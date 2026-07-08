@@ -1,0 +1,12 @@
+{
+  "_status": "EXPECTED / UNVERIFIED — 공식 hooks 문서(cursor.com/docs/hooks) 기반. preToolUse deny 출력 필드는 user_message(공식). 실제 Cursor probe로 최종 확인 필요.",
+  "_event": "preToolUse",
+  "_expected_output_on_raw_write": {
+    "permission": "deny",
+    "user_message": "raw/는 읽기 전용입니다 (수정 금지). 삭제는 wiki-lint --fix를 경유하세요."
+  },
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/abs/vault/raw/x.md"
+  }
+}

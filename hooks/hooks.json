@@ -1,0 +1,29 @@
+{
+  "_comment": "Claude 플러그인 훅 등록 (§5). plugin.json의 hooks 키가 이 파일을 가리켜 마켓플레이스 설치 시 자동 등록된다. command는 ${CLAUDE_PLUGIN_ROOT}(설치된 플러그인 루트)의 run-hook.cmd(폴리글랏 런처)를 경유하므로 install.sh 없이 마켓플레이스만으로 동작한다. install.sh 경로에서는 ${CLAUDE_PLUGIN_ROOT}가 없으므로 install.sh가 이 파일을 $HOME/.claude로 치환해 settings.json 머지를 안내한다. SessionStart는 전역 등록되지만 훅이 'CWD가 볼트 안일 때만' 주입하도록 자가-게이팅하므로 비볼트 세션에 스팸하지 않는다(§5-0·§5-1). 첫 SessionStart가 ~/.llm-wiki/scripts를 플러그인 루트에서 부트스트랩한다(자가치유).",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd session-start claude" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|Bash",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd wiki-protect-raw.sh claude" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd wiki-validate-frontmatter.sh" }
+        ]
+      }
+    ]
+  }
+}

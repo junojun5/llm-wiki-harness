@@ -1,0 +1,6 @@
+{
+  "_status": "EXPECTED / UNVERIFIED — 배포 설계 §12 문서 기반 예상치. 실제 Codex CLI로 probe-hook 캡처 후 교체할 것.",
+  "_event": "PreToolUse",
+  "tool_name": "Write",
+  "tool_input": { "file_path": "/abs/vault/raw/articles/x.md", "content": "..." }
+}

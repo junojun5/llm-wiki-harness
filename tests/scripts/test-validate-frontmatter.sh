@@ -1,0 +1,150 @@
+#!/usr/bin/env bash
+# 단위 테스트: scripts/validate-frontmatter.sh (하네스 스펙 §3-3 문서 클래스·기계 검증)
+set -u
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+VALIDATOR="$REPO_ROOT/scripts/validate-frontmatter.sh"
+PASS=0; FAIL=0
+
+new_sandbox() { SANDBOX="$(mktemp -d)"; }
+cleanup() { [ -n "${SANDBOX:-}" ] && rm -rf "$SANDBOX"; }
+trap cleanup EXIT
+
+# 파일을 만들고 validator 실행 → OUT/ERR/CODE
+run_validate() {
+  local relpath="$1" content="$2"
+  local f="$SANDBOX/$relpath"
+  mkdir -p "$(dirname "$f")"
+  printf '%s' "$content" > "$f"
+  OUT="$(bash "$VALIDATOR" "$f" 2>"$SANDBOX/err")"; CODE=$?
+  ERR="$(cat "$SANDBOX/err")"
+}
+
+assert_eq() { local d="$1" e="$2" a="$3"; if [ "$e" = "$a" ]; then PASS=$((PASS+1)); echo "  ok: $d"; else FAIL=$((FAIL+1)); echo "  FAIL: $d (expected [$e] got [$a])"; fi; }
+assert_contains() { local d="$1" n="$2" h="$3"; if printf '%s' "$h" | grep -qF -- "$n"; then PASS=$((PASS+1)); echo "  ok: $d"; else FAIL=$((FAIL+1)); echo "  FAIL: $d (want substr [$n] in [$h])"; fi; }
+
+# 유효한 클래스① 풀세트 페이지 본문
+VALID_PAGE='---
+title: "머신러닝"
+category: knowledge
+tags: [ml, ai]
+sources: ["raw/papers/x.pdf"]
+created: 2026-06-25
+updated: 2026-06-25
+summary: "짧은 요약"
+status: verified
+base_confidence: 0.9
+---
+
+본문.
+'
+
+echo "test: 유효한 클래스① 페이지 → exit 0"
+new_sandbox; run_validate "wiki/knowledge/ml.md" "$VALID_PAGE"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: summary 누락 → 실패 + summary 언급"
+new_sandbox; run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/summary: \"짧은 요약\"$'\n'/}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "summary 언급" "summary" "$ERR"; cleanup
+
+echo "test: summary 400자 초과 → 실패"
+new_sandbox
+LONG=$(printf 'x%.0s' $(seq 1 401))
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/짧은 요약/$LONG}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "400 언급" "400" "$ERR"; cleanup
+
+echo "test: 잘못된 category enum → 실패"
+new_sandbox; run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/category: knowledge/category: nonsense}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "category 언급" "category" "$ERR"; cleanup
+
+echo "test: 클래스① status enum 위반(proposed) → 실패"
+new_sandbox; run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/status: verified/status: proposed}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "status 언급" "status" "$ERR"; cleanup
+
+echo "test: tags 6개 초과 → 실패"
+new_sandbox
+SIXTAGS='---
+title: "머신러닝"
+category: knowledge
+tags: [a, b, c, d, e, f]
+sources: ["raw/papers/x.pdf"]
+created: 2026-06-25
+updated: 2026-06-25
+summary: "짧은 요약"
+status: verified
+base_confidence: 0.9
+---
+
+본문.
+'
+run_validate "wiki/knowledge/ml.md" "$SIXTAGS"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "tags 언급" "tags" "$ERR"; cleanup
+
+echo "test: created 날짜 형식 위반 → 실패"
+new_sandbox; run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/created: 2026-06-25/created: 2026\/06\/25}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "날짜 언급" "created" "$ERR"; cleanup
+
+echo "test: base_confidence 범위 초과 → 실패"
+new_sandbox; run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 1.5}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "base_confidence 언급" "base_confidence" "$ERR"; cleanup
+
+echo "test: 클래스③ 원장(decisions.md)은 frontmatter 없어도 통과"
+new_sandbox; run_validate "wiki/projects/p/decisions.md" "## [2026-06-25] 결정
+- 결정: 평문 마크다운, frontmatter 없음
+"
+assert_eq "exit 0 (면제)" "0" "$CODE"; cleanup
+
+echo "test: 클래스③ index.md 통과"
+new_sandbox; run_validate "wiki/index.md" "# 목차
+- 평문
+"
+assert_eq "exit 0 (면제)" "0" "$CODE"; cleanup
+
+# 클래스② changes 유효 본문 (축소셋)
+VALID_CHANGE='---
+title: "도메인 모델 변경"
+category: projects
+project: myproj
+targets: ["architecture.md"]
+status: proposed
+created: 2026-06-25
+status_changed: 2026-06-25
+summary: "AS-IS→TO-BE"
+base_confidence: 0.7
+tier: core
+---
+
+## 근거
+- [[x]]
+'
+echo "test: 클래스② changes 유효(proposed) → exit 0"
+new_sandbox; run_validate "wiki/projects/p/changes/2026-06-25-x.md" "$VALID_CHANGE"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: 클래스② changes에 페이지 status(verified) → 실패"
+new_sandbox; run_validate "wiki/projects/p/changes/2026-06-25-x.md" "${VALID_CHANGE/status: proposed/status: verified}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "status 언급" "status" "$ERR"; cleanup
+
+# 클래스② troubleshooting 유효 본문
+VALID_TS='---
+title: "버그 케이스"
+category: projects
+status: open
+created: 2026-06-25
+updated: 2026-06-25
+summary: "증상"
+---
+
+증상.
+'
+echo "test: 클래스② troubleshooting 유효(open) → exit 0"
+new_sandbox; run_validate "wiki/projects/p/troubleshooting/bug.md" "$VALID_TS"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: troubleshooting status 위반(proposed) → 실패"
+new_sandbox; run_validate "wiki/projects/p/troubleshooting/bug.md" "${VALID_TS/status: open/status: proposed}"
+assert_eq "exit !=0" "1" "$CODE"; assert_contains "status 언급" "status" "$ERR"; cleanup
+
+echo ""
+echo "PASS=$PASS FAIL=$FAIL"
+[ "$FAIL" -eq 0 ]

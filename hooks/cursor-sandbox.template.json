@@ -1,0 +1,4 @@
+{
+  "_comment": "Cursor sandbox 템플릿 (배포 설계 §13-6). install.sh가 vault의 .cursor/sandbox.json에 배치/병합한다. 기본 workspace_readwrite sandbox는 워크스페이스 밖 R/W를 차단하므로, ~/.llm-wiki/scripts/resolve-vault.sh 호출이 실패할 수 있다 → 아래 경로를 R/W 허용에 추가. {{VAULT_ABS}}는 install.sh가 실제 vault 절대경로로 치환.",
+  "additionalReadwritePaths": ["~/.llm-wiki", "{{VAULT_ABS}}"]
+}

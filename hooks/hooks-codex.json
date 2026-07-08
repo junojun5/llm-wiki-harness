@@ -1,0 +1,29 @@
+{
+  "_comment": "Codex 플러그인 훅. .codex-plugin/plugin.json의 hooks 키가 이 파일을 가리켜 /plugins 설치 시 등록된다. 단 플러그인 번들 훅은 '비관리(non-managed)'라 설치만으로 무음 활성화되지 않는다 — 최초 1회 /hooks에서 trust 리뷰 + config.toml [features] hooks=true + 비Windows 필요(배포 설계 §4-3). command는 Codex 공식 env var ${PLUGIN_ROOT}(설치된 플러그인 루트; 경로가 ~/.codex/plugins/cache/<mkt>/<name>/<version>/ 로 버전 스코프라 하드코딩 금지)의 run-hook.cmd 경유. CLAUDE_PLUGIN_ROOT도 호환용으로 set되므로 fallback으로 둔다. 훅 command의 cwd는 세션 cwd이므로 반드시 ${PLUGIN_ROOT} 절대참조. install.sh --fallback 경로는 이 파일을 ~/.agents 절대경로로 sed 변환해 ~/.codex/hooks.json을 만든다. ⚠️ stdin/stdout 스키마·이벤트명은 §9-6 probe fixture로 최종 검증 대상.",
+  "_pending_probe": "tests/fixtures/codex-hooks/ — PreToolUse/PostToolUse(apply_patch|Edit|Write)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" session-start codex" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|apply_patch|shell|Bash",
+        "hooks": [
+          { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" wiki-protect-raw.sh codex" }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|apply_patch",
+        "hooks": [
+          { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" wiki-validate-frontmatter.sh" }
+        ]
+      }
+    ]
+  }
+}

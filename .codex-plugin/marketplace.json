@@ -1,0 +1,11 @@
+{
+  "name": "llm-wiki-harness",
+  "owner": { "name": "junojun5" },
+  "plugins": [
+    {
+      "name": "llm-wiki-harness",
+      "source": "./",
+      "description": "LLM Wiki 하네스 — Codex repo-scoped marketplace. 설치 시 ~/.agents/plugins/marketplace.json로 배치"
+    }
+  ]
+}

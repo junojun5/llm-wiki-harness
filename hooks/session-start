@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# session-start [platform] — 두 가지를 한다:
+#   ① 런타임 부트스트랩: ~/.llm-wiki/scripts가 없으면 이 배포본(플러그인 루트/repo)의 scripts/에서
+#      symlink로 생성한다. 마켓플레이스(install.sh 없이) 설치에서도 스킬·훅이 동작하게 하는 자가치유.
+#   ② 볼트 컨텍스트 주입: CWD가 실제 볼트 안일 때만 using-llm-wiki SKILL.md를 세션 컨텍스트로 주입.
+#      전역 등록(마켓플레이스)돼도 볼트 밖 세션엔 주입하지 않는다(스팸 방지, 하네스 스펙 §5-0·§5-1).
+# 인자 $1 = 플랫폼(claude|codex|cursor). 출력은 플랫폼별 stdout JSON, 본문은 <EXTREMELY_IMPORTANT> 래핑.
+# Antigravity는 훅 미사용(AGENTS.md 상시 로드로 대체).
+set -u
+PLATFORM="${1:-claude}"
+SELF="$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+
+# ① 런타임 부트스트랩 (멱등·조용·비치명) — 없을 때만, 존재하는 소스만.
+LLMWIKI="$HOME/.llm-wiki/scripts"
+mkdir -p "$LLMWIKI" 2>/dev/null || true
+for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+  [ -e "$LLMWIKI/$f" ] && continue
+  [ -e "$ROOT/scripts/$f" ] && ln -sfn "$ROOT/scripts/$f" "$LLMWIKI/$f" 2>/dev/null || true
+done
+
+# ② 볼트 게이트 — 볼트가 설정돼 있고(resolve 성공) CWD가 그 볼트 안일 때만 주입.
+RESOLVED="$(bash "$LLMWIKI/resolve-vault.sh" 2>/dev/null)" || exit 0   # 설정된 볼트 없음 → 부트스트랩만
+VAULT_PATH="$(printf '%s\n' "$RESOLVED" | sed -n 's/^VAULT_PATH=//p')"
+[ -n "$VAULT_PATH" ] || exit 0
+case "$PWD/" in "$VAULT_PATH"/*) ;; *) exit 0 ;; esac   # CWD가 볼트 밖 → 주입 안 함(전역 스팸 방지)
+
+SKILL="$ROOT/skills/using-llm-wiki/SKILL.md"
+[ -f "$SKILL" ] || { echo "using-llm-wiki SKILL.md를 찾을 수 없습니다: $SKILL" >&2; exit 2; }
+
+python3 - "$SKILL" "$PLATFORM" <<'PY'
+import json, sys, re
+skill_path, platform = sys.argv[1], sys.argv[2]
+text = open(skill_path, encoding="utf-8").read()
+body = re.sub(r'^---\n.*?\n---\n', '', text, count=1, flags=re.S).strip()   # frontmatter 제거
+wrapped = "<EXTREMELY_IMPORTANT>\n" + body + "\n</EXTREMELY_IMPORTANT>"
+
+if platform == "claude":
+    out = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": wrapped}}
+elif platform == "codex":
+    out = {"additional_context": wrapped}
+elif platform == "cursor":
+    out = {"additional_context": wrapped,
+           "env": {"LLM_WIKI_RESOLVER": "~/.llm-wiki/scripts/resolve-vault.sh"}}
+else:
+    sys.stderr.write("unknown platform: %s\n" % platform); sys.exit(2)
+
+print(json.dumps(out, ensure_ascii=False))
+PY
