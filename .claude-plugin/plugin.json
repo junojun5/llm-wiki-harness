@@ -1,5 +1,5 @@
 {
-  "name": "llm-wiki-harness",
+  "name": "lwh",
   "version": "0.1.0",
   "description": "Claude Code가 유지하는 개인 지식 베이스 하네스 — wiki 스킬·스크립트·훅 모음",
   "author": { "name": "junojun5" },

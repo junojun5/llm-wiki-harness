@@ -3,7 +3,7 @@
   "owner": { "name": "junojun5" },
   "plugins": [
     {
-      "name": "llm-wiki-harness",
+      "name": "lwh",
       "source": "./",
       "description": "LLM Wiki 하네스 — 12개 스킬·공유 스크립트·가드 훅"
     }

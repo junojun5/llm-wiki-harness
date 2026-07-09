@@ -1,5 +1,5 @@
 {
-  "name": "llm-wiki-harness",
+  "name": "lwh",
   "description": "LLM Wiki 하네스 — wiki 스킬·가드 훅. Cursor 플러그인(Skills/Hooks) 번들.",
   "version": "0.1.0",
   "author": { "name": "junojun5" },
