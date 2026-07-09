@@ -1,18 +1,18 @@
 ---
 name: wiki-lint
-description: Use when the user wants to audit, lint, or check the wiki for problems — orphans, broken links, format errors, conflicts, stale pages, PII, cleanable raw files — or asks "lint the wiki", "/wiki-lint", "wiki 점검/audit".
+description: 사용자가 wiki의 문제를 감사·린트·점검하려 할 때 사용 — 고아 페이지, 깨진 링크, 포맷 오류, 충돌, stale 페이지, PII, 정리 가능한 raw 파일 — 또는 "lint the wiki", "/wiki-lint", "wiki 점검/audit"라고 할 때.
 ---
 
 # wiki-lint
 
-Audits the vault and (optionally) fixes mechanical issues. Config Gate first. **Report-only runs are read-only** (only a `log.md` LINT line is appended); `--fix` is the only mode that writes pages.
+볼트를 감사하고 (선택적으로) 기계적 이슈를 수정한다. 먼저 Config Gate. **Report-only 실행은 read-only** (`log.md`에 LINT 줄만 추가됨); 페이지를 쓰는 유일한 모드는 `--fix`다.
 
-## Use the canonical scripts — do NOT reinvent
-Deterministic checks come from the **single code source** (same scripts the validator hook uses, so results never drift). Don't hand-roll `rg`/grep link scans:
-- `~/.llm-wiki/scripts/build-link-graph.sh <WIKI_DIR>` → **one O(N) pass** producing orphans, broken links, concept gaps, relationship target/self issues (checks 1, 2, 9, 12). Never per-file grep (O(N×M)).
-- `~/.llm-wiki/scripts/validate-frontmatter.sh <file>` → per-page class-aware frontmatter check (check 3). Run across pages; it applies the §3-3 document-class rules (ledger files exempt, changes/troubleshooting enums).
+## 정본 스크립트를 사용 — 재발명 금지
+결정론적 체크는 **단일 코드 출처**에서 나온다 (validator 훅이 쓰는 것과 동일한 스크립트이므로 결과가 절대 드리프트하지 않음). `rg`/grep 링크 스캔을 손수 짜지 마라:
+- `~/.llm-wiki/scripts/build-link-graph.sh <WIKI_DIR>` → **O(N) 단일 패스**로 고아, 깨진 링크, 개념 갭, 관계 target/self 이슈 산출 (체크 1, 2, 9, 12). 파일별 grep(O(N×M)) 금지.
+- `~/.llm-wiki/scripts/validate-frontmatter.sh <file>` → 페이지별 클래스 인식 frontmatter 체크 (체크 3). 페이지 전반에 실행; §3-3 문서 클래스 규칙을 적용한다 (원장 파일 면제, changes/troubleshooting enum).
 
-## 17 checks (group output by severity 🔴 ERROR → 🟡 REVIEW → ℹ️ SOFT)
+## 17개 체크 (심각도별로 출력 그룹화 🔴 ERROR → 🟡 REVIEW → ℹ️ SOFT)
 | # | key | check | sev | source |
 |--|--|--|--|--|
 |1|orphans|inbound 0 (excl. index/log/hot)|🟡|graph|
@@ -33,15 +33,15 @@ Deterministic checks come from the **single code source** (same scripts the vali
 |16|change_proposal_issues|applied w/o decisions link · proposed >14d · broken target · stray applied/rejected in changes/ root|🟡|projects/*/changes|
 |17|manifest_integrity|manifest pages_created path missing on disk|🟡|manifest|
 
-Attach a **next-action line** to each group, especially un-fixable ones (conflict→"adopt a source then update §3-3 resolved", PII→"redact / .gitignore", unprocessed→"/wiki-ingest <path>", orphan→"link or archive").
+각 그룹에 **next-action 줄**을 붙이되, 특히 수정 불가능한 것들에 붙인다 (conflict→"소스 하나를 채택한 뒤 §3-3 resolved로 갱신", PII→"수정/.gitignore", unprocessed→"/wiki-ingest <path>", orphan→"링크 걸거나 archive").
 
-## `--fix` model — dry-run default, differentiated apply
-- `--fix` alone = **dry-run**: show what would change, write nothing.
-- Reversible/low-risk (add missing format field, register in index.md, relationship type typo→`related_to`): one batch confirm; `--fix --yes` auto-applies.
-- **Irreversible (check 15 raw deletion): ALWAYS individual confirm — `--yes` does NOT skip it.** Re-verify the summaries/ page exists before deleting.
-- Not auto-fixable (judgment): 1, 2, 9, 12 / needs ingest: 5 / value judgment: 3's base_confidence range.
-- **Frontmatter edits are append-only**: add a missing field at the end; preserve existing field order/comments. Never re-serialize the YAML (avoids churn). Value changes are never auto-applied.
+## `--fix` 모델 — dry-run 기본, 차등 적용
+- `--fix` 단독 = **dry-run**: 무엇이 바뀔지 보여주고, 아무것도 쓰지 않음.
+- 되돌릴 수 있는/저위험 (누락 포맷 필드 추가, index.md 등록, 관계 타입 오타→`related_to`): 한 번의 배치 확인; `--fix --yes`는 자동 적용.
+- **되돌릴 수 없음 (체크 15 raw 삭제): 항상 개별 확인 — `--yes`도 이걸 건너뛰지 않는다.** 삭제 전에 summaries/ 페이지가 존재하는지 재확인.
+- 자동 수정 불가 (판단 필요): 1, 2, 9, 12 / ingest 필요: 5 / 가치 판단: 3의 base_confidence 범위.
+- **Frontmatter 편집은 append-only**: 누락 필드는 끝에 추가; 기존 필드 순서/주석 보존. YAML을 절대 재직렬화하지 않는다 (churn 방지). 값 변경은 절대 자동 적용 안 됨.
 
-## Close-out
+## 마무리(Close-out)
 - `log.md`: `[YYYY-MM-DD] LINT issues_found=N orphans=A broken_links=B format_errors=C missing_summary=D unprocessed=E index_missing=F unverified=G conflicts=H concept_gaps=I stale=J pii_exposure=K relationship_issues=L provenance_drift=M supersession_issues=N raw_deletable=O change_proposal_issues=P manifest_integrity=Q`
-- QMD refresh **only if `--fix` actually wrote** (report-only is read-only, no refresh).
+- QMD refresh는 **`--fix`가 실제로 쓴 경우에만** (report-only는 read-only, refresh 없음).
