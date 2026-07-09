@@ -438,7 +438,7 @@ llm-wiki-harness/                  ← 전용 git repo (스펙·스킬·훅의 �
   install.sh
 ```
 
-**설치 (symlink 방식):** `install.sh`가 `skills/*` → `~/.claude/skills/`, `hooks/*` → `~/.claude/hooks/`로 **symlink**를 걸고, 공유 `scripts/*`는 도구 비종속 런타임 홈 `~/.llm-wiki/scripts/`로 **symlink**한다 (+ settings.json 훅 등록 안내). skills/hooks 경로는 Claude 기준이며, Codex/Cursor/Antigravity 매핑은 멀티플랫폼 배포 설계 §4·§7이 담당한다. 복사가 아니라 symlink이므로:
+**설치 (플러그인 마켓플레이스 우선 + install.sh는 부트스트랩/폴백):** 기본 경로는 **플러그인 마켓플레이스**(`plugin.json`→`hooks.json`)다 — 훅·스킬이 `${CLAUDE_PLUGIN_ROOT}` 경유로 자동 등록되고, 첫 SessionStart가 플러그인 루트의 `scripts/`를 도구 비종속 런타임 홈 `~/.llm-wiki/scripts/`로 부트스트랩하므로 **install.sh 없이도 동작**한다. `install.sh`는 얇은 폴백으로 강등됐다 — 기본 실행은 `~/.llm-wiki` 부트스트랩 + Antigravity 배치, `--fallback`에서만 Claude `~/.claude/skills/`·`~/.claude/hooks/` symlink를 건다. Codex/Cursor/Antigravity 매핑·플러그인 매니페스트 상세는 멀티플랫폼 배포 설계(`docs/distribution-design.md` §4·§7)가 담당한다. 어느 방식이든 canonical source는 git repo이고 런타임 타깃은 그 사본(symlink 또는 플러그인 루트 참조)일 뿐이므로:
 - **업데이트 = `git pull`.** 별도 sync 명령 불필요, 설치본 drift가 구조적으로 불가능.
 - **스킬 버전 = repo HEAD.** 설치된 버전 기록용 별도 manifest 불필요 — git이 버전 추적 그 자체다. 스킬 11개 + resolver + 훅이 항상 같은 커밋으로 원자적으로 움직인다.
 - config 스키마 버전(§3-1 `version`)과 스킬 버전이 자연 분리된다: 전자는 볼트 데이터의 나이, 후자는 repo HEAD.
@@ -2224,7 +2224,7 @@ bash "$HOME/.llm-wiki/scripts/validate-frontmatter.sh" "$TARGET" >&2 || exit 2
 | 순서  | 작업                             |
 | --- | ------------------------------ |
 | 1   | 공용 스크립트 2개 작성 (resolve-vault·validate-frontmatter) — **공통 계층 먼저** |
-| 2   | Hook 스크립트 3개 작성 (protect-raw·session-start·validate-frontmatter wrapper) + 훅 설정 — 글로벌 `~/.claude/settings.json` (protect-raw·validate-frontmatter) + 볼트 로컬 `{vault}/.claude/settings.json` (session-start) |
+| 2   | Hook 스크립트 3개 작성 (protect-raw·session-start·validate-frontmatter wrapper) + 훅 설정 — 세 훅 모두 **글로벌 등록** (`~/.claude/settings.json`; 마켓플레이스는 `plugin.json`이 자동 등록), session-start만 CWD가 볼트일 때 주입하도록 자가-게이팅 (§5-0·§5-1) |
 | 3   | `.wiki-config.example.json` 생성 |
 | 4   | `wiki-setup` SKILL.md 작성       |
 | 5   | `wiki-ingest` SKILL.md 작성      |

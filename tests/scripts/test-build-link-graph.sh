@@ -70,6 +70,8 @@ assert_contains "깨진 본문 링크 보고"        "BROKEN${TAB}knowledge/brok
 assert_absent   "유효 링크는 BROKEN 아님"    "BROKEN${TAB}knowledge/broken.md${TAB}concepts/leaf" "$OUT"
 assert_contains "관계 깨진 target 보고"      "REL_BROKEN${TAB}knowledge/rel.md${TAB}ghost-target" "$OUT"
 assert_contains "관계 자기참조 보고"          "REL_SELF${TAB}knowledge/rel.md" "$OUT"
+# 자기참조는 인바운드로 세지 않으므로, 다른 페이지가 링크하지 않는 rel.md는 고아
+assert_contains "자기참조 페이지도 고아 판정"   "ORPHAN${TAB}knowledge/rel.md" "$OUT"
 assert_contains "SUMMARY 라인 존재"          "SUMMARY" "$OUT"
 # index.md가 lonely를 링크해도 인바운드로 세지 않으므로 lonely는 여전히 고아
 cleanup
