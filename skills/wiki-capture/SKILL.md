@@ -33,7 +33,7 @@ description: 사용자가 현재 대화의 지식을 wiki에 보존하려 할 �
    ---
    ```
    본문: 논의를 **충실히** 기록 (대화 맥락 보존, 선언형으로 다시 쓰지 말 것). 추론/일반화된 문장은 `^[inferred]`, 불확실/논쟁적인 것은 `^[ambiguous]`로 표시 (§3-3); 그 마커들로부터 `provenance` 비율을 추정 — 대화 캡처는 보통 `inferred`가 높게 치우친다 (wiki-lint 체크 13이 마커로부터 재계산). 섹션: `## 주제` / `## 논의 내용` / `## 결론·결정` / `## 열린 질문`.
-   언급된 엔티티(사람/조직) → `entities/` 페이지 생성/갱신, 양방향 링크.
+   언급된 엔티티(사람/조직)는 세션 페이지 본문에서 `[[entities/...]]`로 **언급·링크만** 한다 (참조는 페이지 생성이 아니다). `entities/` 페이지 생성/갱신은 하지 않는다 — 승격은 사용자의 명시적 요청 시에만 일어난다 (상단 2단계 파이프라인).
 3. `index.md` (summaries/sessions 섹션) + `log.md`: `[YYYY-MM-DD] CAPTURE type=session page="…" title="…"`.
 4. `hot.md`: Recent Activity (1줄, 최근 3개 유지) + 주목할 만하면 Key Takeaways; `updated` 갱신.
 5. **QMD refresh** (마지막, 모든 쓰기 이후).

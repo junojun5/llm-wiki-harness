@@ -10,9 +10,9 @@ description: 새 LLM Wiki 볼트를 초기화하거나 깨진 볼트 설정을 �
 ## 모드
 - `/wiki-setup` — 대화형 초기화.
 - `/wiki-setup --vault <path> [--yes]` — 비대화형.
-- `/wiki-setup --update-path` — 이동·이름변경된 볼트로 재지정 (설정 + 포인터 갱신).
+- `/wiki-setup --update-path` — 이동·이름변경된 볼트로 재지정 (설정 + 포인터 갱신). 상세는 아래 "재지정·재정합 워크플로우".
 - `/wiki-setup --repair` — 누락된 설정/디렉터리/템플릿 재생성.
-- `/wiki-setup --update-qmd` — 전체 QMD 재정합: 컬렉션이 없으면 등록 (`collection add … --name wiki`), 이어서 `qmd update` (+ update가 새 해시를 보고하면 `embed`). 스킬 밖에서 수동 편집/이동한 후, 또는 QMD stale이 반복될 때(§3-5 self-healing 에스컬레이션) 사용. 먼저 §3-5 게이트를 실행하고, qmd를 쓸 수 없으면 그렇게 알리고 중단한다.
+- `/wiki-setup --update-qmd` — 전체 QMD 재정합 (컬렉션 전체 reconcile). 스킬 밖에서 수동 편집/이동한 후, 또는 QMD stale이 반복될 때(§3-5 self-healing 에스컬레이션) 사용. 상세는 아래 "재지정·재정합 워크플로우".
 
 **멱등(Idempotent) — 존재 여부만 확인.** 아래의 모든 파일/디렉터리는: 없으면 생성, 있으면 그대로 둔다. 포맷이 오래돼 보여도 기존 내용을 절대 덮어쓰지 않는다 — stale 포맷 진단은 `wiki-lint --fix`의 일이지 setup의 일이 아니다.
 
@@ -52,5 +52,20 @@ description: 새 LLM Wiki 볼트를 초기화하거나 깨진 볼트 설정을 �
 11. `<vault>/.wiki-config.example.json` — 절대 경로를 제거한 빈 템플릿 (git 추적 대상).
 12. 볼트가 git 저장소면, `.gitignore`에 `.wiki-config.json`이 있는지 확인 (머신별 절대 경로); `.example`은 추적 상태로 유지.
 13. 생성한 것 vs 이미-존재-확인된 것의 sanity-check 목록을 출력한다.
+
+## 재지정·재정합 워크플로우
+
+### `--update-path` (볼트 재지정)
+1. 사용자에게 새 볼트 절대 경로를 묻는다.
+2. `<vault>/.wiki-config.json`의 `vault.path`를 새 경로로 갱신한다.
+3. 전역 포인터 `~/.llm-wiki/default-vault`를 새 경로로 갱신한다 — 기존 값이 다른 경로면 Step 4와 동일하게 `old → new`를 보여주고 확인 후 덮어쓴다.
+4. 경로 유효성 확인: `wiki/index.md`, `wiki/log.md`, `wiki/hot.md` 존재 여부를 점검하고 결과를 보고한다.
+
+### `--update-qmd` (전체 QMD 재정합)
+per-skill refresh(§3-5)가 쓰기마다 증분 갱신하지만, QMD를 껐다 켠 사이 쓰기가 누적됐거나·머신을 옮겼거나·git pull/외부 편집으로 볼트가 스킬 밖에서 바뀌면 일괄 reconcile이 필요하다.
+1. **QMD 게이트 판정 (§3-5).** CLI 미설치 → 설치 안내 후 중단. 컬렉션 미등록 → Step 9의 등록(`${QMD_CLI:-qmd} collection add <vault>/<wiki_dir> --name wiki`)부터 수행.
+2. **§3-5 명령 시퀀스를 컬렉션 전체에 적용:** `${QMD_CLI:-qmd} update` (볼트 전체 해시 스캔 — 신규·변경·삭제 반영) → (update가 벡터 필요를 보고하면; 전체 reconcile은 대개 필요) `${QMD_CLI:-qmd} embed` → `${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION"`로 **컬렉션 전체 가시성 검증**. per-skill refresh의 단일 페이지 검증과 달리, 여기선 `qmd ls`로 컬렉션 전체를 확인한다.
+3. **`log.md` 기록:** `[YYYY-MM-DD] QMD-RECONCILE pages_indexed=N embedded=true|false`.
+4. **§3-5 상태 문자열로 결과 보고.** QMD 실패는 볼트를 롤백하지 않고 QMD 상태만 별도 보고한다.
 
 install.sh는 플랫폼에 스킬/스크립트/훅을 배포한다; wiki-setup은 *볼트*만 설정한다.

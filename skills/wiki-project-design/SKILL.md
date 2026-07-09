@@ -29,3 +29,6 @@ change proposal을 통해 프로젝트의 design 문서(`architecture.md`, `doma
 
 ## decisions.md 공동 작성 경계
 **design을 바꾸는 결정**의 `decisions.md` 짝은 직접 append한다 (포맷은 record의 단일 출처; 위임 호출 없음). design과 *무관한* 결정은 wiki-project-record에 속한다. 둘은 `변경 기록:` 줄로 구별된다 (존재 ⟺ design을 경유함).
+
+## 품질 체크
+의미 변경에 change proposal 존재 (표면 변경만 직접 갱신) · applied proposal마다 decisions.md 항목 + `[[change]]` 링크 (스냅샷-기록 짝) · AS-IS/TO-BE가 구체적 (요약이 아니라 비교 가능한 수준) · 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified` + missing knowledge 기록 · domain.md에 일반 개념 본문 복제 없음 (`[[knowledge]]` 링크) · 다이어그램은 mermaid-conventions.md 준수 · index/log/hot/QMD 갱신됨 (§3-5).

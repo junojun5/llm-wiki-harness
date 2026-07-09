@@ -32,8 +32,30 @@ description: 프로젝트 이벤트를 기록할 때 사용 — 결정, 트러�
   - 변경 기록: [[changes/archive/YYYY-MM-DD-{slug}]]   ← design 경유 시만
   ```
   결정을 뒤집으려면: 옛 항목을 참조하는 **새** 항목을 append — 기존 항목을 절대 편집하지 않는다.
-- **troubleshooting/{case}.md** — `open` (가변: 증상/가설/실험) → `resolved` (불변: 원인/해결/재발 방지 채움). 재발 → `## Follow-up — [[new case]]` 링크만 append; 본문은 건드리지 않음.
-- **backlog.md** — 살아있음 (체크박스 토글, 위험 상태 갱신). 유일하게 가변인 출력.
+- **troubleshooting/{case}.md** — `open` (가변: 증상/가설/실험) → `resolved` (불변: 원인/해결/재발 방지 채움). 재발 → `## Follow-up — [[new case]]` 링크만 append; 본문은 건드리지 않음. frontmatter (class-② 문서):
+  ```
+  ---
+  title: "{사건 한 줄 제목}"
+  category: projects
+  status: open | resolved
+  created: YYYY-MM-DD
+  updated: YYYY-MM-DD
+  summary: "≤400자 — 증상·해결 요약"
+  ---
+  ## 증상                      ← open부터 작성
+  ## 가설 / 실험                ← open 동안 점진 갱신
+  ## 원인 / 해결 / 재발 방지      ← resolved 시 채움, 이후 불변
+  ## Follow-up                 ← 재발 시 [[새 케이스]] 링크만 append (본문 무수정)
+  ```
+- **backlog.md** — 살아있음 (체크박스 토글, 위험 상태 갱신). 유일하게 가변인 출력. frontmatter 없음 (class-③ 원장):
+  ```
+  ## TODO
+  - [ ] {할 일} (출처: 코드 분석 | [[페이지]] | 논의) — {한 줄 맥락}
+  - [x] {완료 항목}
+
+  ## 위험
+  - {위험 한 줄} — 영향: {무엇} / 완화: {방안 또는 "미정"} / 상태: open|mitigated|accepted
+  ```
 
 ## 워크플로우
 0. Config Gate. 0.5 hot.md. 1. 라우팅 (위 표). 2. 대화로부터 초안 작성, 파일 포맷을 따름 → **사용자와 확인**. 3. 사례 파일 append / 생성 (첫 기록 시 생성). 4. 관련 `[[knowledge/concepts/design]]` 링크. 5. 간단한 gap 리포트 (미기록 결정 후보 플래그). 6. 종료 시퀀스. log: `[YYYY-MM-DD] PROJECT-RECORD name="…" type=decision|troubleshooting|meeting|backlog target="…"`.
