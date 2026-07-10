@@ -544,7 +544,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 | `wiki-knowledge` | ✅ | knowledge 생성·업데이트 후 |
 | `wiki-lint` | ⚠️ | `--fix`로 실제 쓰기가 발생한 경우만 |
 | `wiki-setup` | ✅ (update only) | 빈 볼트라 embed 불필요. `--update-qmd`는 전체 reconcile |
-| `wiki-query` / `wiki-status` | ❌ | read-only |
+| `wiki-query` / `wiki-status` | ❌ | read-only (log append만 예외, §3-6) |
 
 ---
 
@@ -929,6 +929,8 @@ Step 5: 페이지 작성 (YAML frontmatter 포함)
 Step 6: 관련 wiki/knowledge/ 페이지 있으면 참고 자료로 추가
 
 Step 7: wiki/index.md summaries/web 섹션에 추가
+  wiki/index.md에 summaries/web 서브섹션이 없으면 새로 만들고 추가한다.
+  (wiki-setup은 최상위 카테고리 섹션만 시드하며 서브섹션을 하드코딩하지 않는다.)
 
 Step 8: .manifest.json + wiki/log.md 업데이트
   manifest: source_url (Step 1 정규화본), source_type: url, pages_created, ingested_at  # source_type enum = document|image|url (ingest 스킬별 확장)
@@ -1013,6 +1015,8 @@ Step 2: summaries/sessions/ 에 세션 캡처
 
 Step 3: wiki/index.md, wiki/log.md 갱신
   index.md: summaries/sessions 섹션에 추가
+    wiki/index.md에 summaries/sessions 서브섹션이 없으면 새로 만들고 추가한다.
+    (wiki-setup은 최상위 카테고리 섹션만 시드하며 서브섹션을 하드코딩하지 않는다.)
   log 형식:
     [YYYY-MM-DD] CAPTURE type=session page="{sessions 경로}" title="{제목}"
 
@@ -1109,10 +1113,10 @@ Step 4: Full Read (expensive — 최후 수단)
 
 Step 5: 답변 합성
   표준 답변 포맷:
-    > Based on the wiki:
+    > 위키 기반:
     > [답변 + [[wikilinks]] 인용]
-    > Pages consulted: [[page-a]], [[page-b]]
-    > Gaps: [wiki가 커버하지 못하는 부분]
+    > 참고 페이지: [[page-a]], [[page-b]]
+    > 공백: [wiki가 커버하지 못하는 부분]
 
   인용 포맷: [[wikilink]] 기본 (Obsidian 1차 소비 환경 — 클릭 가능, 페이지 이동 시 자동 추적).
     section grep·full read를 실제 수행한 경우(Step 3·4)에 한해
@@ -1452,6 +1456,10 @@ Step 6: What to Do Next (우선순위 액션, 최대 5개)
 
   모두 해당 없으면:
   ✅ Wiki가 최신 상태입니다. 처리 대기 항목 없음.
+
+Step 7: wiki/log.md 상태 조회 기록 (read-only 예외 — 관찰 기록, §3-6)
+  [YYYY-MM-DD] STATUS unprocessed=N recent_ingest="{경로}" token_estimate=K
+  ※ log append 실패해도 리포트는 이미 전달됨 → 스킬 실패 아님 (self-healing)
 ```
 
 **출력 포맷 예시:**
