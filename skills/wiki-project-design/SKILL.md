@@ -27,6 +27,7 @@ Change proposal을 경유해 프로젝트의 design 문서 — `architecture.md`
    - 대화에서 요구·제약·기술 선택 수집(기존 프로젝트를 역방향으로 문서화하는 경우, 대화 컨텍스트에 담긴 **코드 분석 결과 포함** — 코드를 직접 읽어 역추출하지 않는다, Phase 2 `wiki-project-sync` 영역).
    - wiki-query로 `knowledge/`·`summaries/` 근거 검색 — **architecture 작업에는 필수 실행**. 매치 있으면 `(출처: [[...]])` 인용, 없으면 `⚠️ unverified` + gap report에 missing knowledge 기록.
    - `changes/archive/`에서 같은 주제의 이전 이력 확인(재변경 여부 파악).
+   - 논의 중 **프로젝트 무관·일반화 가능한 통찰**이 나오면 domain.md/architecture.md에 쓰지 않고 `wiki-knowledge` 승격을 제안한다(공통 원칙 4).
 3. change proposal 작성(`status: proposed`, 아래 제안 템플릿) → 사용자 검토 요청.
 4. **(Semantic 경로) 사용자 응답 분기.**
    - **승인** → 대상 문서를 다시 읽어 AS-IS가 여전히 현재 내용과 일치하는지 재검증한다(저장된 체크섬이 아니라 본문 재확인) — 드리프트했으면 proposal을 갱신하고 재승인받는다. 이후 delta 병합(통합, append 아님) → `decisions.md` 짝 항목 직접 append(§4-9-3 포맷, `변경 기록: [[changes/archive/YYYY-MM-DD-{slug}]]`을 최종 archive 경로로 기입) → proposal을 `changes/archive/`로 이동(`status: applied`, `status_changed` 갱신) → Step 6으로.
