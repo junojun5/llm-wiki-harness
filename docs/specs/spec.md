@@ -276,7 +276,7 @@ tier: core | supporting | peripheral
 #   peripheral  → 간접 관련. 유일한 매치일 때만 읽힘
 
 relationships:
-  - target: "[[concepts/related]]"
+  - target: "[[related-concept]]"
     type: uses | contradicts | extends | depends_on | related_to
 # ↑ Relationship query 시 wiki-query가 탐색하는 typed edge
 #   방향·타입 명확할 때만 작성. 애매하면 related_to 또는 생략
@@ -314,7 +314,7 @@ provenance:
 #             둘이 어긋나면 항상 본문 마커 기준으로 frontmatter를 고친다.
 #   wiki-lint drift 감지: 재계산값과 0.20 이상 차이 시 경고 (§4-6 check 13)
 
-superseded_by: "[[wiki/path/replacement-page]]"
+superseded_by: "[[replacement-page]]"
 # ↑ status: archived 페이지가 어떤 페이지로 대체됐는지 machine-readable 참조
 #   archived 페이지에만 사용. 본문의 사유 텍스트와 함께 사용 (보완 관계)
 
@@ -328,6 +328,13 @@ status_changed: YYYY-MM-DD
 
 ## Related pages
 - [[related-1]]
+
+#### 링크·index 표기 규칙 (정본)
+
+- **본문 링크 / 인용 / Related pages / Conflicts sources:** `[[slug]]` 파일명만. (Obsidian 그래프 소비)
+- **frontmatter `relationships.target` / `superseded_by`:** `[[slug]]` 파일명만. slug 전역 유일(§110)하고 build-link-graph.sh가 본문+frontmatter를 한 그래프로 통합(§4-6)하므로 경로 불필요.
+- **index.md 엔트리:** `## 카테고리` 섹션 아래 `| [표시명](wiki-루트-상대경로.md) | 한 줄 설명 |` 마크다운-표.
+- **예외:** decisions.md의 `변경 기록:`만 `[[changes/archive/YYYY-MM-DD-{slug}]]` folder-qualified(§4-9-2 링크 안정성 의무).
 
 #### 파서 호환성 — 수용된 한계
 
@@ -783,7 +790,7 @@ Step 5: 페이지 작성/업데이트
   meetings 라우팅 (raw/meetings/ 소스일 때):
     wiki-ingest는 항상 summaries/meetings/{file}.md 1:1 미러만 생성한다 (§2 미러링 불변식).
     프로젝트·전사 관련성은 복제가 아니라 [[링크]]로 표현 — 프로젝트 문서/인덱스에서
-      [[summaries/meetings/{file}]]를 참조하거나 relationships로 연결한다.
+      [[{meeting-slug}]]를 참조하거나 relationships로 연결한다.
     ※ 미팅 1개 = 산출물 1개 (QMD 이중 회수 방지). raw 트랜스크립트가 있는 미팅은 위 미러가
       유일 산출물이다. raw 없는 라이브 미팅만 wiki/meetings/(전사·팀) 또는
       projects/{name}/meetings/(프로젝트 안건)에 직접 기록되며, 이는 wiki-ingest가 아니라
@@ -1311,7 +1318,7 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
 - `wiki/projects/foo/changes/2026-05-15-db-change.md` — proposed 20일 방치
 
 ### Manifest 정합성 (N건)
-- `raw/papers/old.pdf` — manifest pages_created [[summaries/papers/old]] 디스크에 없음
+- `raw/papers/old.pdf` — manifest pages_created [[old-paper-slug]] 디스크에 없음
   → 액션: 의도된 삭제면 manifest prune, 복구면 /wiki-ingest --full raw/papers/old.pdf (자동 수정 불가, 판단 필요)
 
 # ════ ℹ️ SOFT (소프트 경고) ════
@@ -1518,9 +1525,9 @@ summary: "≤400자 요약"
 status: verified | unverified | conflict
 base_confidence: 0.0-1.0
 relationships:
-  - target: "[[summaries/articles/topic/source-a]]"
+  - target: "[[source-a]]"
     type: depends_on
-  - target: "[[concepts/related-concept]]"
+  - target: "[[related-concept]]"
     type: extends
 ---
 
