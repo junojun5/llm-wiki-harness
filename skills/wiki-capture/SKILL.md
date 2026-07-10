@@ -59,11 +59,11 @@ description: 현재 대화 지식을 wiki에 보존할 때 사용 — "이거 �
    ---
    ```
    본문: 논의를 **충실히** 기록한다 (대화 맥락 보존, 선언형으로 다시 쓰지 않는다). 추론·일반화 문장에는 `^[inferred]`, 불확실·논쟁적 문장에는 `^[ambiguous]` 마커를 단다 — 그 마커 기준으로 위 `provenance` 비율을 추정·기록한다 (대화 캡처는 보통 `inferred` 비중이 높다; wiki-lint check 13이 마커로 재계산해 검산한다).
-   권장 섹션: `## 주제` / `## 논의 내용` / `## 결론·결정` / `## 열린 질문`.
+   권장 섹션: `## 주제` / `## 논의 내용` / `## 결론 / 결정` / `## 열린 질문`.
    언급된 엔티티(사람/조직)는 본문에서 `[[slug]]`로 **언급·링크만** 한다 (참조는 페이지 생성이 아니다) — `entities/` 페이지 자체의 생성·갱신은 하지 않는다. 승격은 사용자의 명시적 요청 시에만 일어난다 (상단 2단계 파이프라인).
 3. **`wiki/index.md` 갱신.** `summaries/sessions` 서브섹션에 추가한다. **해당 서브섹션이 없으면 새로 만들고 추가한다** (wiki-setup은 최상위 카테고리 섹션만 시드하며 서브섹션을 하드코딩하지 않는다).
    **`wiki/log.md` 갱신:** `[YYYY-MM-DD] CAPTURE type=session page="{sessions 경로}" title="{제목}"`.
-4. **`wiki/hot.md` 갱신** (없으면 `using-llm-wiki` §Step 0/QMD 절 참조 템플릿으로 생성). Recent Activity — 방금 캡처한 내용 한 줄 요약, 최근 3개 유지. Key Takeaways — 주목할 인사이트·결정 포함 시 갱신. `updated` 타임스탬프 갱신.
+4. **`wiki/hot.md` 갱신** (없으면 §4-1 Step 8 템플릿으로 생성). Recent Activity — 방금 캡처한 내용 한 줄 요약, 최근 3개 유지. Key Takeaways — 주목할 인사이트·결정 포함 시 갱신. `updated` 타임스탬프 갱신.
 5. **QMD refresh** (§3-5, `using-llm-wiki` 참조) — hot.md까지 모든 쓰기 완료 후 마지막 단계. QMD 상태 문자열을 최종 보고에 포함한다.
 6. **저장 경로 + QMD 상태를 사용자에게 확인 보고.**
 
@@ -78,7 +78,7 @@ description: 현재 대화 지식을 wiki에 보존할 때 사용 — "이거 �
 □ 저장 항목이 재참조 테스트(2주 뒤 다시 찾을 이유)를 통과함 — 잡담/일회성 Q&A 제외됨
 □ Step 1.5 미리보기에서 시크릿(API 키·토큰·비밀번호)이 전부 [REDACTED]로 마스킹됨
 □ 이메일·이름·경로는 마스킹하지 않음 (entities 링크는 언급만, 페이지 생성 없음)
-□ frontmatter 고정값 정확: base_confidence: 0.42 · status: unverified
+□ frontmatter 고정값 정확: base_confidence: 0.42 · status: unverified · sources: ["conversation:YYYY-MM-DD"]
 □ provenance 비율이 본문의 ^[inferred] / ^[ambiguous] 마커와 정합
 □ index.md summaries/sessions 서브섹션 반영 (없으면 신설)
 □ log.md 기록 · hot.md 갱신
