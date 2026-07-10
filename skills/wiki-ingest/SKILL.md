@@ -63,7 +63,7 @@ description: raw/ 로컬 파일을 ingest할 때 사용 — "ingest this", "/ing
      한 ingest에서 신규 개념이 **5개를 초과**하면 전체 목록을 제시하고 사용자 승인을 받은 뒤 생성한다.
    - `entities/` — 사람·조직만 (도구/제품은 `knowledge/`로).
    - **`knowledge/`는 절대 자동 생성 안 됨** — 사용자가 명시적으로 요청할 때만.
-   - **미팅 라우팅:** `raw/meetings/` 소스는 항상 `summaries/meetings/{파일명}.md` 1:1 미러만 생성한다. 프로젝트·전사 관련성은 복제가 아니라 `[[links]]`로 표현한다.
+   - **미팅 라우팅:** `raw/meetings/` 소스는 항상 `summaries/meetings/{파일명}.md` 1:1 미러만 생성한다 — 미팅 1개 = 산출물 1개(QMD 이중 회수 방지). 프로젝트·전사 관련성은 복제가 아니라 `[[{meeting-slug}]]` 참조나 relationships로 연결한다. **범위 밖:** raw 없는 라이브 미팅은 wiki-ingest의 영역이 아니다 — `wiki/meetings/` 또는 `projects/{name}/meetings/`에 직접 기록되며 라이브 캡처·`wiki-project-record`가 담당한다.
    - **기존 페이지 갱신:** 먼저 읽는다 → **병합**(통합, 맹목적 append 아님) → `updated` 갱신 → `sources`에 추가.
    - **수동 편집 가드** (해시 불일치 재-ingest·Full Mode에만 해당): 기존 summary에 새 원본 어디에도 없는 내용(= 사용자 수동 메모)을 발견하면, 삭제 전에 원문을 그대로 보여주고 거취를 묻는다 — 권장 이동처는 `knowledge/`, 대안은 폐기. `summaries/`에 잔류는 선택지가 아니다(page type 규칙 위반). concepts/entities는 다중 소스 living doc이라 이 가드가 해당 없음.
 6. **교차 참조 갱신:** A→B 링크를 추가할 때 B→A 백링크도 검토한다.
@@ -83,5 +83,6 @@ description: raw/ 로컬 파일을 ingest할 때 사용 — "ingest this", "/ing
 □ .manifest.json 갱신됨 (SHA-256 포함)
 □ index.md · log.md · hot.md 갱신됨
 □ 충돌 발견 시 status: conflict + ## Conflicts 반영, 사용자 판단 요청
+□ QMD refresh 실행 (§3-5) — QMD 게이트 통과 + 실제 쓰기 발생 시
 □ QMD 상태 문자열을 최종 보고에 포함
 ```
