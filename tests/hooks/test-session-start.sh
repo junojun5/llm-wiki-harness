@@ -32,7 +32,7 @@ echo "test: 볼트 CWD (claude) — 주입 발생"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" claude 2>/dev/null)"
 printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null && ok "유효 JSON" || no "invalid JSON"
 jpath "additionalContext에 Config Gate" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
-jpath "additionalContext에 raw 불변" "d['hookSpecificOutput']['additionalContext']" "raw/ is immutable" "$OUT"
+jpath "additionalContext에 raw 불변" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
 jpath "EXTREMELY_IMPORTANT 래핑" "d['hookSpecificOutput']['additionalContext']" "EXTREMELY_IMPORTANT" "$OUT"
 jpath "hookEventName=SessionStart" "d['hookSpecificOutput']['hookEventName']" "SessionStart" "$OUT"
 
@@ -47,7 +47,7 @@ jpath "codex additional_context" "d['additional_context']" "Config Gate" "$OUT"
 
 echo "test: 볼트 CWD (cursor) — additional_context + env"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" cursor 2>/dev/null)"
-jpath "cursor additional_context" "d['additional_context']" "raw/ is immutable" "$OUT"
+jpath "cursor additional_context" "d['additional_context']" "raw/ 는 불변" "$OUT"
 jpath "cursor env.LLM_WIKI_RESOLVER" "d['env']['LLM_WIKI_RESOLVER']" "resolve-vault.sh" "$OUT"
 
 echo ""

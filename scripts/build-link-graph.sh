@@ -91,7 +91,7 @@ for p in pages:
         r = resolve(raw)
         if r is None:
             broken.append((p, raw))
-        else:
+        elif r != src:                           # 자기참조는 인바운드로 세지 않음
             inbound[r] = inbound.get(r, 0) + 1
 
     # frontmatter relationships target
@@ -99,9 +99,11 @@ for p in pages:
         r = resolve(raw)
         if r is None:
             rel_broken.append((p, raw))
+        elif r == src:
+            # 자기참조: relationship 오류로 보고하되 인바운드로 세지 않는다.
+            # (자기 자신을 세면 진짜 고아가 ORPHAN 판정에서 누락됨)
+            rel_self.append((p, raw))
         else:
-            if r == src:
-                rel_self.append((p, raw))
             inbound[r] = inbound.get(r, 0) + 1
 
 orphans = sorted(p for p in pages if inbound.get(p[:-3], 0) == 0)
