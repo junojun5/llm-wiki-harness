@@ -20,7 +20,7 @@ status가 쓰는 것은 Step 7의 log append(관찰 기록) 하나뿐이다 — 
 ## 워크플로우
 **Step 0 — Config Gate.**
 
-**Step 0.5 — `wiki/hot.md` 읽기(있으면).** 최근 활동을 파악해 Step 6 "최근 작업" 맥락을 보강한다.
+**Step 0.5 — `wiki/hot.md` 읽기(있으면).** 최근 활동을 파악해 Step 5 "최근 작업" 맥락을 보강한다.
 
 **Step 1 — `.manifest.json` 읽기.**
 - 마지막 ingest 타임스탬프, 총 소스 수, 총 wiki 페이지 수.
