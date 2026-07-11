@@ -1,11 +1,11 @@
 ---
 name: using-llm-wiki
-description: LLM Wiki 볼트에서 작업할 때 사용 — wiki에 읽거나 쓰기 전, 소스를 ingest할 때, 지식 베이스로부터 답할 때, 또는 볼트를 유지보수할 때.
+description: LLM Wiki 볼트에서 작업할 때 사용 — 세션 시작 시 규칙·라우팅 로드
 ---
 
 # LLM Wiki 사용하기
 
-스킬로 유지되는 개인 마크다운 지식 베이스. **Step 0는 모든 작업보다 먼저 실행된다.**
+이 볼트에서 일할 때 항상 떠 있어야 하는 진입 규칙(부트스트랩). Claude/Codex/Cursor는 세션 시작 시 이 스킬을 주입받고, Antigravity는 동일 내용의 `AGENTS.md`를 상시 로드한다 — 둘은 같은 부트스트랩의 두 표현이므로 항상 동기화한다(정본: `AGENTS.md`).
 
 ## Step 0 — Config Gate (필수, 매 작업마다)
 
@@ -21,7 +21,7 @@ bash ~/.llm-wiki/scripts/resolve-vault.sh
 - **raw/ 는 불변.** `raw/` 아래를 생성·수정·삭제하지 않는다 — **사용자가 명시적으로 요청해도.** 소스를 고치려면 볼트 밖에서 고쳐 재-ingest한다. (훅도 raw/ 쓰기를 차단한다.)
 - **쓰기 종료 시퀀스**, 순서대로: 페이지 → `index.md` → `log.md` → `hot.md` → QMD refresh. 원본 먼저, 파생물 나중.
 - 모든 사실 기반 주장에 **출처 표시**: `(출처: [[page]])` 또는 `⚠️ unverified` 표시. 충돌 → `## Conflicts` + `status: conflict`. 폐기(삭제 금지) → `wiki/archived/`로 이동.
-- 페이지는 한국어; 파일명은 소문자-하이픈(lowercase-kebab); 링크는 `[[wiki-link]]`.
+- 페이지는 한국어. 파일명은 소문자-하이픈(lowercase-kebab). 내부 링크는 `[[slug]]`(파일명만, 폴더 경로 없음). `index.md` 엔트리는 `| [표시명](상대경로.md) | 설명 |` 마크다운-표. 분류가 불확실하면 사용자에게 묻는다.
 
 ## QMD refresh (§3-5) — 쓰기 스킬 전용
 
@@ -45,8 +45,20 @@ ${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/<category>/<page>.md" -l 5   # v
 
 **self-healing:** 단발 실패는 액션이 불필요하다 — 다음 쓰기 스킬의 전체 스캔 `update`가 그 공백을 흡수하고, 그동안 검색은 Grep으로 fallback한다. 2회 연속 실패 또는 stale한 결과 → `/wiki-setup --update-qmd` (전체 재정합).
 
-## 라우팅 — 매칭되는 스킬을 호출
+## 라우팅 표 — 의도별 스킬 호출
 
-`wiki-setup` 초기화/복구 · `wiki-ingest` raw 소스 · `ingest-url` URL · `wiki-capture` 현재 대화 · `wiki-query` 답변 · `wiki-lint` 감사/수정 · `wiki-status` 남은 일 · `wiki-knowledge` 종합 · `wiki-project-init` / `wiki-project-design` / `wiki-project-record` 프로젝트.
+| 의도 | 스킬 |
+|---|---|
+| 볼트 초기화/복구 | `wiki-setup` |
+| raw/ 소스 ingest | `wiki-ingest` |
+| URL ingest | `ingest-url` |
+| 현재 대화 캡처 | `wiki-capture` |
+| wiki 기반 질문 답변 | `wiki-query` |
+| 볼트 감사/수정 | `wiki-lint` |
+| 볼트 상태/남은 일 | `wiki-status` |
+| knowledge 페이지 종합 | `wiki-knowledge` |
+| 프로젝트 시작(overview/context/goals) | `wiki-project-init` |
+| 프로젝트 설계 변경(architecture/domain/conventions) | `wiki-project-design` |
+| 결정/이슈/미팅/백로그 기록 | `wiki-project-record` |
 
 어느 것이 맞는지 불확실하면 묻는다 — 추측하지 않는다.
