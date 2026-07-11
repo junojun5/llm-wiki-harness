@@ -62,7 +62,7 @@ flowchart TD
 | 파일 | 상태 | 가변 범위 | 불변 범위 |
 |---|---|---|---|
 | `decisions.md` | 항상 | — (append만) | 전체 항목 본문. 기존 항목 편집 절대 금지 |
-| `meetings/{date}-{slug}.md` | 항상 | — | 전체 본문. 기록 후 불변 |
+| `meetings/YYYY-MM-DD-{slug}.md` | 항상 | — | 전체 본문. 기록 후 불변 |
 | `troubleshooting/{case}.md` | `open` | 증상 / 가설·실험 (점진 갱신) | — |
 | `troubleshooting/{case}.md` | `resolved` | `## Follow-up`에 새 `[[케이스]]` 링크 추가만 | 증상 / 가설·실험 / 원인·해결·재발방지 (본문 무수정) |
 | `backlog.md` | 항상 | 전체 (체크박스 토글, 위험 상태 갱신) | — record의 유일한 완전 가변 산출물 |

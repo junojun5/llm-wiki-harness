@@ -1,6 +1,6 @@
 ---
 name: wiki-project-init
-description: 프로젝트를 시작·(재)정의할 때 사용 — "프로젝트 시작", "새 프로젝트 정리", "/wiki-project-init"
+description: 프로젝트를 시작·(재)정의할 때 사용 — "프로젝트 시작", "새 프로젝트 정리", "/wiki-project-init".
 ---
 
 # wiki-project-init
@@ -32,7 +32,7 @@ spec-kit `[NEEDS CLARIFICATION]` 패턴을 채택한다.
      - **의미 변경 라우팅:** 목적·KPI·제약이 바뀌면 → `decisions.md` 짝 항목을 위해 `wiki-project-record`로 안내. 아키텍처·기술 선택이 바뀌면 → `wiki-project-design`으로 안내.
 2. 인터뷰 진행 — 위 체크리스트를 한 번에 하나씩, 마커 상한 5개.
 3. 증거 수집을 위한 `wiki-query` 실행(공통 원칙: 항상 검색하고 매치될 때만 인용). 매치 있으면 `(출처: [[페이지]])` 인용, 없으면 `⚠️ unverified` + gap report에 `missing knowledge: {주제}` 기록 — 억지 인용 금지. 대상은 context의 외부 의존성·overview 배경 등 사실 기반 기술 주장.
-4. `overview.md` + `context.md` 생성(`goals.md`는 목표 논의가 있었던 경우만). frontmatter `category: projects`. 관련 concepts/entities를 `[[wiki-link]]`로 연결.
+4. `overview.md` + `context.md` 생성(`goals.md`는 목표 논의가 있었던 경우만). frontmatter `category: projects`. 관련 concepts/entities를 `[[slug]]`로 연결.
    - **goals.md를 쓴다면 비목표(non-goals) 섹션은 필수다.**
 5. 자기 검증 체크리스트 루프(공통 원칙 7) — 아래 `## 품질 체크` 기준으로 최대 2회 반복, 그 이후 잔여 항목은 보고만 한다.
 6. **Gap report 출력** — 세 종류를 구분한다:
@@ -54,5 +54,5 @@ spec-kit `[NEEDS CLARIFICATION]` 패턴을 채택한다.
 - goals를 작성했다면 비목표(non-goals) 섹션 존재.
 - `[NEEDS CLARIFICATION]` ≤ 5개, 잔존 시 gap report에 노출.
 - 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified`.
-- `[[wiki-link]]` — 검색 매치가 있을 때 최소 2개, 없으면 억지로 걸지 않고 gap report에 missing knowledge 기록.
+- `[[slug]]` — 검색 매치가 있을 때 최소 2개, 없으면 억지로 걸지 않고 gap report에 missing knowledge 기록.
 - index.md 등록, log.md 기록, hot.md 갱신, QMD refresh(§3-5) 완료.

@@ -41,16 +41,16 @@ Change proposal을 경유해 프로젝트의 design 문서 — `architecture.md`
 
 ```mermaid
 flowchart TD
-  A[변경 필요] --> B{"Surface? (오타·현황·링크·문구)"}
-  B -->|"예"| C["직접 통합 갱신 (Step 5)"]
-  B -->|"아니오: 주장·구조·기술 선택"| D["changes/YYYY-MM-DD-{slug}.md 생성<br/>status: proposed"]
-  D --> E[사용자 검토 요청]
-  E -->|승인| F["AS-IS 재검증<br/>(드리프트 시 proposal 갱신 후 재승인)"]
-  F --> G["delta 병합 + decisions.md 짝 항목 append<br/>+ changes/archive/ 이동 (status: applied)"]
-  E -->|거부| I["changes/archive/ 이동<br/>(status: rejected + 사유)"]
-  C --> H[자기검증 루프 → gap report → 종료 시퀀스]
-  G --> H
-  I --> H
+  Start[변경 필요] --> Q1{"Surface? (오타·현황·링크·문구)"}
+  Q1 -->|"예"| Surface["직접 통합 갱신 (Step 5)"]
+  Q1 -->|"아니오: 주장·구조·기술 선택"| Proposal["changes/YYYY-MM-DD-{slug}.md 생성<br/>status: proposed"]
+  Proposal --> Review[사용자 검토 요청]
+  Review -->|승인| Revalidate["AS-IS 재검증<br/>(드리프트 시 proposal 갱신 후 재승인)"]
+  Revalidate --> Apply["delta 병합 + decisions.md 짝 항목 append<br/>+ changes/archive/ 이동 (status: applied)"]
+  Review -->|거부| Reject["changes/archive/ 이동<br/>(status: rejected + 사유)"]
+  Surface --> End[자기검증 루프 → gap report → 종료 시퀀스]
+  Apply --> End
+  Reject --> End
 ```
 
 - **changes/ QMD 인덱싱:** proposed도 전체 인덱싱한다(별도 제외 없음). 대신 `base_confidence: 0.3`(전체 소스 유형 중 최저) + `tier: peripheral`로 wiki-query 랭킹에서 자연 강등시킨다. proposed 인용 시 "(proposed — 미확정 설계)" 표시 책임은 이 스킬이 아니라 wiki-query 출력 규칙(§4-5)에 있다 — design 단독으로는 보장하지 못한다.
