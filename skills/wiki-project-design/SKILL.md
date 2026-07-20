@@ -112,4 +112,12 @@ tier: peripheral       # wiki-query 랭킹 최하위
 - **다이어그램 정책:** 권장 + on-demand(의무 아님) — 그릴 가치가 있을 때만 작성, 빈 다이어그램 강제 금지. 다이어그램의 의미 변경도 semantic 변경이므로 change proposal 대상이다. 문법·표기 단일 출처는 `references/mermaid-conventions.md`.
 
 ## 품질 체크
-의미 변경에 change proposal 존재(표면 변경만 직접 갱신) · applied proposal마다 decisions.md 항목 + `[[change]]` 링크(스냅샷-기록 짝) · AS-IS/TO-BE가 구체적(요약이 아니라 비교 가능한 수준) · 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified` + missing knowledge 기록 · domain.md에 일반 개념 본문 복제 없음(`[[knowledge]]` 링크) · 다이어그램은 mermaid-conventions.md 준수 · index.md 등록·log.md 기록·hot.md 갱신·QMD refresh 완료.
+```
+□ 의미 변경에 change proposal 존재(표면 변경만 직접 갱신)
+□ applied proposal마다 decisions.md 항목 + `[[change]]` 링크(스냅샷-기록 짝)
+□ AS-IS/TO-BE가 구체적(요약이 아니라 비교 가능한 수준)
+□ 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified` + missing knowledge 기록
+□ domain.md에 일반 개념 본문 복제 없음(`[[knowledge]]` 링크)
+□ 다이어그램은 mermaid-conventions.md 준수
+□ index.md 등록·log.md 기록·hot.md 갱신·QMD refresh 완료
+```

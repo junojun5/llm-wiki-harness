@@ -60,9 +60,11 @@ spec-kit `[NEEDS CLARIFICATION]` 패턴을 채택한다.
 - **필요한 파일만 생성** — 처음부터 아홉 개 파일을 다 만들지 않는다. `overview.md`만 항상 생성(유일한 무조건 생성), `context.md`는 init 시 함께, `goals.md`는 목표 논의가 있을 때만.
 
 ## 품질 체크
-- overview에 목적 1문장 + KPI 존재.
-- goals를 작성했다면 비목표(non-goals) 섹션 존재.
-- `[NEEDS CLARIFICATION]` ≤ 5개, 잔존 시 gap report에 노출.
-- 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified`.
-- `[[slug]]` — 검색 매치가 있을 때 최소 2개, 없으면 억지로 걸지 않고 gap report에 missing knowledge 기록.
-- index.md 등록, log.md 기록, hot.md 갱신, QMD refresh 완료.
+```
+□ overview에 목적 1문장 + KPI 존재
+□ goals를 작성했다면 비목표(non-goals) 섹션 존재
+□ `[NEEDS CLARIFICATION]` ≤ 5개, 잔존 시 gap report에 노출
+□ 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified`
+□ `[[slug]]` — 검색 매치가 있을 때 최소 2개, 없으면 억지로 걸지 않고 gap report에 missing knowledge 기록
+□ index.md 등록·log.md 기록·hot.md 갱신·QMD refresh 완료
+```

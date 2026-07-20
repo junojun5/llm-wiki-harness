@@ -118,4 +118,11 @@ summary: "≤400자 — 증상·해결 요약"
 ```
 
 ## 품질 체크
-append 전 사용자 확인 완료 · 기존 항목 본문 무수정(decisions / resolved troubleshooting / meetings는 diff가 append뿐; backlog·open troubleshooting은 가변 예외) · decisions 이유에 `(출처: [[...]])` 또는 `⚠️ unverified` · troubleshooting: resolved는 4섹션(증상/원인/해결/재발 방지) 완비, open은 증상/가설/실험 · backlog 항목에 출처(코드 분석·논의) 명시 · index.md 등록·log.md 기록·hot.md 갱신·QMD refresh 완료.
+```
+□ append 전 사용자 확인 완료
+□ 기존 항목 본문 무수정(decisions / resolved troubleshooting / meetings는 diff가 append뿐; backlog·open troubleshooting은 가변 예외)
+□ decisions 이유에 `(출처: [[...]])` 또는 `⚠️ unverified`
+□ troubleshooting: resolved는 4섹션(증상/원인/해결/재발 방지) 완비, open은 증상/가설/실험
+□ backlog 항목에 출처(코드 분석·논의) 명시
+□ index.md 등록·log.md 기록·hot.md 갱신·QMD refresh 완료
+```
