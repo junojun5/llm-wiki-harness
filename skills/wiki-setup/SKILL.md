@@ -68,7 +68,7 @@ description: 새 볼트를 초기화하거나 깨진 설정을 복구할 때 사
    ```
    [YYYY-MM-DD] INIT — vault created
    ```
-8. `wiki/hot.md` — 없으면 아래 템플릿으로 생성한다. **이 템플릿이 hot.md의 단일 출처다** — 다른 쓰기 스킬은 "hot.md 없으면 §4-1 Step 8 템플릿으로 생성"이라고 이 위치만 인용하고 재서술하지 않는다.
+8. `wiki/hot.md` — 없으면 아래 템플릿으로 생성한다. **이 템플릿이 hot.md의 단일 출처다** — 다른 쓰기 스킬은 "hot.md 없으면 `wiki-setup` Step 8 템플릿으로 생성"이라고 이 위치만 인용하고 재서술하지 않는다.
    ```
    ---
    title: Hot Cache
@@ -104,14 +104,14 @@ description: 새 볼트를 초기화하거나 깨진 설정을 복구할 때 사
 4. 경로 유효성을 확인한다: `wiki/index.md`, `wiki/log.md`, `wiki/hot.md` 존재 여부를 점검하고 결과를 보고한다.
 
 ### `--update-qmd` (전체 QMD 재정합)
-per-skill refresh(§3-5)는 쓰기마다 증분 갱신하지만, QMD를 껐다 켠 사이 쓰기가 쌓였거나·머신을 옮겼거나·git pull/외부 편집으로 볼트가 스킬 밖에서 바뀌면 일괄 reconcile이 필요하다.
-1. **QMD 게이트 판정(§3-5).** CLI 미설치 → 설치 안내 후 중단. 컬렉션 미등록 → 워크플로우 Step 9의 등록(`${QMD_CLI:-qmd} collection add <vault>/<wiki_dir> --name wiki`)부터 수행한다.
-2. **§3-5 명령 시퀀스를 컬렉션 전체에 적용한다:**
+per-skill refresh는 쓰기마다 증분 갱신하지만, QMD를 껐다 켠 사이 쓰기가 쌓였거나·머신을 옮겼거나·git pull/외부 편집으로 볼트가 스킬 밖에서 바뀌면 일괄 reconcile이 필요하다.
+1. **QMD 게이트 판정.** CLI 미설치 → 설치 안내 후 중단. 컬렉션 미등록 → 워크플로우 Step 9의 등록(`${QMD_CLI:-qmd} collection add <vault>/<wiki_dir> --name wiki`)부터 수행한다.
+2. **QMD refresh 명령 시퀀스를 컬렉션 전체에 적용한다:**
    - `${QMD_CLI:-qmd} update` — 볼트 전체 해시 스캔(신규·변경·삭제 반영).
    - update가 벡터 필요를 보고하면 `${QMD_CLI:-qmd} embed` (전체 reconcile은 대개 필요하다).
    - `${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION"` — **컬렉션 전체 가시성 검증.** per-skill refresh의 단일 페이지 검증과 달리, 여기선 컬렉션 전체를 확인한다.
 3. `log.md`에 기록한다: `[YYYY-MM-DD] QMD-RECONCILE pages_indexed=N embedded=true|false`.
-4. §3-5 상태 문자열로 결과를 보고한다. QMD 실패는 볼트를 롤백하지 않고 QMD 상태만 별도 보고한다.
+4. QMD 상태 문자열로 결과를 보고한다. QMD 실패는 볼트를 롤백하지 않고 QMD 상태만 별도 보고한다.
 
 ## 기존 파일 보존 정책
 `index.md`/`log.md`/`hot.md`는 **존재 여부만** 확인한다. 있으면 내용 불문 유지한다 — 포맷이 낡았거나 frontmatter가 없어도 손대지 않는다. 포맷 노후의 진단·보강은 `wiki-lint --fix`의 책임이다(detect-and-repair) — setup이 내용까지 검사하면 책임이 중복된다. "백업 후 재생성"은 채택하지 않는다: 사용자 데이터를 LLM이 재생성하는 건 위험하고, 백업은 git의 일이다.

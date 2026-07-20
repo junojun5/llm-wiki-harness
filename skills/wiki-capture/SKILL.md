@@ -33,43 +33,53 @@ description: 현재 대화 지식을 wiki에 보존할 때 사용 — "이거 �
 
 ## 워크플로우
 
-0. **Config Gate.**
-0.5. **`wiki/hot.md` 읽기** (있으면) — 최근 활동 파악, 유사 내용이 이미 캡처됐는지 확인.
-1. **보존 가치 있는 지식 식별.**
-   - ✅ 저장: 결정과 이유, 기술적 발견, 분석/프레임워크, 핵심 사실.
-   - ❌ 스킵: 탐색 중 잡담, 결론 없는 논의, 일회성 Q&A.
-   - 판정 도구 — 재참조 테스트: *"2주 뒤 이 내용을 다시 찾을 이유가 있는가?"* 예 → 저장.
-   - 경계 사례 → 사용자에게 질문한다 (분류가 불확실하면 묻는다).
-   - 보존 가치 있는 게 없으면 이유를 사용자에게 알리고 중단한다.
-1.5. **저장 항목 미리보기 + 시크릿 마스킹.** 저장할 항목을 한 줄씩 사용자에게 제시한다 — 이 시점에 민감 항목을 제외할 수 있다. 마스킹 규칙은 위 **## 비밀 마스킹 규칙** 참조.
-2. **세션 페이지 작성** `wiki/summaries/sessions/YYYY-MM-DD-{slug}.md` (slug: kebab-case, ≤50자):
-   ```yaml
-   ---
-   title: "..."
-   category: summaries
-   tags: [...]
-   sources: ["conversation:YYYY-MM-DD"]
-   created: YYYY-MM-DD
-   updated: YYYY-MM-DD
-   summary: "..."            # ≤400자
-   status: unverified
-   status_changed: YYYY-MM-DD
-   base_confidence: 0.42     # conversation 소스 — 고정값, 추정치 아님
-   provenance: { extracted: <r>, inferred: <r>, ambiguous: <r> }   # 마커 기준 추정, 합 ≈ 1.0
-   ---
-   ```
-   본문: 논의를 **충실히** 기록한다 — 대화 맥락을 보존하고, 선언형으로 다시 쓰지 않는다.
-   - **마커:** 추론·일반화 문장에 `^[inferred]`, 불확실·논쟁적 문장에 `^[ambiguous]`.
-   - **provenance:** 위 frontmatter의 비율은 이 마커들을 근거로 추정·기록한다 (대화 캡처는 보통 `inferred` 비중이 높다).
-   - **검산:** wiki-lint check 13이 마커를 재계산해 이 비율을 검산한다.
-   권장 섹션: `## 주제` / `## 논의 내용` / `## 결론 / 결정` / `## 열린 질문`.
-   언급된 엔티티(사람/조직)는 본문에서 `[[slug]]`로 **언급·링크만** 한다 (참조는 페이지 생성이 아니다) — `entities/` 페이지 자체의 생성·갱신은 하지 않는다. 승격은 사용자의 명시적 요청 시에만 일어난다 (상단 2단계 파이프라인).
-3. **`wiki/index.md` 갱신.** `summaries/sessions` 서브섹션에 페이지를 추가한다.
-   - 서브섹션이 없으면 새로 만들고 추가한다 (wiki-setup은 최상위 카테고리 섹션만 시드하며, 서브섹션은 하드코딩하지 않는다).
-   - **`wiki/log.md`:** `[YYYY-MM-DD] CAPTURE type=session page="{sessions 경로}" title="{제목}"` 한 줄을 덧붙인다.
-4. **`wiki/hot.md` 갱신** (없으면 §4-1 Step 8 템플릿으로 생성). Recent Activity — 방금 캡처한 내용 한 줄 요약, 최근 3개 유지. Key Takeaways — 주목할 인사이트·결정 포함 시 갱신. `updated` 타임스탬프 갱신.
-5. **QMD refresh** (§3-5, `using-llm-wiki` 참조) — hot.md까지 모든 쓰기 완료 후 마지막 단계. QMD 상태 문자열을 최종 보고에 포함한다.
-6. **저장 경로 + QMD 상태를 사용자에게 확인 보고.**
+**Step 0 — Config Gate.**
+
+**Step 0.5 — `wiki/hot.md` 읽기 (있으면).** 최근 활동 파악, 유사 내용이 이미 캡처됐는지 확인.
+
+**Step 1 — 보존 가치 있는 지식 식별.**
+- ✅ 저장: 결정과 이유, 기술적 발견, 분석/프레임워크, 핵심 사실.
+- ❌ 스킵: 탐색 중 잡담, 결론 없는 논의, 일회성 Q&A.
+- 판정 도구 — 재참조 테스트: *"2주 뒤 이 내용을 다시 찾을 이유가 있는가?"* 예 → 저장.
+- 경계 사례 → 사용자에게 질문한다 (분류가 불확실하면 묻는다).
+- 보존 가치 있는 게 없으면 이유를 사용자에게 알리고 중단한다.
+
+**Step 1.5 — 저장 항목 미리보기 + 시크릿 마스킹.** 저장할 항목을 한 줄씩 사용자에게 제시한다 — 이 시점에 민감 항목을 제외할 수 있다. 마스킹 규칙은 위 **## 비밀 마스킹 규칙** 참조.
+
+**Step 2 — 세션 페이지 작성** `wiki/summaries/sessions/YYYY-MM-DD-{slug}.md` (slug: kebab-case, ≤50자):
+
+```yaml
+---
+title: "..."
+category: summaries
+tags: [...]
+sources: ["conversation:YYYY-MM-DD"]
+created: YYYY-MM-DD
+updated: YYYY-MM-DD
+summary: "..."            # ≤400자
+status: unverified
+status_changed: YYYY-MM-DD
+base_confidence: 0.42     # conversation 소스 — 고정값, 추정치 아님
+provenance: { extracted: <r>, inferred: <r>, ambiguous: <r> }   # 마커 기준 추정, 합 ≈ 1.0
+---
+```
+
+본문: 논의를 **충실히** 기록한다 — 대화 맥락을 보존하고, 선언형으로 다시 쓰지 않는다.
+- **마커:** 추론·일반화 문장에 `^[inferred]`, 불확실·논쟁적 문장에 `^[ambiguous]`.
+- **provenance:** 위 frontmatter의 비율은 이 마커들을 근거로 추정·기록한다 (대화 캡처는 보통 `inferred` 비중이 높다).
+- **검산:** wiki-lint check 13이 마커를 재계산해 이 비율을 검산한다.
+- **권장 섹션:** `## 주제` / `## 논의 내용` / `## 결론 / 결정` / `## 열린 질문`.
+- **언급된 엔티티(사람/조직):** 본문에서 `[[slug]]`로 **언급·링크만** 한다 (참조는 페이지 생성이 아니다) — `entities/` 페이지 자체의 생성·갱신은 하지 않는다. 승격은 사용자의 명시적 요청 시에만 일어난다 (상단 2단계 파이프라인).
+
+**Step 3 — `wiki/index.md` 갱신.** `summaries/sessions` 서브섹션에 페이지를 추가한다.
+- 서브섹션이 없으면 새로 만들고 추가한다 (wiki-setup은 최상위 카테고리 섹션만 시드하며, 서브섹션은 하드코딩하지 않는다).
+- **`wiki/log.md`:** `[YYYY-MM-DD] CAPTURE type=session page="{sessions 경로}" title="{제목}"` 한 줄을 덧붙인다.
+
+**Step 4 — `wiki/hot.md` 갱신** (없으면 `wiki-setup` Step 8 템플릿으로 생성). Recent Activity — 방금 캡처한 내용 한 줄 요약, 최근 3개 유지. Key Takeaways — 주목할 인사이트·결정 포함 시 갱신. `updated` 타임스탬프 갱신.
+
+**Step 5 — QMD refresh** (`using-llm-wiki` 참조) — hot.md까지 모든 쓰기 완료 후 마지막 단계. QMD 상태 문자열을 최종 보고에 포함한다.
+
+**Step 6 — 저장 경로 + QMD 상태를 사용자에게 확인 보고.**
 
 ## 세션은 영구적
 

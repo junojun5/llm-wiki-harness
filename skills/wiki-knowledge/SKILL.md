@@ -18,26 +18,34 @@ description: 여러 요약·개념·세션을 종합해 knowledge 페이지를 �
 
 ## 워크플로우
 
-0. **Config Gate** (`using-llm-wiki` 참조).
-0.5. **`wiki/hot.md` 읽기** (있으면) — 최근 활동·진행 중 스레드 파악. 동일 주제가 이미 캡처됐는지 확인하고, 관련 summaries·sessions가 언급돼 있으면 Step 2 재료 수집에 우선 포함한다.
-1. **대상 knowledge 페이지 존재 여부 확인.**
+**Step 0 — Config Gate** (`using-llm-wiki` 참조).
+
+**Step 0.5 — `wiki/hot.md` 읽기(있으면).** 최근 활동·진행 중 스레드 파악. 동일 주제가 이미 캡처됐는지 확인하고, 관련 summaries·sessions가 언급돼 있으면 Step 2 재료 수집에 우선 포함한다.
+
+**Step 1 — 대상 knowledge 페이지 존재 여부 확인.**
    - 없음 → **신규 생성 모드**: Step 2 → 2.5 → 5.
    - 있음 → **업데이트 모드**: Step 2 → 3 → 4 → 5.
-2. **재료 수집.** 사용자가 지정한 summaries·concepts·sessions를 읽는다. `wiki/index.md`를 grep해 관련 기존 페이지를 파악한다. 각 재료의 `sources:`에서 원본 URL을 추출한다(신규 knowledge 페이지의 `sources:` 구성용).
-2.5. **[신규 생성 모드 전용] 쓰기 전 종합 계획 미리보기.** 신규 knowledge는 합성·해석 비중이 높으므로, 업데이트 모드의 Step 4와 대칭으로 쓰기 전에 아래를 보고하고 확인받는다:
+
+**Step 2 — 재료 수집.** 사용자가 지정한 summaries·concepts·sessions를 읽는다. `wiki/index.md`를 grep해 관련 기존 페이지를 파악한다. 각 재료의 `sources:`에서 원본 URL을 추출한다(신규 knowledge 페이지의 `sources:` 구성용).
+
+**Step 2.5 — [신규 생성 모드 전용] 쓰기 전 종합 계획 미리보기.** 신규 knowledge는 합성·해석 비중이 높으므로, 업데이트 모드의 Step 4와 대칭으로 쓰기 전에 아래를 보고하고 확인받는다:
    - `sources_used` — 어떤 summaries·concepts·sessions를 합성하는지 목록.
    - 섹션별 핵심 주장 개요(개요·핵심 개념·트레이드오프에 무엇이 들어가는지).
    - 예상 provenance — inferred/ambiguous 비중이 높으면 미리 표시(해석 비중 신호).
+
    확인 후 진행. 자연어로 범위·강조점 조정 허용. 1인 로컬 전제이므로 가벼운 게이트다 — 승인 절차가 아니라 "이 방향이 맞나" 확인.
-3. **[업데이트 모드 전용] 기존 페이지 전체 읽기 + 변경 분석.** 재료와 기존 페이지의 각 주장을 정성적으로 분류한다(수치 임계값 아님):
+
+**Step 3 — [업데이트 모드 전용] 기존 페이지 전체 읽기 + 변경 분석.** 재료와 기존 페이지의 각 주장을 정성적으로 분류한다(수치 임계값 아님):
    - **동일 주장** → 본문 유지 + `sources`·`relationships`에 출처만 추가.
    - **표현·상세도 차이** → 더 정확·구체한 쪽으로 통합(충돌 아님).
    - **범위·맥락 차이** → 둘 다 보존, 맥락 명시해 통합(충돌 아님).
-   - **정면 모순** → `status: conflict` 예정 + `## Conflicts` 노트 준비(§3-3).
+   - **정면 모순** → `status: conflict` 예정 + `## Conflicts` 노트 준비.
    - **신규** → 적절한 섹션에 통합.
    - **구조 변경 필요** → 아래 분할 트리거 해당 여부 확인.
+
    LLM이 1차 분류한다. "정면 모순"만 사용자 확정 대상, 나머지는 Step 4 보고 후 진행.
-4. **[업데이트 모드 전용] 변경 계획을 사용자에게 보고.** 예:
+
+**Step 4 — [업데이트 모드 전용] 변경 계획을 사용자에게 보고.** 예:
    ```
    다음 변경을 적용합니다:
    - [통합] 핵심 개념 섹션에 attention mechanism 내용 추가
@@ -46,18 +54,22 @@ description: 여러 요약·개념·세션을 종합해 knowledge 페이지를 �
    - [구조 제안] 페이지 30% 증가 → 서브폴더 분할 권장 (별도 확인)
    ```
    충돌·구조 변경은 사용자 확인 후 진행. 나머지는 바로 실행.
-5. **페이지 작성 / 업데이트.** 아래 템플릿 구조를 준수한다.
+
+**Step 5 — 페이지 작성 / 업데이트.** 아래 템플릿 구조를 준수한다.
    - **신규** → 템플릿 그대로 생성.
    - **업데이트** → 기존 구조 유지하며 **병합**(통합, append 금지).
-   - **충돌 확정 시** → `status: conflict`, `## Conflicts` 노트 삽입(§3-3), `status_changed` 갱신.
-   - **구조 변경 확정 시** → 서브폴더 생성 + `index.md` 분리. 신규 서브폴더 페이지를 먼저 쓰고 검증한 뒤에야 원본을 `index.md` 허브로 전환한다(원본 먼저, §3-6). 인바운드 링크·relationships 재작성 중 실패는 wiki-lint가 감지·수리하고 롤백은 git이 맡는다 — 전용 staging·백업 트랜잭션은 두지 않는다.
-6. **`wiki/index.md` + `wiki/log.md` 갱신.**
+   - **충돌 확정 시** → `status: conflict`, `## Conflicts` 노트 삽입, `status_changed` 갱신.
+   - **구조 변경 확정 시** → 서브폴더 생성 + `index.md` 분리. 신규 서브폴더 페이지를 먼저 쓰고 검증한 뒤에야 원본을 `index.md` 허브로 전환한다(원본 먼저). 인바운드 링크·relationships 재작성 중 실패는 wiki-lint가 감지·수리하고 롤백은 git이 맡는다 — 전용 staging·백업 트랜잭션은 두지 않는다.
+
+**Step 6 — `wiki/index.md` + `wiki/log.md` 갱신.**
    ```
    [YYYY-MM-DD] KNOWLEDGE mode=create|update page="{경로}" sources_used=N
    (업데이트 시) changes="merge|conflict|restructure"
    ```
-7. **`wiki/hot.md` 갱신** — Recent Activity(생성/업데이트한 페이지 한 줄, 최근 3개 유지) · 심층 인사이트·새 합성 결과 있으면 Key Takeaways 갱신 · 진행 중 주제가 knowledge로 구체화됐으면 Active Threads 갱신 · `updated` 타임스탬프 갱신.
-8. **QMD refresh** — hot.md까지 모든 쓰기 완료 후 마지막에 실행(`using-llm-wiki` 참조).
+
+**Step 7 — `wiki/hot.md` 갱신.** Recent Activity(생성/업데이트한 페이지 한 줄, 최근 3개 유지) · 심층 인사이트·새 합성 결과 있으면 Key Takeaways 갱신 · 진행 중 주제가 knowledge로 구체화됐으면 Active Threads 갱신 · `updated` 타임스탬프 갱신.
+
+**Step 8 — QMD refresh.** hot.md까지 모든 쓰기 완료 후 마지막에 실행(`using-llm-wiki` 참조).
 
 ## 페이지 템플릿
 
@@ -120,7 +132,7 @@ relationships:
 
 ## 중첩링크 주의
 
-`relationships.target`의 `[[...]]`는 **frontmatter 중첩 필드 안에 있어 Obsidian 그래프·백링크로 인식되지 않는다** — QMD·CLI의 표준 YAML 파서는 정상 해석하지만, Obsidian은 파싱만 되고 그래프에 반영하지 않는다(spec §3-3). 이 필드의 소비자는 wiki-query 같은 머신이지 Obsidian 그래프가 아니다.
+`relationships.target`의 `[[...]]`는 **frontmatter 중첩 필드 안에 있어 Obsidian 그래프·백링크로 인식되지 않는다** — QMD·CLI의 표준 YAML 파서는 정상 해석하지만, Obsidian은 파싱만 되고 그래프에 반영하지 않는다. 이 필드의 소비자는 wiki-query 같은 머신이지 Obsidian 그래프가 아니다.
 
 **따라서 사람용 연결은 반드시 본문에도 만든다:**
 - ✅ 합성 계보를 나타내는 재료는 `relationships: depends_on`에 기록**하고**, 사람이 따라갈 연결은 본문 `[[slug]]` 링크와 `## 관련 페이지` 섹션에 둔다.
@@ -143,7 +155,7 @@ wiki/knowledge/{주제}/
   {subtopic1}.md
   {subtopic2}.md
 ```
-`index.md`는 전체 주제 개요(2-3문장) + 하위 페이지 목차·한 줄 설명 + 읽기 순서만 담고, 본문은 각 하위 페이지로 위임한다(Diátaxis landing page 원칙). 신규 서브폴더 페이지를 먼저 쓰고 검증한 뒤 원본을 허브로 전환한다(원본 먼저, §3-6).
+`index.md`는 전체 주제 개요(2-3문장) + 하위 페이지 목차·한 줄 설명 + 읽기 순서만 담고, 본문은 각 하위 페이지로 위임한다(Diátaxis landing page 원칙). 신규 서브폴더 페이지를 먼저 쓰고 검증한 뒤 원본을 허브로 전환한다(원본 먼저).
 
 ## 품질 체크
 ```

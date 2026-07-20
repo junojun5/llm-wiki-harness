@@ -19,7 +19,7 @@ lint는 **"무엇이 깨졌나"**(구조적 이슈: 고아, 깨진 링크, 포�
 ## 정본 스크립트를 사용 — 재발명 금지
 결정론적 체크는 **단일 코드 출처**에서 나온다 (validator 훅이 쓰는 것과 동일한 스크립트이므로 결과가 절대 드리프트하지 않음). `rg`/grep 링크 스캔을 손수 짜지 마라:
 - `~/.llm-wiki/scripts/build-link-graph.sh <WIKI_DIR>` → **O(N) 단일 패스**로 고아, 깨진 링크, 개념 갭, 관계 target/self 이슈 산출 (체크 1, 2, 9, 12). 파일별 grep(O(N×M)) 금지.
-- `~/.llm-wiki/scripts/validate-frontmatter.sh <file>` → 페이지별 클래스 인식 frontmatter 체크 (체크 3). 페이지 전반에 실행; §3-3 문서 클래스 규칙을 적용한다 (원장 파일 면제, changes/troubleshooting enum).
+- `~/.llm-wiki/scripts/validate-frontmatter.sh <file>` → 페이지별 클래스 인식 frontmatter 체크 (체크 3). 페이지 전반에 실행; 문서 클래스 규칙을 적용한다 (원장 파일 면제, changes/troubleshooting enum).
 
 **스캔 대상 제외:** `wiki/index.md`, `wiki/log.md`, `wiki/hot.md` — 17개 체크 전체에서 스캔·계수 대상이 아니다. hot.md는 쓰기 스킬이 자동 갱신하므로 lint가 검증하지 않는다.
 
@@ -79,7 +79,7 @@ severity별로 그룹화해 출력한다 (🔴 ERROR → 🟡 REVIEW → ℹ️ 
 - `changes/` 루트에 `applied`|`rejected` 파일 잔류(`archive/` 미이동) → 위치 불일치.
 
 ## 출력 형식과 다음 액션
-severity 그룹(🔴 → 🟡 → ℹ️)으로 묶어 출력하고, 각 그룹에 **next-action 줄**을 붙인다. 특히 자동 수정 불가 항목에 구체적 액션을 제시한다: conflict → "소스 하나를 채택한 뒤 §3-3 resolved로 갱신", PII → "값 확인 후 수정/.gitignore", 미처리 raw → "/wiki-ingest <경로>", 고아 → "링크 추가 또는 archive". 끝에 총계 줄: `총 이슈: N개 | 🔴 M개 | 🟡 K개 | ℹ️ J개 | 자동 수정 가능: M개 (--fix)`.
+severity 그룹(🔴 → 🟡 → ℹ️)으로 묶어 출력하고, 각 그룹에 **next-action 줄**을 붙인다. 특히 자동 수정 불가 항목에 구체적 액션을 제시한다: conflict → "소스 하나를 채택한 뒤 페이지 포맷의 resolved 규칙으로 갱신", PII → "값 확인 후 수정/.gitignore", 미처리 raw → "/wiki-ingest <경로>", 고아 → "링크 추가 또는 archive". 끝에 총계 줄: `총 이슈: N개 | 🔴 M개 | 🟡 K개 | ℹ️ J개 | 자동 수정 가능: M개 (--fix)`.
 
 ## `--fix` 모델
 dry-run이 기본값이고, 카테고리별로 적용 방식이 갈린다.
@@ -102,4 +102,4 @@ flowchart TD
 
 ## 마무리
 - `log.md`: `[YYYY-MM-DD] LINT issues_found=N orphans=A broken_links=B format_errors=C missing_summary=D unprocessed=E index_missing=F unverified=G conflicts=H concept_gaps=I stale=J pii_exposure=K relationship_issues=L provenance_drift=M supersession_issues=N raw_deletable=O change_proposal_issues=P manifest_integrity=Q`
-- **QMD refresh**(§3-5, `using-llm-wiki` 참조)는 **`--fix`가 실제로 페이지를 쓴 경우에만** 실행한다. report-only 실행은 read-only이므로 refresh하지 않는다.
+- **QMD refresh**(`using-llm-wiki` 참조)는 **`--fix`가 실제로 페이지를 쓴 경우에만** 실행한다. report-only 실행은 read-only이므로 refresh하지 않는다.

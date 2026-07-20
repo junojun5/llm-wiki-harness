@@ -9,12 +9,12 @@ description: wiki에 저장된 지식을 질문·조회할 때 사용 — "wiki�
 저렴한 단계부터 비싼 단계까지 순서대로 밟아 wiki에서 질문에 답한다. 답할 수 있는 즉시 멈춰 토큰을 최소화한다. 먼저 Config Gate.
 
 ## read-only 경계
-wiki-query는 페이지 / `index.md` / `hot.md` / QMD 무엇도 쓰지 않는다. 유일한 예외는 Step 6의 `log.md` QUERY 추가(관찰 기록) — 정의·근거는 §3-6 "read-only 스킬의 경계"를 참조한다. log append가 실패해도 답변은 이미 전달됐으므로 스킬 실패가 아니다.
+wiki-query는 페이지 / `index.md` / `hot.md` / QMD 무엇도 쓰지 않는다. 유일한 예외는 Step 6의 `log.md` QUERY 추가(관찰 기록) — 정의·근거는 "read-only 스킬의 경계"를 참조한다. log append가 실패해도 답변은 이미 전달됐으므로 스킬 실패가 아니다.
 
-QMD는 후보 수집(discovery)에만 쓴다. 최종 인용·답변 근거는 **항상 파일 본문에서 검증**한다 — QMD가 캐시한 텍스트로 답하지 않는다. 파일이 없거나 본문에 해당 내용이 없는 QMD 히트는 버리고 "QMD 인덱스가 stale할 수 있음 — /wiki-setup --update-qmd"라고 기록한다(self-healing, §3-5).
+QMD는 후보 수집(discovery)에만 쓴다. 최종 인용·답변 근거는 **항상 파일 본문에서 검증**한다 — QMD가 캐시한 텍스트로 답하지 않는다. 파일이 없거나 본문에 해당 내용이 없는 QMD 히트는 버리고 "QMD 인덱스가 stale할 수 있음 — /wiki-setup --update-qmd"라고 기록한다(self-healing).
 
 ## 검색 사다리
-**Step 0 — Config Gate + QMD 게이트.** Config Gate 통과 후 QMD 게이트 판정(§3-5) → 이후 Step 2b 활용 여부가 정해진다.
+**Step 0 — Config Gate + QMD 게이트.** Config Gate 통과 후 QMD 게이트 판정 → 이후 Step 2b 활용 여부가 정해진다.
 
 **Step 0.5 — `wiki/hot.md` 읽기(있으면).** 질문이 최근 활동에 대한 것이면 hot.md만으로 바로 답할 수 있는지 확인한다 → 충분하면 Step 5로 점프.
 
@@ -26,7 +26,7 @@ QMD는 후보 수집(discovery)에만 쓴다. 최종 인용·답변 근거는 **
 - **Index-only 모드는 여기서 중단.** `summary:` 필드 + index.md 설명만으로 답변을 구성하고 라벨 `(index-only — 페이지 본문 미읽음, 세부 내용 누락 가능)`을 붙인다 → Step 6으로 점프.
 
 **Step 2b — QMD Semantic Pass** (QMD 게이트 통과 시만; 미설정이면 스킵하고 Step 3으로). 시맨틱 검색으로 키워드가 놓친 후보를 보완한다(후보 수집 전용). 결과 충분 → Step 4로 점프(QMD 상위 파일만 전체 읽기). 결과 불충분 → Step 3.
-- ⚠️ **stale 인덱스 가드:** QMD가 가리킨 경로가 실재하지 않거나(삭제·이동) 본문에 해당 내용이 없으면 → 그 후보를 폐기하고 "QMD 인덱스가 stale할 수 있음, /wiki-setup --update-qmd 권장" 1줄을 답변에 덧붙인다(§3-5 self-healing).
+- ⚠️ **stale 인덱스 가드:** QMD가 가리킨 경로가 실재하지 않거나(삭제·이동) 본문에 해당 내용이 없으면 → 그 후보를 폐기하고 "QMD 인덱스가 stale할 수 있음, /wiki-setup --update-qmd 권장" 1줄을 답변에 덧붙인다(self-healing).
 
 **Step 3 — Section Pass (중간 비용, Step 2/2b 불충분 시).** 각 후보 파일에 `Grep -A 10 -B 2 "<query-term>" <candidate-file>` 실행 → 15~30줄 확보(전체 읽기 100~500줄 대비 저렴). 충분하면 Step 5로 점프.
 
@@ -37,7 +37,7 @@ QMD는 후보 수집(discovery)에만 쓴다. 최종 인용·답변 근거는 **
 
 **Step 5 — 답변 합성.** 아래 "## 답변 포맷"을 따른다.
 
-**Step 6 — `wiki/log.md` 쿼리 기록** (read-only 예외 — 관찰 기록, §3-6):
+**Step 6 — `wiki/log.md` 쿼리 기록** (read-only 예외 — 관찰 기록):
 ```
 [YYYY-MM-DD] QUERY query="{질문 요약}" result_pages=N mode=normal|index_only escalated=true|false
 ```
@@ -56,5 +56,5 @@ log append 실패해도 답변은 이미 전달됨 → 스킬 실패 아님(self
 - 인용은 `[[slug]]` 기본(Obsidian 1차 소비 환경 — 클릭 가능, 페이지 이동 시 자동 추적). Section grep·Full read를 실제 수행한 경우(Step 3·4)에 한해 검증 편의로 `file_path:line` 힌트를 인용 옆에 보조 표기할 수 있다 — 기본은 항상 `[[slug]]`.
 - 인용마다 검색 단계 투명성 라벨을 붙인다: `found in summary` | `section grep` | `full page read`.
 - 스테일 체크: (오늘 − `updated`) > 90일 → `[[slug]] (stale: last updated YYYY-MM-DD)`.
-- 미확정 상태 표시(§4-9 연동): `status: proposed`(changes/ 제안) → `[[slug]] (proposed — 미확정 설계)`; `[NEEDS CLARIFICATION]` 마커 잔존 또는 `status: unverified` → `[[slug]] (미확정: 가정 포함)`. 미확정 내용을 사실처럼 회수하지 않는다.
+- 미확정 상태 표시(wiki-project 스킬군 연동): `status: proposed`(changes/ 제안) → `[[slug]] (proposed — 미확정 설계)`; `[NEEDS CLARIFICATION]` 마커 잔존 또는 `status: unverified` → `[[slug]] (미확정: 가정 포함)`. 미확정 내용을 사실처럼 회수하지 않는다.
 - wiki에 없으면 "wiki에 해당 내용이 없습니다"라고 명시한다(임의 생성 금지). 절대 자신의 지식으로 답을 지어내 wiki 콘텐츠인 양 제시하지 않는다.

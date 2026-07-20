@@ -83,7 +83,7 @@ index-only 패스: ~K tokens
 ```
 모두 해당 없으면 → "✅ Wiki가 최신 상태입니다. 처리 대기 항목 없음."
 
-**Step 7 — `wiki/log.md` 상태 조회 기록** (read-only 예외 — 관찰 기록, §3-6 "read-only 스킬의 경계"):
+**Step 7 — `wiki/log.md` 상태 조회 기록** (read-only 예외 — 관찰 기록):
 ```
 [YYYY-MM-DD] STATUS unprocessed=N recent_ingest="{경로}" token_estimate=K
 ```

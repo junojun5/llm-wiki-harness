@@ -24,23 +24,33 @@ spec-kit `[NEEDS CLARIFICATION]` 패턴을 채택한다.
 - **goals:** 마일스톤? 측정 가능한 성공 기준? **비목표(non-goals) — 명시적으로 안 하는 것.**
 
 ## 워크플로우
-0. **Config Gate** (AGENTS.md / CLAUDE.md Step 0).
-0.5. `hot.md` 읽기 — 관련 논의 스레드 확인.
-1. 프로젝트명 확인(slug 규칙 §2) → `wiki/projects/{name}/` 존재 검사.
-   - **존재하지 않음** → 신규 생성 경로, Step 2로.
-   - **존재함 → 재프레이밍 모드.** 기존 파일을 읽고 인터뷰로 갱신한다. **기존 콘텐츠를 보존·통합한다 — 절대 덮어쓰지 않는다.**
-     - **의미 변경 라우팅:** 목적·KPI·제약이 바뀌면 → `decisions.md` 짝 항목을 위해 `wiki-project-record`로 안내. 아키텍처·기술 선택이 바뀌면 → `wiki-project-design`으로 안내.
-2. 인터뷰 진행 — 위 체크리스트를 한 번에 하나씩, 마커 상한 5개.
-3. 증거 수집을 위한 `wiki-query` 실행(공통 원칙: 항상 검색하고 매치될 때만 인용). 매치 있으면 `(출처: [[페이지]])` 인용, 없으면 `⚠️ unverified` + gap report에 `missing knowledge: {주제}` 기록 — 억지 인용 금지. 대상은 context의 외부 의존성·overview 배경 등 사실 기반 기술 주장.
-4. `overview.md` + `context.md` 생성(`goals.md`는 목표 논의가 있었던 경우만). frontmatter `category: projects`. 관련 concepts/entities를 `[[slug]]`로 연결.
-   - **goals.md를 쓴다면 비목표(non-goals) 섹션은 필수다.**
-5. 자기 검증 체크리스트 루프(공통 원칙 7) — 아래 `## 품질 체크` 기준으로 최대 2회 반복, 그 이후 잔여 항목은 보고만 한다.
-6. **Gap report 출력** — 세 종류를 구분한다:
+**Step 0 — Config Gate** (AGENTS.md / CLAUDE.md Step 0).
+
+**Step 0.5 — `hot.md` 읽기.** 관련 논의 스레드 확인.
+
+**Step 1 — 프로젝트명 확인**(slug 규칙) → `wiki/projects/{name}/` 존재 검사.
+- **존재하지 않음** → 신규 생성 경로, Step 2로.
+- **존재함 → 재프레이밍 모드.** 기존 파일을 읽고 인터뷰로 갱신한다. **기존 콘텐츠를 보존·통합한다 — 절대 덮어쓰지 않는다.**
+  - **의미 변경 라우팅:** 목적·KPI·제약이 바뀌면 → `decisions.md` 짝 항목을 위해 `wiki-project-record`로 안내. 아키텍처·기술 선택이 바뀌면 → `wiki-project-design`으로 안내.
+
+**Step 2 — 인터뷰 진행.** 위 체크리스트를 한 번에 하나씩, 마커 상한 5개.
+
+**Step 3 — 증거 수집을 위한 `wiki-query` 실행**(공통 원칙: 항상 검색하고 매치될 때만 인용). 매치 있으면 `(출처: [[페이지]])` 인용, 없으면 `⚠️ unverified` + gap report에 `missing knowledge: {주제}` 기록 — 억지 인용 금지. 대상은 context의 외부 의존성·overview 배경 등 사실 기반 기술 주장.
+
+**Step 4 — `overview.md` + `context.md` 생성**(`goals.md`는 목표 논의가 있었던 경우만). frontmatter `category: projects`. 관련 concepts/entities를 `[[slug]]`로 연결.
+- **goals.md를 쓴다면 비목표(non-goals) 섹션은 필수다.**
+
+**Step 5 — 자기 검증 체크리스트 루프**(공통 원칙 7). 아래 `## 품질 체크` 기준으로 최대 2회 반복, 그 이후 잔여 항목은 보고만 한다.
+
+**Step 6 — Gap report 출력.** 세 종류를 구분한다:
    1. 단계 미진입 (예: "goals.md 없음 — 기획 단계 미도달", 정상 상태)
    2. 실제 갭 (예: "goals.md 있는데 성공 기준 섹션 비어 있음")
    3. missing knowledge 목록 (다음 ingest 의제)
-7. 종료 시퀀스 — index → log → hot → QMD refresh(§3-5).
-   log: `[YYYY-MM-DD] PROJECT-INIT name="{name}" files=[…] markers=N`
+
+**Step 7 — 종료 시퀀스.** index → log → hot → QMD refresh. log:
+```
+[YYYY-MM-DD] PROJECT-INIT name="{name}" files=[…] markers=N
+```
 
 ## 경계
 - **W (소유·직접 쓰기):** `overview.md` / `context.md` / `goals.md`.
@@ -55,4 +65,4 @@ spec-kit `[NEEDS CLARIFICATION]` 패턴을 채택한다.
 - `[NEEDS CLARIFICATION]` ≤ 5개, 잔존 시 gap report에 노출.
 - 기술 주장에 `(출처: [[...]])` 또는 `⚠️ unverified`.
 - `[[slug]]` — 검색 매치가 있을 때 최소 2개, 없으면 억지로 걸지 않고 gap report에 missing knowledge 기록.
-- index.md 등록, log.md 기록, hot.md 갱신, QMD refresh(§3-5) 완료.
+- index.md 등록, log.md 기록, hot.md 갱신, QMD refresh 완료.

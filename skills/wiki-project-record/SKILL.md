@@ -38,19 +38,26 @@ flowchart TD
   Q5 -->|확신 없음| Ask[사용자에게 질문]
 ```
 
-- (raw 트랜스크립트가 있는 미팅은 `wiki-ingest`가 `summaries/meetings/`에 미러링한다 — §4-2. 여기서 다루는 건 raw 없는 라이브 프로젝트 미팅뿐이다.)
+- (raw 트랜스크립트가 있는 미팅은 `wiki-ingest`가 `summaries/meetings/`에 미러링한다. 여기서 다루는 건 raw 없는 라이브 프로젝트 미팅뿐이다.)
 
-**decisions.md 공동 쓰기 — 형식은 record, 쓰기는 두 스킬:** `decisions.md`는 이 스킬이 **소유**(형식·append 규칙의 단일 출처)하지만, 실제 append는 두 스킬이 나눠 한다. 설계 문서 본문 변경을 동반하는 결정은 `wiki-project-design`이 proposal 병합 시 아래 §4-9-3 형식을 **직접** append하고(위임 호출 없음), 설계 본문과 무관한 결정만 이 스킬이 직행 append한다. 한 파일에 두 출처가 섞이지만 `변경 기록:` 필드의 유무로 구분된다(design 경유 시만 존재).
+**decisions.md 공동 쓰기 — 형식은 record, 쓰기는 두 스킬:** `decisions.md`는 이 스킬이 **소유**(형식·append 규칙의 단일 출처)하지만, 실제 append는 두 스킬이 나눠 한다. 설계 문서 본문 변경을 동반하는 결정은 `wiki-project-design`이 proposal 병합 시 아래 decisions.md 형식을 **직접** append하고(위임 호출 없음), 설계 본문과 무관한 결정만 이 스킬이 직행 append한다. 한 파일에 두 출처가 섞이지만 `변경 기록:` 필드의 유무로 구분된다(design 경유 시만 존재).
 
 ## 워크플로우
-0. **Config Gate** (§3-2).
-0.5. `hot.md` 읽기 — 관련 논의 스레드 확인.
-1. 위 라우팅으로 대상 파일 판별.
-2. 대화에서 초안 작성(결정/이유/대안 또는 증상/가설 등, 아래 파일 포맷 준수) → **사용자와 확인**.
-3. 대상 파일에 append, 또는 첫 기록이면 신규 파일 생성(케이스당 1파일, 미팅당 1파일).
-4. 관련 `[[knowledge]]`/`[[concepts]]`/design 문서 링크 연결.
-5. 간단한 gap report 출력 — 미기록 결정 후보가 있으면 플래그.
-6. 종료 시퀀스 — index → log → hot → QMD refresh(§3-5, §3-6 순서). log: `[YYYY-MM-DD] PROJECT-RECORD name="{name}" type=decision|troubleshooting|meeting|backlog target="{경로}"`.
+**Step 0 — Config Gate.**
+
+**Step 0.5 — `hot.md` 읽기.** 관련 논의 스레드 확인.
+
+**Step 1 — 위 라우팅으로 대상 파일 판별.**
+
+**Step 2 — 대화에서 초안 작성**(결정/이유/대안 또는 증상/가설 등, 아래 파일 포맷 준수) → **사용자와 확인**.
+
+**Step 3 — 대상 파일에 append**, 또는 첫 기록이면 신규 파일 생성(케이스당 1파일, 미팅당 1파일).
+
+**Step 4 — 관련 `[[knowledge]]`/`[[concepts]]`/design 문서 링크 연결.**
+
+**Step 5 — 간단한 gap report 출력.** 미기록 결정 후보가 있으면 플래그.
+
+**Step 6 — 종료 시퀀스.** index → log → hot → QMD refresh. log: `[YYYY-MM-DD] PROJECT-RECORD name="{name}" type=decision|troubleshooting|meeting|backlog target="{경로}"`.
 
 ## 승인 규칙 — 결정은 사용자의 것
 - **MUST** append 전 결정·이유·대안 초안을 제시하고 확인받는다. **자동 append 금지.**
@@ -111,4 +118,4 @@ summary: "≤400자 — 증상·해결 요약"
 ```
 
 ## 품질 체크
-append 전 사용자 확인 완료 · 기존 항목 본문 무수정(decisions / resolved troubleshooting / meetings는 diff가 append뿐; backlog·open troubleshooting은 가변 예외) · decisions 이유에 `(출처: [[...]])` 또는 `⚠️ unverified` · troubleshooting: resolved는 4섹션(증상/원인/해결/재발 방지) 완비, open은 증상/가설/실험 · backlog 항목에 출처(코드 분석·논의) 명시 · index.md 등록·log.md 기록·hot.md 갱신·QMD refresh(§3-5) 완료.
+append 전 사용자 확인 완료 · 기존 항목 본문 무수정(decisions / resolved troubleshooting / meetings는 diff가 append뿐; backlog·open troubleshooting은 가변 예외) · decisions 이유에 `(출처: [[...]])` 또는 `⚠️ unverified` · troubleshooting: resolved는 4섹션(증상/원인/해결/재발 방지) 완비, open은 증상/가설/실험 · backlog 항목에 출처(코드 분석·논의) 명시 · index.md 등록·log.md 기록·hot.md 갱신·QMD refresh 완료.

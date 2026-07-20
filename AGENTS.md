@@ -18,7 +18,7 @@ bash ~/.llm-wiki/scripts/resolve-vault.sh
 - **모든 사실 기반 주장에 출처**: `(출처: [[page]])` 또는 `⚠️ unverified` 표시. 충돌 → `## Conflicts` 블록 + `status: conflict`. 폐기(삭제 금지) → `wiki/archived/`로 이동.
 - 페이지는 한국어. 파일명은 소문자-하이픈. 내부 링크는 [[slug]] (파일명만, 폴더 경로 없음). index.md는 마크다운-표 `| [표시명](상대경로.md) | 설명 |`. 분류 불확실하면 묻는다.
 
-## QMD refresh (§3-5) — 쓰기 스킬 종료 단계
+## QMD refresh — 쓰기 스킬 종료 단계
 
 QMD는 볼트 위의 **선택적** 검색 인덱스(markdown이 source of truth). read-only 스킬(`wiki-query`·`wiki-status`)은 refresh하지 않는다. 설정 파일 없음 — qmd 레지스트리가 단일 출처.
 
