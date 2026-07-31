@@ -116,7 +116,7 @@ ingest 1회당 신규 concept가 5개를 넘으면 전체 목록을 제시하고
 
 ## meetings 라우팅
 
-`raw/meetings/` 소스는 **항상** `summaries/meetings/{file}.md` 1:1 미러만 생성한다. 프로젝트·전사 관련성은 복제가 아니라 `[[링크]]`로 표현한다 — 프로젝트 문서나 인덱스에서 `[[summaries/meetings/{file}]]`를 참조하거나 `relationships`로 연결한다.
+`raw/meetings/` 소스는 **항상** `summaries/meetings/{file}.md` 1:1 미러만 생성한다. 프로젝트·전사 관련성은 복제가 아니라 `[[링크]]`로 표현한다 — 프로젝트 문서나 인덱스에서 `[[{file}]]`를 참조하거나 `relationships`로 연결한다.
 
 미팅 1개 = 산출물 1개다(QMD 이중 회수 방지). raw 트랜스크립트가 있는 미팅은 위 미러가 유일 산출물이고, raw 없는 라이브 미팅만 `wiki/meetings/` 또는 `projects/{name}/meetings/`에 직접 기록되며 그것은 `wiki-project-record`의 영역이다.
 

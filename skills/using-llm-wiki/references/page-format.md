@@ -61,7 +61,7 @@ tier: core | supporting | peripheral
 #   core → 동점 시 먼저 읽힘 / peripheral → 유일한 매치일 때만 읽힘
 
 relationships:
-  - target: "[[concepts/related]]"
+  - target: "[[related-concept]]"
     type: uses | contradicts | extends | depends_on | related_to
 # wiki-query가 탐색하는 typed edge. 방향·타입이 명확할 때만 작성, 애매하면 related_to 또는 생략
 #   uses=target 개념을 활용 / contradicts=상충(충돌 근거) / extends=확장·심화
@@ -71,7 +71,12 @@ provenance:
   extracted: 0.0-1.0      # 원본에서 직접 추출한 claim 비율 (기본값 — 마커 없는 나머지)
   inferred: 0.0-1.0       # 추론·일반화 비율 (본문 ^[inferred] 마커)
   ambiguous: 0.0-1.0      # 불확실·논쟁적 비율 (본문 ^[ambiguous] 마커)
-# 합 ≈ 1.0. 대화 기반·추론 비중이 높은 페이지에 설정. 공식 소스 ingest만 있는 페이지는 생략
+# 합 = 1.0 ± 0.05 (validator 허용오차). 대화 기반·추론 비중이 높은 페이지에 설정.
+# 공식 소스 ingest만 있는 페이지는 생략 (= 전부 extracted = 1.0으로 간주)
+# ⚠️ **provenance·relationships는 반드시 위와 같은 블록 표기다.** 세 비율을 한 줄짜리
+#   인라인 flow mapping(중괄호)으로 적으면 validator가 그 값을 스칼라 문자열로 읽어
+#   검사 자체가 무의미해진다 — 그래서 validator는 "키는 있는데 dict/list로 파싱되지 않으면
+#   에러"로 끊는다. 인라인으로 쓰면 페이지 쓰기가 실패한다. relationships도 같은 함정이 있다.
 
 superseded_by: "[[replacement-page]]"   # archived 페이지가 무엇으로 대체됐는지
 status_changed: YYYY-MM-DD              # status 마지막 변경일 (status 변경 시 함께 갱신)

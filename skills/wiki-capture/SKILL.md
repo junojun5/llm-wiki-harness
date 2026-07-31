@@ -53,7 +53,10 @@ Step 2: summaries/sessions/YYYY-MM-DD-{slug}.md 에 캡처
     base_confidence: 0.42
     status: unverified
     status_changed: YYYY-MM-DD
-    provenance: { extracted: <비율>, inferred: <비율>, ambiguous: <비율> }
+    provenance:              # 반드시 블록 표기 — 인라인 { } 는 validator가 거부한다
+      extracted: <비율>
+      inferred: <비율>
+      ambiguous: <비율>
 
   본문은 대화 내용을 충실히 기록한다 (대화 맥락 보존, 선언적 재작성 없음).
   추론·일반화 문장에 ^[inferred], 불확실·논쟁적 문장에 ^[ambiguous] 마커를 단다.

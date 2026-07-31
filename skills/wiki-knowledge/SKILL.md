@@ -25,9 +25,9 @@ summary: "≤400자 요약"
 status: verified | unverified | conflict
 base_confidence: 0.0-1.0
 relationships:
-  - target: "[[summaries/articles/topic/source-a]]"
+  - target: "[[source-a]]"
     type: depends_on
-  - target: "[[concepts/related-concept]]"
+  - target: "[[related-concept]]"
     type: extends
 ---
 
