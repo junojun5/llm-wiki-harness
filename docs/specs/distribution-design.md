@@ -201,7 +201,7 @@ SKILL.md frontmatter = `name` + `description`만 → 4개 도구 공통이라 �
 **주입 메커니즘:**
 - Claude/Codex/Cursor: `session-start` 훅이 `skills/using-llm-wiki/SKILL.md`를 읽어 세션 컨텍스트로 주입 (`<EXTREMELY_IMPORTANT>` 래핑). 플랫폼별 stdout 필드 분기 — Claude `hookSpecificOutput.additionalContext` / Codex `additional_context` / Cursor `additional_context`+`env`. Cursor엔 `hookSpecificOutput` 래퍼가 없으므로 래핑 문자열을 `additional_context`에 직접 넣는다.
 - Antigravity: 훅 스키마 미공개(404·0 handlers) → AGENTS.md가 부트스트랩 핵심 규칙을 상시 로드하여 대체.
-- **Cursor Cloud Agent에서는 `sessionStart`·user hooks 미지원** → 로컬 Agent vs Cloud Agent 차이를 README 트러블슈팅에 명시.
+- **Cursor Cloud Agent에서는 `sessionStart`·user hooks 미지원** → 로컬 Agent vs Cloud Agent 차이를 `docs/troubleshooting.md`에 명시.
 
 **작성 원칙:** 토큰 효율 최우선 (매 세션 로드). best-skill-creator 가이드의 "frequently-loaded skills <200 words" 목표 준수. 상세는 본문에 두지 않고 개별 스킬·스펙을 인용. AGENTS.md에 들어가는 축약판도 Codex 32 KiB 예산(§6)을 넘기지 않는다.
 
@@ -219,7 +219,7 @@ SKILL.md frontmatter = `name` + `description`만 → 4개 도구 공통이라 �
 
 **정정:** Cursor·Codex의 네이티브 로드 경로는 **프로젝트 루트 `AGENTS.md`**이지 `.agents/AGENTS.md`가 아니다. 따라서 canonical을 루트 `AGENTS.md`에 두고, `.agents/AGENTS.md`(Antigravity 프로젝트)·`~/.gemini/config/AGENTS.md`(Antigravity 글로벌)는 install.sh가 symlink로 파생한다 → drift 0.
 
-**Codex 32 KiB 예산:** Codex는 global/project `AGENTS.md`를 instruction chain으로 병합하며 기본 `project_doc_max_bytes`=32 KiB. AGENTS.md에는 `using-llm-wiki` 축약판만 둔다 — ① Config Gate(`~/.llm-wiki/scripts/resolve-vault.sh`) ② raw/ 쓰기 금지 ③ 쓰기 종료 시퀀스 ④ 11개 스킬 라우팅 1줄 요약. 상세 절차는 각 `SKILL.md`·스펙으로 위임. 한도 초과 시 `project_doc_max_bytes` 상향 방법을 README 트러블슈팅에 둔다.
+**Codex 32 KiB 예산:** Codex는 global/project `AGENTS.md`를 instruction chain으로 병합하며 기본 `project_doc_max_bytes`=32 KiB. AGENTS.md에는 `using-llm-wiki` 축약판만 둔다 — ① Config Gate(`~/.llm-wiki/scripts/resolve-vault.sh`) ② raw/ 쓰기 금지 ③ 쓰기 종료 시퀀스 ④ 11개 스킬 라우팅 1줄 요약. 상세 절차는 각 `SKILL.md`·스펙으로 위임. 한도 초과 시 `project_doc_max_bytes` 상향 방법을 `docs/troubleshooting.md`에 둔다.
 
 ---
 
@@ -282,7 +282,7 @@ README.md는 단순 설치 안내를 넘어 **repo를 잘 활용하기 위한 �
    - **상태 점검**: `wiki-status`
    - 각 시나리오에 입력/기대 산출물/플랫폼 차이(훅 유무) 명시
 5. **best-practice** — raw/ 불변, 인용 규칙, 충돌 처리, QMD 선택 설치, 멀티 볼트 운영, 우아한 강등 플랫폼에서의 주의점
-6. **트러블슈팅** — Config Gate 실패 코드(E_*)별 복구, QMD 미설치 fallback, 훅 미등록, Codex `/hooks` trust 미완(차단 안 됨), Codex `project_doc_max_bytes` 상향, Cursor 로컬 vs Cloud Agent 훅 차이, Cursor/Antigravity sandbox·`~/.llm-wiki/` 접근 권한 승인(Allow), Windows Git Bash/WSL 요구
+6. **트러블슈팅** (`docs/troubleshooting.md` — README는 링크만) — Config Gate 실패 코드(E_*)별 복구, QMD 미설치 fallback, 훅 미등록, Codex `/hooks` trust 미완(차단 안 됨), Codex `project_doc_max_bytes` 상향, Cursor 로컬 vs Cloud Agent 훅 차이, Cursor/Antigravity sandbox·`~/.llm-wiki/` 접근 권한 승인(Allow), Windows Git Bash/WSL 요구
 
 각 시나리오는 하네스 스펙 §4의 해당 스킬 워크플로를 인용하되, README는 *사용자 관점의 흐름*에 집중한다.
 
