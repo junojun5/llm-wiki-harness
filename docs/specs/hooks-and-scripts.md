@@ -39,7 +39,7 @@
 | 파일 | 대상 | 내용 |
 |---|---|---|
 | **`hooks.json`** | Claude (플러그인) | `.claude-plugin/plugin.json`이 이 파일을 가리켜 마켓플레이스 설치 시 자동 등록. SessionStart·PreToolUse·PostToolUse 3종을 `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd` 경유로 등록 → **install.sh 없이 동작**. `--fallback`(수동)은 `${CLAUDE_PLUGIN_ROOT}`를 `~/.claude`로 치환한 스니펫을 만들어 `~/.claude/settings.json` 머지를 안내. |
-| **`hooks-codex.json`** | Codex (플러그인) | `.codex-plugin/plugin.json`의 `hooks` 키가 가리켜 `/plugins` 설치 시 등록. SessionStart·PreToolUse(`apply_patch` 포함)·PostToolUse를 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` 경유로 등록. **플러그인 번들 훅은 non-managed** → 최초 1회 `/hooks` **trust** 필요(비Windows). trust 미완 시 **무경고 no-op**. `config.toml [features] hooks=true`는 0.145.0에서 **불필요**하다(stable·기본 활성으로 승격). `--fallback`/`--vault`는 `${PLUGIN_ROOT..}`를 실제 절대경로로 render해 `~/.codex/hooks.json`·`{vault}/.codex/hooks.json` 생성. |
+| **`hooks-codex.json`** | Codex (플러그인) | `.codex-plugin/plugin.json`의 `hooks` 키가 가리켜 `/plugins` 설치 시 등록. SessionStart·PreToolUse(`apply_patch` 포함)·PostToolUse를 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` 경유로 등록. **플러그인 번들 훅은 non-managed** → 최초 1회 `/hooks` **trust** 필요(비Windows). trust 미완 시 **무경고 no-op**. `config.toml [features] hooks=true`는 0.145.0에서 **불필요**하다(stable·기본 활성으로 승격). `--fallback`/`--vault`는 `${PLUGIN_ROOT..}`를 실제 절대경로로 render해 `~/.codex/hooks.json`·`{vault}/.codex/hooks.json` 생성. ⚠️ **최상위 키는 `description`·`hooks` 둘만 허용된다** — Codex는 이 파일을 strict 역직렬화하므로 `_comment` 같은 추가 키가 있으면 파일 **전체 파싱이 실패**하고 경고 한 줄만 남긴 뒤 **훅 0개로 진행**한다(2026-08-01 실측, 0.146.0). 설치는 성공하고 `codex plugin list`도 `installed, enabled`로 보이므로 조용히 무방비가 된다. Claude·Cursor는 `_comment`를 관용하지만 이 파일에는 넣지 않는다 — `tests/hooks/test-hook-config-schema.sh`가 강제. |
 | **`hooks-cursor.json`** | Cursor (설정 파일 배치) | ⚠️ **플러그인 경유 자동 등록은 불가**(cursor-agent가 매니페스트 `hooks`를 소비하지 않음 — 2026-07-31 실측). `install.sh --fallback`이 `~/.cursor/hooks.json`, `--vault`가 `{vault}/.cursor/hooks.json`으로 절대경로 render해 배치한다. camelCase 이벤트(`sessionStart`/`preToolUse`/`postToolUse`) + JS 정규식 matcher. 도구명은 `Write`·`Edit`·`Shell`(대문자 S). 차단 출력 `{"permission":"deny","user_message":…}` + `exit 0`. sessionStart 주입은 `{"additional_context":…,"env":{…}}`. ⚠️ Cursor는 훅 설정을 7개 소스에서 **병합**하며 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행하므로, 같은 훅을 Claude 설정과 중복 등록하면 **2회 발화**한다 — 경로를 분리해 유지한다. Cloud Agent는 sessionStart 미지원. |
 
 ### 설정 템플릿
@@ -59,10 +59,21 @@ hooks/    = 그 판정을 이벤트에 물려 자동 실행
    ├─ 로직(bash 3): session-start · wiki-protect-raw · wiki-validate-frontmatter
    ├─ 런처·도구:    run-hook.cmd(OS 위임) · probe-hook.sh(픽스처 캡처)
    └─ 등록 JSON 3:  hooks.json(Claude) · hooks-codex.json(Codex) · hooks-cursor.json(Cursor)
-                    — 모두 플러그인 매니페스트가 가리켜 설치 시 자동 등록(Antigravity는 훅 스키마 미공개로 제외)
+                    — Claude·Codex는 플러그인 매니페스트가 가리켜 설치 시 자동 등록,
+                      Cursor는 install.sh가 설정 파일로 배치(매니페스트 hooks 미소비 — 필수)
+                      Antigravity는 훅 스키마 미공개로 제외
                     + cursor-sandbox.template.json(Cursor sandbox 권한)
 ```
 
 **게이팅 요약:** 주입(session-start)은 **CWD가 볼트 안일 때만**, 보호(가드 훅)는 **경로가 볼트 `raw/`·`wiki/` 안일 때만**, 부트스트랩(session-start ①)은 **항상**(멱등). 볼트 미설정 머신에선 resolve-vault 실패로 전부 조용한 no-op.
 
-> ⚠️ **미검증:** Codex/Cursor의 훅 stdin/stdout 스키마와 Antigravity 훅 포맷은 실제 CLI 실측(`probe-hook.sh` 골든 픽스처)이 필요하다. 가드 훅은 다중 키 탐색으로 보수적으로 대응하나, trust·실측 전까지 Codex/Cursor의 기계적 차단은 그 확인 뒤 보장된다.
+**실기 검증 상태 (2026-08-01, Phase 3 E2E):**
+
+| 플랫폼 | 설치 경로 | 기계적 차단 실측 |
+|---|---|---|
+| Claude Code | 마켓플레이스 (`/plugin install`) | ✅ `raw/` 쓰기 `exit 2` 차단 · PostToolUse가 누락 키 4건 보고 · SessionStart가 `~/.llm-wiki/scripts` 부트스트랩 |
+| Codex CLI 0.146.0 | 마켓플레이스 (`codex plugin add`) | ✅ `apply_patch` 상대경로 차단(`PreToolUse Blocked`) — **단 `/hooks` trust 필요**. trust 미완 시 무경고 통과를 실측 재현 |
+| cursor-agent 2026.07.23 | `install.sh --vault` / `--fallback` | ✅ `Write` 절대경로 차단(`permission:deny`) · `Shell`/resolver 호출은 통과 · payload에 `cursor_version` 확인 |
+| Antigravity 1.1.8 | `install.sh` | ➖ 훅 없음(스키마 미공개). skills 12개 + `rules/llm-wiki.md` 배치 확인 — `raw/` 보호는 AGENTS.md 소프트 룰 |
+
+> Windows(`run-hook.cmd` cmd.exe 분기)는 여전히 정적 검토만 됐다 — 실기 검증은 Windows 환경 확보 시.

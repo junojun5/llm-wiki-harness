@@ -1,10 +1,13 @@
 {
-  "_comment": "Codex 플러그인 훅. .codex-plugin/plugin.json의 hooks 키가 이 파일을 가리켜 /plugins 설치 시 등록된다. 단 플러그인 번들 훅은 '비관리(non-managed)'라 설치만으로 활성화되지 않는다 — 최초 1회 /hooks에서 trust 리뷰 필요(비Windows). ⚠️ trust 미완 상태에서는 경고도 오류도 없이 조용히 no-op 한다 — 훅이 등록됐는데 raw/ 차단이 안 되면 먼저 /hooks trust를 확인한다(비대화형은 --dangerously-bypass-hook-trust). config.toml [features] hooks=true는 0.145.0에서 불필요하다(hooks가 stable·기본 활성으로 승격). command는 Codex 공식 env var ${PLUGIN_ROOT}(설치된 플러그인 루트; 경로가 ~/.codex/plugins/cache/<mkt>/<name>/<version>/ 로 버전 스코프라 하드코딩 금지)의 run-hook.cmd 경유. CLAUDE_PLUGIN_ROOT도 호환용으로 set되므로 fallback으로 둔다. 훅 command의 cwd는 세션 cwd이므로 반드시 ${PLUGIN_ROOT} 절대참조. 마켓플레이스 매니페스트는 .agents/plugins/marketplace.json이 canonical이다(.codex-plugin/marketplace.json은 읽히지 않음). install.sh --fallback 경로는 이 파일을 ~/.agents 절대경로로 render해 ~/.codex/hooks.json을 만든다. stdin/stdout 스키마·이벤트명은 2026-07-31 실측 확정 — 골든 픽스처 tests/fixtures/codex-hooks/, 계약 표는 spec.md §5-4.",
+  "description": "LLM Wiki 하네스 가드 훅 — raw/ 보호·frontmatter 검증·볼트 컨텍스트 주입. 설치 후 /hooks에서 trust 필요(미완 시 무경고 no-op). 상세는 docs/specs/hooks-and-scripts.md 참조.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" session-start codex" }
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" session-start codex"
+          }
         ]
       }
     ],
@@ -12,7 +15,10 @@
       {
         "matcher": "Write|Edit|apply_patch|shell|Bash",
         "hooks": [
-          { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" wiki-protect-raw.sh codex" }
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" wiki-protect-raw.sh codex"
+          }
         ]
       }
     ],
@@ -20,7 +26,10 @@
       {
         "matcher": "Write|Edit|apply_patch",
         "hooks": [
-          { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" wiki-validate-frontmatter.sh" }
+          {
+            "type": "command",
+            "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" wiki-validate-frontmatter.sh"
+          }
         ]
       }
     ]
