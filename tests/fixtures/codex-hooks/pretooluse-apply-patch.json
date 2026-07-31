@@ -1,0 +1,15 @@
+{
+  "_status": "MEASURED 2026-07-31 — codex-cli 0.145.0 / cursor-agent 2026.07.23. 경로·이메일은 마스킹됨. 계약 설명은 spec.md §5-4.",
+  "session_id": "019fb87a-cf02-7111-bfbc-afd0f0c39756",
+  "turn_id": "019fb87a-cf83-7f62-9d38-0ee7a4b3f1bc",
+  "transcript_path": "/Users/juno/.codex/sessions/2026/07/31/rollout-2026-07-31T23-01-23-019fb87a-cf02-7111-bfbc-afd0f0c39756.jsonl",
+  "cwd": "/PROBE_WS/f475e49c/tmp/probe/ws",
+  "hook_event_name": "PreToolUse",
+  "model": "gpt-5.5",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Add File: notes.md\n+---\n+title: test\n+---\n+This is a body text line.\n*** End Patch\n"
+  },
+  "tool_use_id": "call_bKewTLUg2cCn1RLVoJ9SIwIg"
+}

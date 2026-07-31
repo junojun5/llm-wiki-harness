@@ -1,0 +1,22 @@
+{
+  "_status": "MEASURED 2026-07-31 — codex-cli 0.145.0 / cursor-agent 2026.07.23. 경로·이메일은 마스킹됨. 계약 설명은 spec.md §5-4.",
+  "conversation_id": "31c86040-0619-481f-bba4-d8781a6e7b93",
+  "generation_id": "31c86040-0619-481f-bba4-d8781a6e7b93",
+  "model": "gpt-5.5",
+  "tool_name": "Shell",
+  "tool_input": {
+    "command": "echo hi",
+    "cwd": "/PROBE_WS/f475e49c/tmp/probe/ws",
+    "timeout": 30000
+  },
+  "tool_use_id": "7a59c433-b8cd-47fe-85fb-e1af73e0d68c",
+  "cwd": "/PROBE_WS/f475e49c/tmp/probe/ws",
+  "session_id": "31c86040-0619-481f-bba4-d8781a6e7b93",
+  "hook_event_name": "preToolUse",
+  "cursor_version": "2026.07.23-e383d2b",
+  "workspace_roots": [
+    "/PROBE_WS/f475e49c/tmp/probe/ws"
+  ],
+  "user_email": "user@example.com",
+  "transcript_path": "/Users/juno/.cursor/projects/Users-juno-claude-jobs-f475e49c-tmp-probe-ws/agent-transcripts/31c86040-0619-481f-bba4-d8781a6e7b93/31c86040-0619-481f-bba4-d8781a6e7b93.jsonl"
+}

@@ -1,0 +1,20 @@
+{
+  "_status": "MEASURED 2026-07-31 — cursor-agent 2026.07.23. 경로·이메일 마스킹됨. 계약 설명은 spec.md §5-4. 이 페이로드는 {ws}/.claude/settings.json 의 **Claude 포맷** 등록으로 발화한 것이다 — 등록 포맷과 무관하게 Cursor는 항상 자기 스키마(camelCase hook_event_name, workspace_roots)로 페이로드를 준다.",
+  "conversation_id": "85f2275d-ae9e-4e60-a8a8-d4eb67e22066",
+  "generation_id": "85f2275d-ae9e-4e60-a8a8-d4eb67e22066",
+  "model": "gpt-5.5",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/PROBE_WS/f475e49c/tmp/probe/ws/claudefmt.md",
+    "content": "claudefmt\n"
+  },
+  "tool_use_id": "call_ltH9nCWnVYY8L3tZxTstlMos\nctc_0cb2fc259c3cc232016a6cb5ac4c24819eb2005e2ee47efbf8",
+  "session_id": "85f2275d-ae9e-4e60-a8a8-d4eb67e22066",
+  "hook_event_name": "preToolUse",
+  "cursor_version": "2026.07.23-e383d2b",
+  "workspace_roots": [
+    "/PROBE_WS/f475e49c/tmp/probe/ws"
+  ],
+  "user_email": "user@example.com",
+  "transcript_path": "/Users/juno/.cursor/projects/Users-juno-claude-jobs-f475e49c-tmp-probe-ws/agent-transcripts/85f2275d-ae9e-4e60-a8a8-d4eb67e22066/85f2275d-ae9e-4e60-a8a8-d4eb67e22066.jsonl"
+}
