@@ -208,13 +208,19 @@ PATH="$TMP/nopy"    # python3 부재
 # .github/workflows/windows.yml (설계 스케치 — 구현 계획에서 확정)
 on: [push, pull_request]
 jobs:
-  cmd-launcher:
+  cmd-launcher:                     # required — 보류 3번을 닫는 갈래
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - name: run-hook.cmd 인자 전달 검증 (cmd.exe)
         shell: cmd
         run: tests\hooks\test-run-hook-cmd.cmd
+
+  bash-suite:                       # 정보용 — 결과를 보며 별도로 닫는다
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
       - name: 셸 스위트 (Git Bash)
         shell: bash
         run: bash tests/run.sh
@@ -227,7 +233,13 @@ jobs:
 
 **기대 효과:** Phase 2 T5부터 열려 있던 항목이 닫히고, 이후 `run-hook.cmd`를 건드릴 때마다 자동 검증된다. `distribution-design.md` §10의 Windows 항목도 "정적 검토만"에서 "CI 검증"으로 갱신된다.
 
-**주의:** 2번 갈래(Git Bash)가 처음부터 통과하지 않을 가능성이 실재한다 — 경로 구분자·`realpath`·symlink 동작이 다르다. **통과하지 않으면 그건 이 설계의 실패가 아니라 발견이다.** 실패 항목은 별도 이슈로 분리하고 CI에서는 우선 cmd.exe 갈래만 필수(required)로 두는 것을 권한다.
+**필수/선택 경계 — 확정.** cmd.exe 갈래만 **required**로 두고, Git Bash 갈래는 `continue-on-error: true`로 시작한다.
+
+근거: 2번 갈래는 처음부터 통과하지 않을 가능성이 실재한다 — 경로 구분자·`realpath`·symlink 동작이 다르고, 이 설계의 §1-4 (2-a)가 도입하는 `readlink` 루프도 Windows symlink에서 다르게 돈다. **통과하지 않으면 그건 이 설계의 실패가 아니라 발견이다.** 다만 이 레포에 CI가 전무한 상태에서 첫 CI가 빨간불로 시작하면 신호가 죽는다(빨간불에 익숙해지면 CI가 무의미해진다). 그래서:
+
+- **보류 3번은 cmd.exe 갈래 통과로 닫는다** — 그게 정확히 미검증이던 대상이다.
+- Git Bash 갈래는 결과를 보며 실패 항목을 별도 이슈로 분리해 따로 닫는다. 전부 통과하면 그때 `continue-on-error`를 제거하고 required로 승격한다.
+- **승격 조건을 문서에 남긴다** — 안 그러면 `continue-on-error`가 영구화되고 "Windows 지원"이 검증 없는 주장으로 남는다.
 
 ---
 
@@ -251,6 +263,14 @@ jobs:
 - `.ps1`/PowerShell 대응본 — `distribution-design.md` §10대로 네이티브 수요 확인 후
 - `chmod` 기반 파일시스템 강제 — spec §5-2가 Phase 1 비목표로 선언
 
-## 6. 미결 — 리뷰에서 확정할 것
+## 6. 결정 이력
 
-- **Windows CI의 필수/선택 경계.** cmd.exe 갈래만 required로 두고 Git Bash 갈래는 처음엔 `continue-on-error`로 시작할지, 둘 다 required로 두고 실패하면 그때 고칠지. 후자는 이 레포에 CI가 없는 상태에서 첫 CI가 빨간불로 시작할 위험이 있다.
+| 결정 | 선택 | 근거 |
+|---|---|---|
+| 가드 훅을 차단으로 전환할지 | **아니오** — fail-open 유지 | 훅이 글로벌이라 차단 해석이 머신 전체를 막고, 판정 블록 자체가 python3라 `raw/`만 골라낼 수 없다 (§1-3) |
+| python3 부재를 어디서 알릴지 | **session-start 1회** | 매 쓰기의 문제가 아니라 머신 설정 문제 (§1-3) |
+| 런타임 게이트 위치 | **위치 판정 뒤 · 파싱 앞** | `E_NO_RUNTIME`이 "볼트 존재"를 함의해 스팸 방지가 공짜로 따라온다 (§1-4) |
+| shell `COMMAND` 상대경로 | **폐기** | spec §5-2가 비목표로 선언. `docs/plans/`는 정본 계층 밖 (§2) |
+| Windows CI 필수 범위 | **cmd.exe만 required** | 보류 3번의 대상은 cmd.exe 갈래다. 첫 CI가 빨간불로 시작하면 신호가 죽는다 (§3) |
+
+미결 항목 없음.
