@@ -28,20 +28,39 @@ case "$PWD/" in "$VAULT_PATH"/*) ;; *) exit 0 ;; esac   # CWD가 볼트 밖 → 
 SKILL="$ROOT/skills/using-llm-wiki/SKILL.md"
 [ -f "$SKILL" ] || { echo "using-llm-wiki SKILL.md를 찾을 수 없습니다: $SKILL" >&2; exit 2; }
 
-python3 - "$SKILL" "$PLATFORM" <<'PY'
+# ③ 플랫폼 판별은 argv보다 페이로드가 우선한다 (§5-1). Cursor는 Claude 포맷 등록
+#    (~/.claude/settings.json 등)도 실행하므로 argv가 `claude`인 채 Cursor에서 발화할 수 있다.
+#    페이로드에 cursor_version 키가 있으면 Cursor로 판정한다.
+#    stdin이 TTY면 읽지 않는다(수동 실행 시 블로킹 방지).
+INPUT=""
+[ -t 0 ] || INPUT="$(cat 2>/dev/null || true)"
+if [ -n "$INPUT" ] && printf '%s' "$INPUT" | python3 -c '
+import json, sys
+try:
+    d = json.load(sys.stdin)
+except Exception:
+    sys.exit(1)
+sys.exit(0 if isinstance(d, dict) and "cursor_version" in d else 1)
+' 2>/dev/null; then
+  PLATFORM="cursor"
+fi
+
+python3 - "$SKILL" "$PLATFORM" "$LLMWIKI/resolve-vault.sh" <<'PY'
 import json, sys, re
-skill_path, platform = sys.argv[1], sys.argv[2]
+skill_path, platform, resolver = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(skill_path, encoding="utf-8").read()
 body = re.sub(r'^---\n.*?\n---\n', '', text, count=1, flags=re.S).strip()   # frontmatter 제거
 wrapped = "<EXTREMELY_IMPORTANT>\n" + body + "\n</EXTREMELY_IMPORTANT>"
 
-if platform == "claude":
+# 출력 포맷은 2026-07-31 실측 확정 (§5-1).
+if platform in ("claude", "codex"):
+    # Codex는 Claude와 **동일 포맷**이다. {"additional_context":…}를 내보내면
+    # `hook: SessionStart Failed`로 끝나고 주입이 조용히 무효가 된다.
     out = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": wrapped}}
-elif platform == "codex":
-    out = {"additional_context": wrapped}
 elif platform == "cursor":
+    # Cursor엔 hookSpecificOutput 래퍼가 없다(실측). env 값은 틸드가 확장되지 않으므로 절대경로.
     out = {"additional_context": wrapped,
-           "env": {"LLM_WIKI_RESOLVER": "~/.llm-wiki/scripts/resolve-vault.sh"}}
+           "env": {"LLM_WIKI_RESOLVER": resolver}}
 else:
     sys.stderr.write("unknown platform: %s\n" % platform); sys.exit(2)
 
