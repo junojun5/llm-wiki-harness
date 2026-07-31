@@ -67,6 +67,15 @@ echo "test: Codex 골든 픽스처(cursor_version 없음) → codex 포맷 유�
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" codex < "$REPO_ROOT/tests/fixtures/codex-hooks/sessionstart.json" 2>/dev/null)"
 jpath "codex 포맷 유지" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 
+# run-hook.cmd 폴리글랏 런처 — Unix 분기가 <hook> [platform] 을 그대로 위임하는지.
+# (Windows/cmd 분기는 macOS·Linux에서 실행할 수 없어 정적 검토로만 확인 — hooks/run-hook.cmd 주석 참조)
+echo "test: run-hook.cmd Unix 분기 — 플랫폼 인자가 훅에 그대로 전달"
+LAUNCHER="$REPO_ROOT/hooks/run-hook.cmd"
+OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$LAUNCHER" session-start codex </dev/null 2>/dev/null)"
+jpath "런처 경유 codex 포맷" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
+OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$LAUNCHER" session-start cursor </dev/null 2>/dev/null)"
+jpath "런처 경유 cursor 포맷" "d['additional_context']" "Config Gate" "$OUT"
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

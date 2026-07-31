@@ -12,14 +12,26 @@
 :; exec bash "$HOOK_DIR/$SCRIPT" "$@"
 @echo off
 rem ── Windows 진입점 ──
+rem ⚠️ cmd.exe의 `shift`는 %* 에 영향이 없다 — %* 는 항상 "원본 전체 인자"로 확장된다.
+rem    따라서 `shift` 후 `bash %SCRIPT% %*` 를 쓰면 스크립트명이 첫 인자로 다시 실려
+rem    `session-start session-start claude` 가 되고 PLATFORM="session-start" →
+rem    unknown platform exit 2 로 세 훅이 전부 죽는다. %2 부터 직접 누적한다.
+rem    (macOS/Linux CI에서는 cmd.exe를 실행할 수 없어 정적 검토로만 확인 — 실기 검증은
+rem     Windows 환경 확보 시. Windows는 Git Bash/WSL bash가 PATH에 있어야 한다.)
 setlocal
 set "HOOK_DIR=%~dp0"
 set "SCRIPT=%~1"
+set "ARGS="
+:collect_args
 shift
+if "%~1"=="" goto :args_collected
+set "ARGS=%ARGS% "%~1""
+goto :collect_args
+:args_collected
 where bash >nul 2>nul
 if errorlevel 1 (
   echo run-hook.cmd: bash를 찾을 수 없습니다. Git Bash 또는 WSL bash를 PATH에 추가하세요. 1>&2
   exit /b 1
 )
-bash "%HOOK_DIR%%SCRIPT%" %*
+bash "%HOOK_DIR%%SCRIPT%" %ARGS%
 exit /b %errorlevel%
