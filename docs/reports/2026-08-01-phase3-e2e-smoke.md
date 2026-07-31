@@ -13,14 +13,14 @@
 **의도대로 동작한다 — 단 결함 4건을 고친 뒤부터다.** 그중 하나(`hooks-codex.json`의 `_comment`)는 **Codex에서 훅 3종이 전부 죽어 있던** 것으로, 설치는 성공하고 `codex plugin list`도 `installed, enabled`로 보였기 때문에 스모크를 돌리지 않았다면 발견되지 않았다.
 
 | 축 | Claude Code | Codex 0.146.0 | cursor-agent | Antigravity 1.1.8 |
-|---|:--:|:--:|:--:|:--:|
+|---|---|---|---|---|
 | 스킬 로드 | ✅ 12개 (`llm-wiki-harness:` 네임스페이스) | ✅ 규칙 준수로 확인 | ✅ 규칙 준수로 확인 | ➖ 배치만 확인 |
-| SessionStart — 런타임 부트스트랩 | ✅ | ✅ | ➖ 미측정 | ✖ 훅 없음 |
-| SessionStart — 규칙 주입 | ➖ 미측정 | ✅ | ✅ (AGENTS.md 경유) | ✖ 훅 없음 |
-| PreToolUse — `raw/` 차단 | ✅ | ✅ (수정 후) | ✅ | ✖ 훅 없음 |
-| PostToolUse — frontmatter 검증 | ✅ | ➖ 미측정 | ➖ 미측정 | ✖ 훅 없음 |
+| SessionStart — 런타임 부트스트랩 | ✅ | ✅ | ➖ 미측정 | ❌ 훅 없음 |
+| SessionStart — 규칙 주입 | ➖ 미측정 | ✅ | ✅ (AGENTS.md 경유) | ❌ 훅 없음 |
+| PreToolUse — `raw/` 차단 | ✅ | ✅ (수정 후) | ✅ | ❌ 훅 없음 |
+| PostToolUse — frontmatter 검증 | ✅ | ➖ 미측정 | ➖ 미측정 | ❌ 훅 없음 |
 
-✅ 실행해 확인 · ➖ 미측정 · ✖ 구조적으로 불가
+✅ 실행해 확인 · ➖ 미측정 · ❌ 구조적으로 불가
 
 Antigravity는 **훅 스키마가 미공개**라 기계적 차단이 원래 없다 — `raw/` 보호는 `AGENTS.md` 소프트 룰이 담당한다(설계 의도).
 
@@ -159,7 +159,7 @@ B4 DECISION=[block]        →  에이전트: "생성·수정이 금지되어 �
 ## 6. 발견해 고친 결함 4건
 
 | # | 결함 | 심각도 | 조치 |
-|---|---|:--:|---|
+|---|---|---|---|
 | 1 | **`hooks-codex.json`의 `_comment`가 Codex strict 스키마를 위반**해 훅 3종이 전부 no-op | 🔴 | `description`으로 교체 + `tests/hooks/test-hook-config-schema.sh` 신설 (PR #6) |
 | 2 | **인라인 flow 시퀀스 `relationships: [{…}]`가 표기 가드와 `type` enum 검사를 동시 우회** — 파서의 `[ ]` 분기가 문자열 리스트를 돌려주므로 `isinstance(list)`를 통과하고, 그 상태에서 `isinstance(r, dict)` 게이트가 무발화한다. 2026-07-31에 `provenance`만 닫히고 남아 있던 케이스 | 🔴 | 원소가 전부 매핑인지까지 검사 (PR #5) |
 | 3 | **클래스② 판정이 경로의 아무 세그먼트나 매칭** — 스펙이 허용하는 `knowledge/api/changes/`를 오판해 정상 페이지를 거부 | 🟡 | `projects` 손자 위치 인접성으로 한정 (PR #5) |

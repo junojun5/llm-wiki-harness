@@ -48,7 +48,7 @@ Step 7: 종료 시퀀스 (아래 "종료")
 각 항목의 `[키]`는 log 필드명과 1:1 매칭된다. severity: 🔴 ERROR(즉시 수정) / 🟡 REVIEW(검토 필요) / ℹ️ SOFT(소프트 경고).
 
 | # | 키 | 항목 | sev | 체크 |
-|---|---|---|:--:|---|
+|---|---|---|---|---|
 | 1 | `orphans` | 고아 페이지 | 🟡 | 링크 그래프 인바운드 0 |
 | 2 | `broken_links` | 깨진 `[[wiki-link]]` | 🟡 | 링크 그래프 — 대상 .md 부재 |
 | 3 | `format_errors` | page format 위반 | 🔴 | validator(클래스별 필수 키·enum·형식). 추가: `base_confidence`가 [0.0, 1.0] 밖 |

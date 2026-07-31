@@ -1955,7 +1955,7 @@ context.md                        domain.md         decisions.md (첫 결정부�
 **범례:** **W**=직접 생성·수정(소유) · **W\***=조건부 직접 쓰기(각주) · **△**=직접 쓰기 금지(proposal 경유 또는 타 스킬 안내) · **R**=읽기 · **—**=해당 없음
 
 | 스킬 | overview·context·goals | architecture·domain·conventions | changes/ | decisions.md | backlog.md | troubleshooting·meetings |
-|------|:--:|:--:|:--:|:--:|:--:|:--:|
+|------|---|---|---|---|---|---|
 | `wiki-project-init` | **W** | R · △¹ | — | △→record² | — | — |
 | `wiki-project-design` | R | **W**³ | **W** | **W\***⁴ | R | R |
 | `wiki-project-record` | R | R · △¹ | R | **W** | **W** | **W** |
