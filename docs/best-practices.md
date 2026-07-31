@@ -312,6 +312,6 @@ flowchart TD
 | 흩어진 지식 묶기 | `wiki-knowledge` | lint |
 | 볼트 점검 | `wiki-status`(남은 일) / `wiki-lint`(깨진 것) | `--fix` → raw cleanup |
 | 프로젝트 | `wiki-project-init` | design(proposal) / record |
-| 에러 코드 | — | [README 트러블슈팅](../README.md#트러블슈팅) |
+| 에러 코드 | — | [트러블슈팅](troubleshooting.md) |
 
 > 모든 흐름의 공통 전제: **session-start가 규칙을 깔고 → 스킬이 Step 0로 볼트를 잡고 → 쓰기는 index→log→hot→QMD로 마감한다.**
