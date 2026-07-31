@@ -71,7 +71,7 @@ Step 5: 페이지 작성
 Step 6: 관련 wiki/knowledge/ 페이지가 있으면 참고 자료로 추가
 Step 7: wiki/index.md 의 summaries/web 섹션에 추가
 
-Step 8: .manifest.json + wiki/log.md 업데이트
+Step 8: .manifest.json + wiki/log.md 업데이트 (스키마: references/manifest.md)
   manifest: source_url(Step 1 정규화본) / source_type: url / pages_created / ingested_at
   log: [YYYY-MM-DD] INGEST-URL url="{url}" page="{경로}"
 

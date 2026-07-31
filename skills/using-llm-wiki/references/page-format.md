@@ -51,9 +51,17 @@ status: verified | unverified | conflict | archived
 #   archived   → 폐기. wiki/archived/로 이동됨
 
 base_confidence: 0.0-1.0
-# 소스 유형별 신뢰도. paper=0.9 / official=0.85 / repository=0.75 / blog=0.55 /
-# conversation=0.42 / forum=0.4 / unknown=0.4 / change proposal=0.3(최저)
+# 소스 유형별 신뢰도. paper=0.9 / official=0.85 / project=0.8 / repository=0.75 /
+# blog=0.55 / conversation=0.42 / forum=0.4 / unknown=0.35 / change proposal=0.3(최저)
 # 소스의 속성이므로 archive돼도 불변이다
+#
+# project=0.8 — projects/ 스냅샷 문서(overview·context·goals·architecture·domain·conventions).
+#   형식상 인터뷰(=대화) 산출물이지만 **그 프로젝트에 관한 한 1차 사료**다. conversation=0.42를
+#   쓰면 "내 프로젝트의 아키텍처 결정 근거"가 임의의 블로그(0.55)보다 낮게 랭킹되는 왜곡이 생긴다.
+#   문장 단위 신뢰도는 본문 (출처: [[page]])·⚠️ unverified가 담당하므로, 페이지 스칼라는
+#   "이 문서가 이 주제에 갖는 권위"로 읽는다. sources: 는 ["conversation:YYYY-MM-DD"]를 그대로 쓴다.
+# unknown=0.35 — forum과 같은 0.4면 frontmatter만으로 두 유형을 구분할 수 없어
+#   "ingest-url fallback으로 들어온 페이지"를 감사할 수 없다. 값을 분리해 식별 가능하게 한다.
 
 # ─── 선택 필드 ───────────────────────────────────────────
 tier: core | supporting | peripheral

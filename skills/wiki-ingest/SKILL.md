@@ -14,6 +14,8 @@ description: raw 디렉터리의 로컬 파일(md, txt, pdf, 이미지)을 wiki�
 ## 실행 모드
 
 **Append Mode (기본)** — 신규·변경 소스만 처리한다.
+`.manifest.json` 스키마·필드 규칙은 `using-llm-wiki/references/manifest.md`가 단일 출처다 — 여기서 재서술하지 않는다.
+
 - `.manifest.json`에 없는 파일 → 신규 ingest
 - 있는 파일 → SHA-256 해시 비교. 일치하면 스킵(타임스탬프 무관), 불일치하면 재ingest
 

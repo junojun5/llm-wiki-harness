@@ -17,7 +17,7 @@ description: ingest 대기 중인 raw 파일, 최근 처리 내역, 볼트 전�
 Step 0:   Config Gate
 Step 0.5: wiki/hot.md 읽기 (있으면) — Step 5 "최근 작업" 맥락 보강
 
-Step 1: .manifest.json 읽기
+Step 1: .manifest.json 읽기 (스키마·소비 패턴: using-llm-wiki/references/manifest.md)
   마지막 ingest 타임스탬프 / 총 소스 수 / 총 wiki 페이지 수
   manifest 없으면 → "아직 ingest된 파일 없음. /wiki-ingest를 먼저 실행하세요" 출력 후 Step 4로
 

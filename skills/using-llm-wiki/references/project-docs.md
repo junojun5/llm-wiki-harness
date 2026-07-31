@@ -26,7 +26,7 @@ raw → summaries → knowledge ──→ projects/{name}/   (증류 체인의 �
 5. **gap report — 모든 세션 종료 시 출력.** 세 종류를 구분한다: ① 단계 미진입("goals.md 없음 — 기획 단계 미도달", 정상) ② 진짜 갭("goals.md 있는데 성공 기준 섹션이 비어 있음") ③ missing knowledge 목록(다음 ingest 의제).
 6. **필요한 파일만.** 처음부터 전체 파일을 만들지 않는다 (생성 트리거는 아래 생애주기 표).
 7. **자가검증 체크리스트 루프.** 문서 작성 후 템플릿 요구사항에서 체크리스트를 생성해 스스로 검증하고 실패 항목을 수정한다 — **최대 2회 반복**, 잔여 항목은 보고한다.
-8. **공통 종료 시퀀스.** index.md → log.md → hot.md → QMD refresh (`using-llm-wiki`).
+8. **공통 종료 시퀀스.** 문서(페이지) 쓰기 → index.md → log.md → hot.md → QMD refresh (`using-llm-wiki`). **원본 먼저, 파생물 나중** — 역순이면 "기록은 있는데 문서가 없는" 거짓 기록이 남는다.
 9. **재진입 — 파일 상태로 이어받는다.** design·record는 한 대화 턴에 안 끝날 수 있다. 별도 모드 플래그를 두지 않고 파일 상태로 재개한다 — change proposal `status: proposed` 존재 = 초안 완료(승인 대기), 승인 시 apply. 재실행 시 완료분은 스킵하고 미완분만 진행하므로 proposed 적체·승인 전 병합이 구조적으로 방지된다.
 
 ## 디렉토리 구조
@@ -85,7 +85,7 @@ context.md                        domain.md         decisions.md (첫 결정부�
 - ³ 표면 변경은 직접 W, **의미 변경은 `changes/` proposal 경유 후 병합.**
 - ⁴ applied proposal의 **짝 항목만** 아래 형식으로 직접 append한다 (위임 호출 없음).
 
-**교차 스킬:** `wiki-query`는 전 문서 R(`changes/` proposed는 `tier: peripheral` 강등 + 인용 시 "(proposed — 미확정 설계)" 표시) · `wiki-lint`는 전 문서 R + `--fix`로 frontmatter·링크 메타만 수리(본문 의미 무수정) · `wiki-ingest`는 `projects/`에 직접 쓰지 않는다.
+**교차 스킬:** `wiki-query`는 전 문서 R(`changes/` proposed는 `tier: peripheral` 강등 + 인용 시 "(proposed — 미확정 설계)" 표시) · `wiki-lint`는 전 문서 R + `--fix`로 frontmatter 필드 추가·relationship type 오타 폴백·`index.md` 등록을 수리하고(본문 의미는 무수정) **비가역 raw 삭제도 개별 확인 후 수행**한다 · `wiki-ingest`는 `projects/`에 직접 쓰지 않는다.
 
 ## 원장·라이프사이클 문서 형식
 

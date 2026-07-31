@@ -25,6 +25,7 @@ Step 2: frontmatter 검증
 
 Step 3: manifest·raw 대조 — 항목 5·10·15·17
         .manifest.json content_hash 기준. mtime은 쓰지 않는다
+        (스키마·소비 패턴: using-llm-wiki/references/manifest.md)
 
 Step 4: 본문·frontmatter 스캔 — 항목 6·7·8·11·13·14·16
 

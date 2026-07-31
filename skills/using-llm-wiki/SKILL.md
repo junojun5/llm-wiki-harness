@@ -105,21 +105,34 @@ QMD는 볼트 위에 얹은 **선택적** 검색 인덱스다. markdown 볼트�
 
 ```bash
 ${QMD_CLI:-qmd} update      # 텍스트(BM25) 인덱스 — 저비용, 매번
-${QMD_CLI:-qmd} embed       # 벡터 인덱스 — update가 "새 해시에 벡터 필요"를 보고할 때만 (고비용)
-${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/<category>/<page>.md" -l 5   # 검증
-${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"               # 경로가 불확실할 때
+${QMD_CLI:-qmd} embed       # 벡터 인덱스 — 아래 조건일 때만 (고비용)
+${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/<wiki 기준 상대경로>.md" -l 5   # 검증
+${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"                 # 경로가 불확실할 때
 ```
 
-컬렉션은 `wiki/` 루트 기준 상대경로를 그대로 보존한다 (flatten 없음). archive 이동은 인덱스 삭제가 아니라 **경로 재인덱싱**이고, 검색 강등은 `status: archived` frontmatter가 담당한다 — 인덱스를 분기하지 않는다.
+**embed 조건 (실측 문자열로 판정).** `update`의 **stdout**에 아래 라인이 있을 때만 실행한다 — exit code로는 판정할 수 없다.
+
+```
+Run 'qmd embed' to update embeddings (N unique hashes need vectors)
+```
+
+판정 기준은 stdout이 `unique hashes need vectors`를 포함하는가다. `N`은 "새로 추가된 해시 수"가 아니라 **"벡터가 아직 없는 해시 수"**다 — embed를 한 번도 돌리지 않았다면 변경이 없어도 계속 나오고(벡터가 실제로 없으므로 정당하다), embed가 성공하면 **라인이 사라지며** 페이지를 수정하면 다시 나타난다. 벡터는 파일이 아니라 **해시 단위**라 내용이 같은 두 파일은 벡터 1개를 공유한다. update stdout 파싱이 어려운 환경에서는 `qmd status`의 `Pending: N need embedding` 행을 대신 쓸 수 있다(호출 1회 추가).
+
+**verify도 exit code가 아니라 stdout으로 판정한다.** `qmd get`은 문서가 없어도 **exit 0**을 반환하고 stdout에 `Document not found: …`를 출력한다 — exit code 분기는 항상 성공으로 오판한다.
+
+**경로는 `wiki/` 기준 상대경로 전체다.** `{category}/{page}.md` 2단계가 아니라 `summaries/articles/ai-ml/deep-topic/page.md`처럼 깊이가 그대로 유지된다(flatten 없음). archive 이동은 인덱스 삭제가 아니라 **경로 재인덱싱**이고, 검색 강등은 `status: archived` frontmatter가 담당한다 — 인덱스를 분기하지 않는다.
 
 **최종 리포트에 상태 문자열 하나를 포함한다:**
 
 - `QMD refreshed: update + embed + verified`
-- `QMD refreshed: update only + verified`
+- `QMD refreshed: update only + verified` — embed가 **불필요**해서 실행하지 않은 경우
+- `QMD partial: update 성공 · embed 실패 (시맨틱 검색만 구식 — 단발 무시, 반복 시 --update-qmd)`
 - `QMD partial: update 성공 · verify 실패 (인덱스 미반영 가능 — 단발 무시, 반복 시 --update-qmd)`
 - `QMD skipped: collection not registered`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <짧은 에러 요약>`
+
+> `update only + verified`는 **"embed가 필요 없었다"**는 뜻이지 "embed가 실패했다"는 뜻이 아니다. embed를 시도했으나 실패했다면 반드시 `QMD partial: … embed 실패`를 쓴다 — 실패를 성공으로 위장하지 않기 위한 구분이다.
 
 **self-healing.** `qmd update`가 매번 전체 해시 스캔이므로 실패한 refresh의 누락분은 다음 refresh가 흡수한다. 단발 실패·embed만 실패는 액션 불필요(그동안 검색은 Grep fallback, BM25는 정상). 2회 연속 실패, 검색 결과가 stale하게 느껴짐, 스킬 밖 수동 편집 직후 정확한 검색이 필요한 경우에만 `/wiki-setup --update-qmd`로 전체 reconcile한다.
 
@@ -127,6 +140,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"               # �
 
 - **페이지 frontmatter·문서 클래스·provenance 산정·archive 전환·충돌 노트** → `references/page-format.md`
 - **index.md·log.md·hot.md 형식** → `references/derived-files.md`
+- **`.manifest.json` ingest 원장 스키마·소비 패턴** → `references/manifest.md` (`wiki-ingest`·`ingest-url`·`wiki-status`·`wiki-lint`)
 - **projects/ 컨셉·공통 원칙·생애주기·접근 권한·원장 형식** → `references/project-docs.md` (wiki-project 스킬군 전용)
 
 ## 안티패턴 — 전 스킬 공통
