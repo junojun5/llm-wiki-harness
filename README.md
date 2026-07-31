@@ -249,6 +249,24 @@ qmd collection list         # 볼트 wiki/ 경로가 목록에 있는지
 
 비대화형 실행은 `codex exec --dangerously-bypass-hook-trust …`. `config.toml [features] hooks=true`는 0.145.0에서 **불필요**하다(stable·기본 활성).
 
+### Codex — 훅 설정 파싱 실패도 같은 증상을 낸다 (경고 1줄 + 훅 0개)
+
+trust와 **증상이 똑같아서** 헷갈린다. Codex는 훅 설정을 strict하게 읽으므로 최상위에 `description`·`hooks` 외의 키가 있으면 파일 전체를 버린다. 설치는 성공하고 `codex plugin list`도 `installed, enabled`로 보이는데 가드만 사라진다. 구분법은 경고를 보는 것이다:
+
+```
+codex exec ... 2>&1 | grep 'failed to parse'
+# warning: failed to parse hooks config …/hooks.json: unknown field `_comment`,
+#          expected `description` or `hooks`
+```
+
+하네스 배포본은 이 제약을 지키며 `tests/hooks/test-hook-config-schema.sh`가 회귀를 막는다. **직접 손으로 만든 `~/.codex/hooks.json`이나 낡은 `{vault}/.codex/hooks.json`이 원인일 수 있다** — `install.sh`는 기존 파일을 덮지 않으므로(비파괴 정책) 하네스가 갱신돼도 옆에 `hooks.llm-wiki.json` 사본만 생긴다. 그 사본과 비교해 수동 머지한다.
+
+### Codex — 훅이 2번 발화한다 (플러그인 + 볼트-로컬 중복 등록)
+
+Codex는 플러그인 훅과 프로젝트-로컬 `{vault}/.codex/hooks.json`을 **병합**한다. 둘 다 있으면 같은 훅이 2회 발화한다(실측: SessionStart 1회 → 2회). Cursor의 경로 분리 원칙과 같은 이유로 **한쪽만 남긴다** — 마켓플레이스로 설치했다면 Codex 목적의 `install.sh --vault`/`--fallback`은 실행하지 않는다.
+
+> `install.sh`는 `~/.llm-wiki/scripts/`를 **자기 체크아웃 경로로 재지정**한다(하네스 소유 파일이라 비파괴 정책의 예외). 마켓플레이스 부트스트랩은 플러그인 캐시를 가리키므로, 임시 클론·워크트리에서 `install.sh`를 돌리면 공용 런타임이 그 경로에 묶인다. 그 디렉토리를 지우면 링크가 깨진다 — 안정된 클론에서 실행하거나, 링크를 지우고 다음 SessionStart의 자가-부트스트랩에 맡긴다.
+
 ### Codex — `AGENTS.md`가 잘려 로드된다 (`project_doc_max_bytes`)
 
 Codex는 global/project `AGENTS.md`를 instruction chain으로 병합하며 기본 한도가 **32 KiB**다. 초과하면 규칙이 조용히 잘린다.
