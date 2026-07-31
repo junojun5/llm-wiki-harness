@@ -12,3 +12,6 @@ tests/**/*.actual
 
 # IDE
 .idea/
+
+# 워크트리 (하네스가 생성/정리)
+.claude/worktrees/
