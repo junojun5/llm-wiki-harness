@@ -75,6 +75,44 @@ echo "[7] session-start — 볼트 CWD에서만 주입(자가-게이팅)"
 OUT_OUTSIDE="$(cd "$SB" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude)"
 [ -z "$OUT_OUTSIDE" ] && ok "볼트 밖 CWD → 주입 없음(스팸 방지)" || no "볼트 밖인데 주입됨"
 
+echo "[8] install.sh 덮어쓰기 정책 — 기존 파일 보존 + .llm-wiki 사본 (비파괴)"
+# 별도 격리 HOME/vault. 대상 파일을 미리 만들어 두고 install → 원본이 그대로 남고 사본이 생기는지.
+SB2="$SB/nondestructive"
+H2="$SB2/home"; V2="$SB2/vault"
+mkdir -p "$H2/.claude" "$H2/.cursor" "$H2/.codex" "$H2/.gemini/config" "$V2/.cursor"
+printf '{"USER_ORIGINAL":"codex"}\n'          > "$H2/.codex/hooks.json"
+printf '{"USER_ORIGINAL":"cursor-hooks"}\n'   > "$V2/.cursor/hooks.json"
+printf '{"USER_ORIGINAL":"cursor-sandbox"}\n' > "$V2/.cursor/sandbox.json"
+printf '# 사용자 전역 AGENTS.md\n'             > "$H2/.gemini/config/AGENTS.md"
+HOME="$H2" bash "$REPO/install.sh" --fallback --vault "$V2" >"$SB2/out" 2>&1
+grep -q 'USER_ORIGINAL' "$H2/.codex/hooks.json"          && ok "~/.codex/hooks.json 원본 보존"          || no "~/.codex/hooks.json 덮어씀"
+grep -q 'USER_ORIGINAL' "$V2/.cursor/hooks.json"         && ok "볼트 .cursor/hooks.json 원본 보존"      || no "볼트 .cursor/hooks.json 덮어씀"
+grep -q 'USER_ORIGINAL' "$V2/.cursor/sandbox.json"       && ok "볼트 .cursor/sandbox.json 원본 보존"    || no "볼트 .cursor/sandbox.json 덮어씀"
+grep -q '사용자 전역' "$H2/.gemini/config/AGENTS.md"      && ok "~/.gemini AGENTS.md 원본 보존"          || no "~/.gemini AGENTS.md 덮어씀"
+[ ! -L "$H2/.gemini/config/AGENTS.md" ]                  && ok "~/.gemini AGENTS.md symlink 교체 안 함" || no "일반 파일이 symlink로 교체됨"
+# 사본이 확장자를 보존한 이름으로 옆에 생겼는지
+[ -f "$H2/.codex/hooks.llm-wiki.json" ]      && ok "사본 ~/.codex/hooks.llm-wiki.json"          || no "codex 사본 없음"
+[ -f "$V2/.cursor/hooks.llm-wiki.json" ]     && ok "사본 .cursor/hooks.llm-wiki.json"           || no "cursor hooks 사본 없음"
+[ -f "$V2/.cursor/sandbox.llm-wiki.json" ]   && ok "사본 .cursor/sandbox.llm-wiki.json"         || no "cursor sandbox 사본 없음"
+[ -L "$H2/.gemini/config/AGENTS.llm-wiki.md" ] && ok "사본 AGENTS.llm-wiki.md"                  || no "AGENTS 사본 없음"
+grep -q '수동 머지 필요' "$SB2/out"           && ok "머지 TODO를 설치 요약에 재고지"             || no "머지 TODO 미고지"
+# 사본 내용이 실제 render 결과인지 (placeholder가 남아 있으면 안 된다)
+grep -q '{{HOOKS_DIR}}'  "$V2/.cursor/hooks.llm-wiki.json"   && no "cursor 사본에 placeholder 잔존"   || ok "cursor 사본 절대경로 render됨"
+grep -q '{{VAULT_ABS}}'  "$V2/.cursor/sandbox.llm-wiki.json" && no "sandbox 사본에 placeholder 잔존"  || ok "sandbox 사본 {{VAULT_ABS}} 치환됨"
+
+echo "[9] install.sh 멱등성 — 재실행 시 사본을 만들지 않는다"
+SB3="$SB/idempotent"; H3="$SB3/home"; V3="$SB3/vault"
+mkdir -p "$H3/.claude" "$H3/.cursor" "$H3/.codex" "$H3/.gemini/config" "$V3"
+HOME="$H3" bash "$REPO/install.sh" --fallback --vault "$V3" >/dev/null 2>&1
+HOME="$H3" bash "$REPO/install.sh" --fallback --vault "$V3" >"$SB3/out2" 2>&1
+[ "$(find "$SB3" -name '*.llm-wiki.*' | wc -l | tr -d ' ')" = "0" ] && ok "재실행에도 사본 0건" || no "재실행이 사본을 만들었다"
+grep -q '이미 최신' "$SB3/out2" && ok "재실행은 '이미 최신'으로 보고" || no "'이미 최신' 보고 없음"
+
+echo "[10] --help — 주석 블록만 출력(코드 누출 없음)"
+HELP="$(bash "$REPO/install.sh" --help)"
+printf '%s' "$HELP" | grep -qE 'set -euo pipefail|while \[ \$# -gt 0 \]' && no "--help에 코드 누출" || ok "--help 코드 누출 없음"
+printf '%s' "$HELP" | grep -q 'install.sh 필수' && ok "--help에 Cursor install.sh 필수 명시" || no "Cursor 필수 명시 없음"
+
 echo ""
 echo "SMOKE PASS=$PASS FAIL=$FAIL"
 echo "ⓘ 실제 Claude/Codex/Cursor/Antigravity CLI end-to-end는 in-app 검증 필요 (tests/fixtures/README.md, 배포 설계 §10)."
