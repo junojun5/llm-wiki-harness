@@ -108,3 +108,42 @@ bash scripts/build-link-graph.sh /tmp/w    # 수정 전: BROKEN a.md nope / 수�
 | 6 | **`ingest-url`·`wiki-capture`** | 이번 범위 밖. 9/12스킬 커버 |
 
 앞선 4건은 [Phase 3 리포트](2026-08-01-phase3-e2e-smoke.md) §5와 `distribution-design.md` §10에서 계속 추적한다.
+
+---
+
+## 7. 머지 후 마켓플레이스 스모크 — 결함 1건 추가 발견
+
+PR #11을 master에 머지(`1e31d51`)한 뒤 설치본을 검증했다.
+
+### 발견 6 — 버전 bump 없이는 배포되지 않는다 🔴
+
+`claude plugin update`는 **`plugin.json`의 `version` 문자열로만** 갱신 여부를 판정하고 커밋 sha는 보지 않는다.
+
+```
+마켓플레이스 클론  → 1e31d51  (머지 커밋까지 갱신됨)
+설치 기록 sha      → b1d1593  (구버전)
+version            → 0.1.0 → 0.1.0
+결과               → "already at the latest version (0.1.0)" · 캐시 refresh 안 됨
+```
+
+**설치본으로 발견 1이 그대로 재현됐다** — 이게 배포가 안 됐다는 결정적 증거다.
+
+```
+설치본: BROKEN  a.md  nope     ← 코드 스팬을 링크로 계수 (수정 전 동작)
+master : broken=0               ← 수정 반영
+```
+
+`claude plugin marketplace update`를 먼저 돌려도 결과는 같다 — 그건 카탈로그만 새로 받는다.
+
+**이 결함의 성질은 Codex `_comment`와 같다.** 설치는 성공하고 `plugin list`도 `enabled`로 보이는데 실제 반영은 없다. 침묵으로 실패하므로 스모크 없이는 발견되지 않는다. **머지가 곧 배포가 아니라는 것**이 이 레포의 릴리스 모델이다.
+
+### 조치
+
+- **버전 0.1.0 → 0.2.0**, 5곳 동시 (`VERSION` · `.claude-plugin/` · `.codex-plugin/` · `.cursor-plugin/` · `.antigravity-plugin/`의 `plugin.json`). 스크립트 동작 변경(발견 1)과 스킬 절차 추가(발견 3의 Step 5.5)를 포함하므로 patch가 아니라 minor로 올렸다.
+- **`tests/install/test-version-consistency.sh` 신설** — 5곳 일치 + semver 형식 + 매니페스트 JSON 유효성. "언제 올려야 하는가"는 사람의 판단이라 테스트할 수 없지만 **부분 bump는 막는다**(일부만 올리면 플랫폼마다 다른 버전이 배포된다). 훼손 주입으로 실제로 잡는 것을 확인했다.
+- **`tests/run.sh` 글롭 확장** — `install/`에서 `smoke.sh`만 집던 것을 `install/test-*.sh`도 포함하도록. 안 하면 신규 테스트가 러너에서 조용히 빠진다.
+- **`docs/troubleshooting.md`에 항목 추가** — 증상·원인·확인 명령·해결. `claude plugin update <name>`이 접미어 없이는 `not found`로 실패하는 것과, 런타임 홈 symlink 때문에 **스크립트는 즉시 새 버전이 되고 스킬 문서만 재시작을 기다리는 비대칭**도 함께 기록했다.
+
+### 검증
+
+`tests/run.sh` 9스위트 **PASS 172 FAIL 0** (`test-version-consistency` 7건 신규).
