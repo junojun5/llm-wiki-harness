@@ -76,4 +76,8 @@ hooks/    = 그 판정을 이벤트에 물려 자동 실행
 | cursor-agent 2026.07.23 | `install.sh --vault` / `--fallback` | ✅ `Write` 절대경로 차단(`permission:deny`) · `Shell`/resolver 호출은 통과 · payload에 `cursor_version` 확인 |
 | Antigravity 1.1.8 | `install.sh` | ➖ 훅 없음(스키마 미공개). skills 12개 + `rules/llm-wiki.md` 배치 확인 — `raw/` 보호는 AGENTS.md 소프트 룰 |
 
+**중복 등록 = 이중 발화 (2026-08-01 실측).** Codex는 플러그인 훅과 프로젝트-로컬 `{vault}/.codex/hooks.json`을 **병합**한다 — 둘 다 있으면 같은 훅이 2회 발화한다(SessionStart 1회 → 2회로 실측). Cursor에 대해 이미 명시한 "경로를 분리해 유지한다" 원칙이 Codex에도 그대로 적용된다: 마켓플레이스로 설치했다면 Codex 목적의 `install.sh --fallback`/`--vault`는 돌리지 않는다.
+
+**`~/.llm-wiki/scripts` 소유권 주의.** 마켓플레이스 부트스트랩(session-start ①)은 이 경로를 **플러그인 캐시**로 링크하고, `install.sh [1]`은 **자기 체크아웃**으로 링크한다. 둘 다 하네스 소유 파일이라 비파괴 정책의 예외이므로 **나중에 실행한 쪽이 이긴다.** 임시 클론·git worktree에서 `install.sh`를 돌리면 4개 플랫폼이 공유하는 런타임이 그 임시 경로에 묶이고, 그 디렉토리를 지우면 전부 깨진다(가드 훅은 fail-open이라 조용히 무방비가 된다). 안정된 클론에서 실행하거나, 링크를 지워 다음 SessionStart의 자가-부트스트랩에 맡긴다.
+
 > Windows(`run-hook.cmd` cmd.exe 분기)는 여전히 정적 검토만 됐다 — 실기 검증은 Windows 환경 확보 시.
