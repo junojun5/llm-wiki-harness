@@ -120,7 +120,7 @@ severity 그룹(🔴 → 🟡 → ℹ️)으로 묶고, 각 섹션에 **다음 �
 
 집계 문자는 서로 겹치지 않게 쓴다 — `T`(총 이슈, 중복 제거) · `E`/`R`/`S`(severity별) · `F`(자동 수정 가능). 아래 LINT 라인의 항목 문자(`A`~`Q`)와도 구분된다.
 
-액션 문구 예: conflict → "소스 채택 결정 후 충돌 노트 resolved 갱신" · PII → "값 확인 후 redaction/.gitignore" · 미처리 raw → "`/wiki-ingest <경로>`" · 고아 → "링크 추가 또는 archive" · manifest 정합성 → "의도된 삭제면 manifest prune, 복구면 `/wiki-ingest --full <raw경로>`".
+액션 문구 예: conflict → "소스 채택 결정 후 충돌 노트 resolved 갱신" · PII → "값 확인 후 redaction/.gitignore" · 미처리 raw → "`wiki-ingest <경로>`" · 고아 → "링크 추가 또는 archive" · manifest 정합성 → "의도된 삭제면 manifest prune, 복구면 `wiki-ingest --full <raw경로>`".
 
 ## `--fix` — 기본 dry-run, 적용은 차등 확인
 

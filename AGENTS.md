@@ -26,10 +26,10 @@ bash ~/.llm-wiki/scripts/resolve-vault.sh
 
 QMD는 볼트 위의 **선택적** 검색 인덱스(markdown이 source of truth). read-only 스킬(`wiki-query`·`wiki-status`)은 refresh하지 않는다. 설정 파일 없음 — qmd 레지스트리가 단일 출처.
 
-- **게이트** (refresh·검색 전): ① `command -v ${QMD_CLI:-qmd}` 실패 → Grep fallback, `QMD skipped: qmd CLI unavailable`. ② `${QMD_CLI:-qmd} collection list`에 `$VAULT_PATH/$WIKI_DIR` 매칭 컬렉션 없음 → Grep fallback + "/wiki-setup --update-qmd로 등록하세요", `QMD skipped: collection not registered`. ③ 둘 다 통과 → 매칭 컬렉션명을 `QMD_WIKI_COLLECTION`으로 사용.
+- **게이트** (refresh·검색 전): ① `command -v ${QMD_CLI:-qmd}` 실패 → Grep fallback, `QMD skipped: qmd CLI unavailable`. ② `${QMD_CLI:-qmd} collection list`에 `$VAULT_PATH/$WIKI_DIR` 매칭 컬렉션 없음 → Grep fallback + "wiki-setup --update-qmd로 등록하세요", `QMD skipped: collection not registered`. ③ 둘 다 통과 → 매칭 컬렉션명을 `QMD_WIKI_COLLECTION`으로 사용.
 - **시퀀스** (page→index→log→hot 이후 마지막, **스킬 실행당 1회** — update가 전체 해시 스캔): `${QMD_CLI:-qmd} update` (텍스트/BM25, 매번) → `${QMD_CLI:-qmd} embed` (벡터, update stdout에 `unique hashes need vectors`가 있을 때만) → `${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/<category>/<page>.md" -l 5` 검증. 실패해도 **볼트는 롤백하지 않는다** — QMD 상태만 별도 보고. 쓴 게 없으면(해시 일치 ingest, report-only lint) 생략.
 - **상태 문자열(하나):** `QMD refreshed: update + embed + verified` · `QMD refreshed: update only + verified` · `QMD partial: update 성공 · embed 실패 (시맨틱 검색만 구식 — 단발 무시, 반복 시 --update-qmd)` · `QMD partial: update 성공 · verify 실패 (인덱스 미반영 가능 — 단발 무시, 반복 시 --update-qmd)` · `QMD skipped: collection not registered` · `QMD skipped: qmd CLI unavailable` · `QMD failed: <짧은 에러 요약>`
-- **self-healing:** 단발 실패는 액션 불필요(다음 스킬의 전체 스캔 update가 흡수, 그동안 Grep fallback). 2회 연속 실패·stale 체감 → `/wiki-setup --update-qmd`.
+- **self-healing:** 단발 실패는 액션 불필요(다음 스킬의 전체 스캔 update가 흡수, 그동안 Grep fallback). 2회 연속 실패·stale 체감 → `wiki-setup --update-qmd`.
 
 ## 스킬 라우팅 — 해당 스킬을 호출
 

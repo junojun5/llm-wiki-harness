@@ -25,11 +25,11 @@
 
 | exit | 코드 | 뜻 | 복구 |
 |---|---|---|---|
-| 2 | `E_NO_CONFIG` | 볼트 설정이 없다 | `/wiki-setup` |
-| 3 | `E_BAD_POINTER` | 전역 포인터가 없는 경로를 가리킨다 | `/wiki-setup --update-path` |
-| 4 | `E_INVALID_CONFIG` | `.wiki-config.json`이 깨졌다 | `/wiki-setup --repair` |
+| 2 | `E_NO_CONFIG` | 볼트 설정이 없다 | `wiki-setup` |
+| 3 | `E_BAD_POINTER` | 전역 포인터가 없는 경로를 가리킨다 | `wiki-setup --update-path` |
+| 4 | `E_INVALID_CONFIG` | `.wiki-config.json`이 깨졌다 | `wiki-setup --repair` |
 | 5 | `E_VERSION` | 설정 버전이 하네스보다 새롭다 | 하네스 `git pull` |
-| 6 | `E_NOT_A_VAULT` | 볼트 구조(`wiki/`)가 없다 | `/wiki-setup --repair` |
+| 6 | `E_NOT_A_VAULT` | 볼트 구조(`wiki/`)가 없다 | `wiki-setup --repair` |
 
 스크립트 **파일 자체가 없으면** `./install.sh`를 재실행한다 — `~/.llm-wiki/scripts` 부트스트랩이 안 된 상태다.
 
@@ -48,8 +48,8 @@ python3 --version     # 없으면 설치 후 재시도
 QMD는 **선택적** 검색 인덱스다(markdown이 source of truth). 없어도 하네스는 동작하며, 스킬이 Grep으로 대체하고 상태 문자열을 남긴다.
 
 - `QMD skipped: qmd CLI unavailable` — `qmd`가 PATH에 없다. [요구사항](../README.md#선택--qmd-검색-인덱스)의 `npm install -g @tobilu/qmd`로 설치하거나, 그대로 Grep으로 쓴다.
-- `QMD skipped: collection not registered` — 볼트가 컬렉션으로 등록되지 않았다 → `/wiki-setup --update-qmd`
-- `QMD partial: …` / `QMD failed: …` — **단발이면 액션 불필요**하다. `qmd update`가 매번 전체 해시 스캔이라 다음 쓰기가 누락분을 흡수한다(self-healing). **2회 연속 실패**나 검색 결과가 stale하게 느껴질 때만 `/wiki-setup --update-qmd`.
+- `QMD skipped: collection not registered` — 볼트가 컬렉션으로 등록되지 않았다 → `wiki-setup --update-qmd`
+- `QMD partial: …` / `QMD failed: …` — **단발이면 액션 불필요**하다. `qmd update`가 매번 전체 해시 스캔이라 다음 쓰기가 누락분을 흡수한다(self-healing). **2회 연속 실패**나 검색 결과가 stale하게 느껴질 때만 `wiki-setup --update-qmd`.
 
 진단 순서:
 
@@ -61,7 +61,7 @@ qmd collection list         # 볼트 wiki/ 경로가 목록에 있는지
 
 `qmd doctor`가 `model cache: missing N/3`을 보고하면 안내대로 `qmd pull`로 미리 받는다. 단 우리가 쓰는 `embed`에는 임베딩 모델만 필요하므로, 나머지 2개가 없어도 하네스의 QMD refresh는 정상 동작한다.
 
-> ⚠️ **`qmd collection add`는 경로를 생략하면 현재 디렉토리를 등록한다.** 수동으로 정리할 때 `qmd collection add`만 치면 엉뚱한 cwd가 컬렉션이 된다 — 경로를 항상 명시하고, 잘못 만들었으면 `qmd collection remove <name>`으로 지운다. `/wiki-setup`은 항상 볼트 경로를 명시하므로 이 함정에 걸리지 않는다.
+> ⚠️ **`qmd collection add`는 경로를 생략하면 현재 디렉토리를 등록한다.** 수동으로 정리할 때 `qmd collection add`만 치면 엉뚱한 cwd가 컬렉션이 된다 — 경로를 항상 명시하고, 잘못 만들었으면 `qmd collection remove <name>`으로 지운다. `wiki-setup`은 항상 볼트 경로를 명시하므로 이 함정에 걸리지 않는다.
 
 > 첫 QMD 사용 시 **GGUF 모델 ~2GB 다운로드**로 오래 멈춘 것처럼 보일 수 있다. 실패가 아니라 초기 1회 비용이다.
 

@@ -13,11 +13,11 @@ description: 새 wiki 볼트를 초기화하거나 깨진 볼트 설정을 복�
 
 | 호출 | 하는 일 |
 |---|---|
-| `/wiki-setup` | 신규 초기화 (아래 워크플로) |
-| `/wiki-setup --vault <path> [--yes]` | 비대화형 초기화 |
-| `/wiki-setup --repair` | config 경로 재검증 + 필수 파일 복구 |
-| `/wiki-setup --update-path` | 볼트가 이동했거나 머신을 옮긴 경우 경로 재지정 |
-| `/wiki-setup --update-qmd` | 검색 인덱스 전체 reconcile |
+| `wiki-setup` | 신규 초기화 (아래 워크플로) |
+| `wiki-setup --vault <path> [--yes]` | 비대화형 초기화 |
+| `wiki-setup --repair` | config 경로 재검증 + 필수 파일 복구 |
+| `wiki-setup --update-path` | 볼트가 이동했거나 머신을 옮긴 경우 경로 재지정 |
+| `wiki-setup --update-qmd` | 검색 인덱스 전체 reconcile |
 
 ## 워크플로 — 신규 초기화
 
@@ -72,7 +72,7 @@ Step 9: QMD 설정 (선택 — 없어도 볼트는 완전히 동작한다)
        npm install -g @tobilu/qmd      (또는 bun install -g @tobilu/qmd)
        전제: Node.js ≥ 22 또는 Bun ≥ 1.0 · macOS는 brew install sqlite
        첫 실행 시 GGUF 모델 ~2GB 자동 다운로드
-     설치 후 /wiki-setup --update-qmd 로 등록 + 전체 인덱싱"
+     설치 후 wiki-setup --update-qmd 로 등록 + 전체 인덱싱"
 
   ※ QMD 설정은 어디에도 저장하지 않는다 — qmd 자체 레지스트리가 단일 출처다
 

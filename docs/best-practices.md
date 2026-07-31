@@ -63,7 +63,7 @@ sequenceDiagram
     A->>S: wiki-ingest 호출
     S->>S: Step 0 — resolve-vault.sh
     alt 볼트 못 찾음 (E_NO_CONFIG)
-        S-->>U: "먼저 /wiki-setup 하세요"
+        S-->>U: "먼저 wiki-setup 하세요"
     else 볼트 OK
         S->>V: raw/ 읽기 (읽기만)
         S->>V: wiki/summaries/ 쓰기
