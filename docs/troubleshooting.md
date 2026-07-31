@@ -167,4 +167,19 @@ claude plugin update llm-wiki-harness@llm-wiki-harness   # 정규화된 이름 �
 
 `claude plugin update llm-wiki-harness`(마켓플레이스 접미어 없이)는 `Plugin "llm-wiki-harness" not found`로 실패한다 — `claude plugin list`가 출력하는 `<플러그인>@<마켓플레이스>` 형태를 그대로 쓴다.
 
+### 캐시는 새 버전인데 런타임이 옛 버전이다
+
+`plugin update`가 성공했는데도 동작이 그대로면 **런타임 홈이 구버전을 가리키는지** 본다. `~/.llm-wiki/scripts/*`는 버전별 캐시 디렉토리를 가리키므로, 구버전 캐시가 남아 있으면 stale해질 수 있다.
+
+```bash
+ls -l ~/.llm-wiki/scripts/          # 어느 버전을 가리키나
+```
+
+0.2.1부터는 새 버전의 `session-start`가 **형제 버전을 가리키는 링크를 자동 재지정**한다(사용자 클론을 가리키는 링크는 비파괴 정책대로 보존한다). **0.2.0 이하에서 올라올 때만 1회 수동 복구가 필요하다** — 구 훅은 이 로직이 없어 스스로 고치지 못한다.
+
+```bash
+rm -f ~/.llm-wiki/scripts/{resolve-vault,validate-frontmatter,build-link-graph}.sh
+bash ~/.claude/plugins/cache/llm-wiki-harness/llm-wiki-harness/<새버전>/hooks/session-start claude </dev/null
+```
+
 **적용은 재시작 후다.** `update`는 캐시를 교체하지만 실행 중인 세션은 옛 스킬을 들고 있다. 런타임 홈(`~/.llm-wiki/scripts/`)은 캐시를 symlink하므로 **스크립트는 즉시 새 버전이 되고 스킬 문서만 재시작을 기다린다** — 이 비대칭이 "스크립트는 고쳐졌는데 스킬이 옛 절차를 따르는" 상태를 만들 수 있으니 릴리스 검증은 재시작 후에 한다.

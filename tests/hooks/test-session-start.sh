@@ -90,6 +90,67 @@ jpath "런처 경유 codex 포맷" "d['hookSpecificOutput']['additionalContext']
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$LAUNCHER" session-start cursor </dev/null 2>/dev/null)"
 jpath "런처 경유 cursor 포맷" "d['additional_context']" "Config Gate" "$OUT"
 
+# ── 부트스트랩 ①: 버전 업데이트 시 stale symlink 재지정 ────────────────────
+# 마켓플레이스 캐시는 버전별 디렉토리라, 존재 여부만 보면 symlink가 구버전에 영구히
+# 고정된다. 2026-08-01 실측: 캐시는 0.2.0인데 런타임 홈은 0.1.0이라 고친 결함이 그대로
+# 재현됐다. 형제 버전은 재지정하고 사용자 클론(install.sh)은 보존해야 한다.
+
+# 가짜 플러그인 캐시 레이아웃 — ROOT가 */plugins/cache/* 안이어야 형제 판정이 켜진다
+# 비교를 물리 경로로 한다 — macOS의 mktemp는 /var(→ /private/var) 심볼릭 아래에 만든다
+mkdir -p "$SB/plugins/cache/llm-wiki-harness/llm-wiki-harness"
+MP="$(cd "$SB/plugins/cache/llm-wiki-harness/llm-wiki-harness" && pwd -P)"
+for v in 0.1.0 0.2.0; do
+  mkdir -p "$MP/$v/hooks" "$MP/$v/scripts" "$MP/$v/skills/using-llm-wiki"
+  cp "$HOOK" "$MP/$v/hooks/session-start"
+  cp "$REPO_ROOT/skills/using-llm-wiki/SKILL.md" "$MP/$v/skills/using-llm-wiki/SKILL.md"
+  for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+    printf '#!/usr/bin/env bash\necho %s\n' "$v" > "$MP/$v/scripts/$s"
+  done
+done
+
+echo "test: 형제 버전 stale symlink → 새 버전으로 재지정"
+H2="$SB/home2/.llm-wiki/scripts"; mkdir -p "$H2"
+for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+  ln -sfn "$MP/0.1.0/scripts/$s" "$H2/$s"
+done
+(cd "$SB" && HOME="$SB/home2" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
+[ "$(readlink "$H2/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "형제 버전 재지정 (0.1.0 → 0.2.0)" || no "재지정 안 됨: $(readlink "$H2/resolve-vault.sh")"
+[ "$(bash "$H2/build-link-graph.sh")" = "0.2.0" ] \
+  && ok "재지정 후 새 버전이 실행된다" || no "여전히 옛 스크립트 실행"
+
+echo "test: 사용자 클론을 가리키는 symlink는 보존 (install.sh 비파괴 정책)"
+H3="$SB/home3/.llm-wiki/scripts"; mkdir -p "$H3"
+CLONE="$SB/my-clone/scripts"; mkdir -p "$CLONE"
+for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+  printf '#!/usr/bin/env bash\necho clone\n' > "$CLONE/$s"
+  ln -sfn "$CLONE/$s" "$H3/$s"
+done
+(cd "$SB" && HOME="$SB/home3" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
+[ "$(readlink "$H3/resolve-vault.sh")" = "$CLONE/resolve-vault.sh" ] \
+  && ok "사용자 클론 링크 보존" || no "클론 링크가 덮어써짐: $(readlink "$H3/resolve-vault.sh")"
+
+echo "test: 깨진 symlink → 복구"
+H4="$SB/home4/.llm-wiki/scripts"; mkdir -p "$H4"
+ln -sfn "$SB/gone/scripts/resolve-vault.sh" "$H4/resolve-vault.sh"
+(cd "$SB" && HOME="$SB/home4" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
+[ "$(readlink "$H4/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "깨진 링크 복구" || no "깨진 링크 방치: $(readlink "$H4/resolve-vault.sh")"
+
+echo "test: symlink가 아닌 실제 파일은 손대지 않는다"
+H5="$SB/home5/.llm-wiki/scripts"; mkdir -p "$H5"
+printf '#!/usr/bin/env bash\necho mine\n' > "$H5/resolve-vault.sh"
+(cd "$SB" && HOME="$SB/home5" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
+[ ! -L "$H5/resolve-vault.sh" ] && [ "$(bash "$H5/resolve-vault.sh")" = "mine" ] \
+  && ok "실제 파일 보존" || no "실제 파일이 symlink로 교체됨"
+
+echo "test: 이미 이 배포본을 가리키면 멱등 (재지정 없음)"
+H6="$SB/home6/.llm-wiki/scripts"; mkdir -p "$H6"
+ln -sfn "$MP/0.2.0/scripts/resolve-vault.sh" "$H6/resolve-vault.sh"
+BEFORE="$(readlink "$H6/resolve-vault.sh")"
+(cd "$SB" && HOME="$SB/home6" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
+[ "$(readlink "$H6/resolve-vault.sh")" = "$BEFORE" ] && ok "멱등" || no "멱등 위반"
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
