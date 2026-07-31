@@ -31,7 +31,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| **`run-hook.cmd`** | **폴리글랏 런처** — Unix(bash)·Windows(cmd.exe) 양쪽에서 동작. `run-hook.cmd <script> [platform]` → `bash <hookdir>/<script> [platform]`로 위임(자기 위치를 `$0`로 찾음). 세 플러그인이 모두 이걸 경유해 훅 스크립트를 부른다 — Claude `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd`, Codex `${PLUGIN_ROOT}/hooks/run-hook.cmd`, Cursor `./hooks/run-hook.cmd`(self-locating으로 cwd 버그 회피). Windows 네이티브 에이전트가 `.sh`를 직접 못 돌릴 때 Git Bash/WSL bash로 넘긴다. |
+| **`run-hook.cmd`** | **폴리글랏 런처** — Unix(bash)·Windows(cmd.exe) 양쪽에서 동작. `run-hook.cmd <script> [platform]` → `bash <hookdir>/<script> [platform]`로 위임(자기 위치를 `$0`로 찾음). 세 플랫폼이 모두 이걸 경유해 훅 스크립트를 부르되 command 표기가 갈린다 — Claude `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd`, Codex `${PLUGIN_ROOT}/hooks/run-hook.cmd`(둘 다 플러그인 매니페스트가 자동 등록), Cursor는 `install.sh`가 `{{HOOKS_DIR}}`를 실제 설치 절대경로로 render한다(플러그인 자동 등록이 불가하므로 self-locating 상대경로 전제가 성립하지 않는다 — 2026-07-31 실측). Windows 네이티브 에이전트가 `.sh`를 직접 못 돌릴 때 Git Bash/WSL bash로 넘긴다. |
 | **`probe-hook.sh`** | **픽스처 캡처 도구**(개발용). 훅 이벤트의 raw stdin 페이로드·argv를 파일로 저장하고 항상 통과(exit 0). Codex/Cursor의 실제 stdin/stdout 스키마를 실측해 골든 픽스처로 확보하기 위한 것. 평상시 훅 등록에는 쓰지 않는다. (배포 설계 §9-6) |
 
 ### 플랫폼별 등록 JSON (같은 bash 로직을 각 플랫폼 형식으로 등록)
@@ -39,8 +39,8 @@
 | 파일 | 대상 | 내용 |
 |---|---|---|
 | **`hooks.json`** | Claude (플러그인) | `.claude-plugin/plugin.json`이 이 파일을 가리켜 마켓플레이스 설치 시 자동 등록. SessionStart·PreToolUse·PostToolUse 3종을 `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd` 경유로 등록 → **install.sh 없이 동작**. `--fallback`(수동)은 `${CLAUDE_PLUGIN_ROOT}`를 `~/.claude`로 치환한 스니펫을 만들어 `~/.claude/settings.json` 머지를 안내. |
-| **`hooks-codex.json`** | Codex (플러그인) | `.codex-plugin/plugin.json`의 `hooks` 키가 가리켜 `/plugins` 설치 시 등록. SessionStart·PreToolUse(`apply_patch` 포함)·PostToolUse를 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` 경유로 등록. **플러그인 번들 훅은 non-managed** → 최초 1회 `/hooks` **trust** + `config.toml [features] hooks=true`(비Windows) 필요. `--fallback`/`--vault`는 `${PLUGIN_ROOT..}`를 실제 절대경로로 render해 `~/.codex/hooks.json`·`{vault}/.codex/hooks.json` 생성. |
-| **`hooks-cursor.json`** | Cursor (플러그인) | `.cursor-plugin/plugin.json`의 `skills`·`hooks` 키가 가리켜 플러그인 설치 시 자동 등록. camelCase 이벤트(`sessionStart`/`preToolUse`/`postToolUse`) + JS 정규식 matcher. command는 `./hooks/run-hook.cmd`(self-locating) — Cursor 플러그인 훅의 cwd=워크스페이스 버그를 `$0` 자가위치로 회피(플러그인 루트 env var 없음·하드코딩 금지). 차단 출력 `{"permission":"deny","user_message":…}`. `--fallback`/`--vault`는 `./hooks/run-hook.cmd`를 절대경로로 render해 `~/.cursor/hooks.json`·`.cursor/hooks.json` 생성. Cloud Agent는 sessionStart 미지원(로컬 전용). |
+| **`hooks-codex.json`** | Codex (플러그인) | `.codex-plugin/plugin.json`의 `hooks` 키가 가리켜 `/plugins` 설치 시 등록. SessionStart·PreToolUse(`apply_patch` 포함)·PostToolUse를 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` 경유로 등록. **플러그인 번들 훅은 non-managed** → 최초 1회 `/hooks` **trust** 필요(비Windows). trust 미완 시 **무경고 no-op**. `config.toml [features] hooks=true`는 0.145.0에서 **불필요**하다(stable·기본 활성으로 승격). `--fallback`/`--vault`는 `${PLUGIN_ROOT..}`를 실제 절대경로로 render해 `~/.codex/hooks.json`·`{vault}/.codex/hooks.json` 생성. |
+| **`hooks-cursor.json`** | Cursor (설정 파일 배치) | ⚠️ **플러그인 경유 자동 등록은 불가**(cursor-agent가 매니페스트 `hooks`를 소비하지 않음 — 2026-07-31 실측). `install.sh --fallback`이 `~/.cursor/hooks.json`, `--vault`가 `{vault}/.cursor/hooks.json`으로 절대경로 render해 배치한다. camelCase 이벤트(`sessionStart`/`preToolUse`/`postToolUse`) + JS 정규식 matcher. 도구명은 `Write`·`Edit`·`Shell`(대문자 S). 차단 출력 `{"permission":"deny","user_message":…}` + `exit 0`. sessionStart 주입은 `{"additional_context":…,"env":{…}}`. ⚠️ Cursor는 훅 설정을 7개 소스에서 **병합**하며 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행하므로, 같은 훅을 Claude 설정과 중복 등록하면 **2회 발화**한다 — 경로를 분리해 유지한다. Cloud Agent는 sessionStart 미지원. |
 
 ### 설정 템플릿
 

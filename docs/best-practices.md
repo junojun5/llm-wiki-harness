@@ -3,7 +3,7 @@
 실제로 어떤 순서로 스킬을 호출하는지를 **그림 + 표**로 정리한다.
 핵심은 하나다: **모든 흐름은 `session-start` 훅이 부트스트랩을 주입한 뒤 시작하고, 모든 쓰기는 Step 0 Config Gate를 통과한다.** 그 위에서 케이스마다 스킬 순서가 달라진다.
 
-- 카탈로그·설치는 [README](../README.md), 규칙의 근거는 [spec.md](spec.md)·[distribution-design.md](distribution-design.md) 참조.
+- 카탈로그·설치는 [README](../README.md), 규칙의 근거는 [spec.md](specs/spec.md)·[distribution-design.md](specs/distribution-design.md) 참조.
 
 ---
 
@@ -312,6 +312,6 @@ flowchart TD
 | 흩어진 지식 묶기 | `wiki-knowledge` | lint |
 | 볼트 점검 | `wiki-status`(남은 일) / `wiki-lint`(깨진 것) | `--fix` → raw cleanup |
 | 프로젝트 | `wiki-project-init` | design(proposal) / record |
-| 에러 코드 | — | [README §6 트러블슈팅](../README.md) |
+| 에러 코드 | — | [README 트러블슈팅](../README.md#트러블슈팅) |
 
 > 모든 흐름의 공통 전제: **session-start가 규칙을 깔고 → 스킬이 Step 0로 볼트를 잡고 → 쓰기는 index→log→hot→QMD로 마감한다.**

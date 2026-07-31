@@ -26,16 +26,49 @@ Andrej Karpathy의 **LLM Wiki 패턴**을 하네스로 구현한 것이다. RAG�
 
 **에이전트는 작업 전 항상 관련 스킬을 먼저 확인한다.** 제안이 아니라 강제되는 흐름이다. 케이스별 상세 흐름(그린필드·대량 적재·질문 우선·캡처·유지보수·프로젝트·멀티플랫폼)은 [docs/best-practices.md](docs/best-practices.md) 참조.
 
+## 요구사항
+
+### 필수 — 이게 없으면 하네스가 동작하지 않는다
+
+| | 확인 | 용도 |
+|---|---|---|
+| **bash** | `bash --version` | 공유 스크립트·훅 전부 bash다. Windows는 [Git Bash 또는 WSL](#windows--git-bash-또는-wsl-bash가-path에-필요) |
+| **python3** | `python3 --version` | `resolve-vault.sh`(Config Gate)·`validate-frontmatter.sh`가 JSON·YAML 파싱에 쓴다 |
+
+> ⚠️ **python3가 없으면 오진과 함께 가드가 조용히 풀린다.** Config Gate가 `E_INVALID_CONFIG: config 파싱에 실패했습니다`를 내보내지만 **실제 원인은 config가 아니라 python3 부재**다 — `--repair`를 반복해도 해결되지 않는다. 동시에 resolver 실패를 "볼트가 아님"으로 해석하는 훅들이 통과 처리되어 **raw/ 보호와 frontmatter 검증이 둘 다 발화하지 않는다.** 진단이 이상하면 먼저 `python3 --version`을 확인한다.
+
+`jq`는 필요하지 않다 (파싱은 전부 python3로 통일돼 있다).
+
+### 선택 — QMD (검색 인덱스)
+
+QMD는 **없어도 된다.** markdown 볼트가 source of truth이고 QMD는 그 위에 얹는 검색 캐시다. 미설치면 스킬이 Grep으로 대체하고 `QMD skipped: qmd CLI unavailable`을 보고한다. 있으면 BM25 + 벡터 시맨틱 검색으로 `wiki-query`의 후보 수집이 좋아진다.
+
+```bash
+npm install -g @tobilu/qmd        # 또는: bun install -g @tobilu/qmd
+qmd --version                     # 확인 (본 하네스는 2.5.3에서 실측 검증)
+```
+
+- **전제:** Node.js ≥ 22 또는 Bun ≥ 1.0
+- **macOS:** Homebrew SQLite가 필요할 수 있다 — `brew install sqlite` (qmd는 `better-sqlite3`를 번들하므로 대개 불필요하다. `qmd doctor`가 판정해 준다)
+- **GGUF 모델이 온디바이스로 다운로드된다** — 전체 3개 합계 ~2GB. 다만 **이 하네스가 쓰는 경로는 임베딩 모델 하나뿐이다**: 스킬은 `update`·`embed`·`get`·`ls`만 호출하고, 나머지 두 모델(query expansion·reranking)이 필요한 `qmd query`는 호출하지 않는다. 첫 사용 시 멈춘 것처럼 보이는 걸 피하려면 미리 받아 둔다 — `qmd doctor`가 캐시 부족을 보고하며 `qmd pull`을 안내한다.
+- 진단: `qmd doctor` (설치·SQLite·모델 캐시) · `qmd status` (인덱스·컬렉션 health)
+
+**컬렉션 등록은 직접 하지 않는다.** 볼트에서 `/wiki-setup`을 실행하면 Step 9가 등록까지 처리한다(`qmd collection add {vault}/{wiki_dir} --name wiki`, 기등록이면 경로 매칭으로 스킵). QMD를 나중에 설치했다면 `/wiki-setup --update-qmd` 한 번으로 등록 + 전체 인덱싱이 된다.
+
+QMD 설정은 `.wiki-config.json`에 저장하지 않는다 — qmd 자체 레지스트리가 단일 출처이고, 스킬은 매번 런타임에 게이트를 판정한다.
+
 ## 설치
 
 지원 플랫폼은 4개. 어느 쪽이든 ① 스킬·훅 배치 → ② 볼트에서 `/wiki-setup` 1회 → ③ 스킬 사용 흐름은 같다. 다른 건 **설치 위치**와 **훅이 자동으로 등록되는 정도**뿐이다.
 
-| 플랫폼 | 플러그인 설치만으로 스킬+훅 | 비고 |
-|---|---|---|
-| **Claude Code** | ✅ 완전 자동 | 불필요(선택 `--fallback`) |
-| **Codex** | ✅ 자동 선언, 단 최초 1회 `/hooks` trust 필요 | `config.toml [features] hooks=true` |
-| **Cursor** | ✅ 로컬 자동 등록 | Cloud Agent는 sessionStart 미지원 |
-| **Antigravity** | ⚠️ 스킬 + AGENTS.md만 | 공식 훅 스키마 미공개 — 아래 참고 |
+| 플랫폼 | 플러그인 설치만으로 스킬+훅 | `install.sh` | 비고 |
+|---|---|---|---|
+| **Claude Code** | ✅ 스킬+훅 완전 자동 | 선택 (`--fallback`) | 첫 SessionStart가 `~/.llm-wiki`를 자가치유 |
+| **Codex** | ✅ 스킬+훅 자동 선언, 단 최초 1회 `/hooks` trust | 선택 (`--fallback`) | trust 미완 시 **무경고 no-op** |
+| **Cursor** | ⚠️ **스킬만** — 훅은 등록되지 않는다 | **필수** | 훅은 `.cursor/hooks.json` 배치 경로만 유효 |
+| **Antigravity** | ⚠️ 스킬 + AGENTS.md만 | **필수** | 공식 훅 스키마 미공개 — 아래 참고 |
+
+> **Cursor에서 `install.sh`는 폴백이 아니라 필수다.** cursor-agent가 플러그인 매니페스트의 `hooks` 키를 소비하지 않으므로(2026-07-31 실측), 플러그인만 설치하면 스킬은 로드되지만 **raw/ 가드와 frontmatter 검증이 아예 돌지 않는다.**
 
 ### Claude Code
 
@@ -52,22 +85,27 @@ Andrej Karpathy의 **LLM Wiki 패턴**을 하네스로 구현한 것이다. RAG�
 
 ```bash
 codex plugin marketplace add junojun5/llm-wiki-harness
-# → /plugins 설치 후 /hooks 에서 trust + ~/.codex/config.toml [features] hooks=true
+# → /plugins 설치 후 /hooks 에서 trust (비대화형은 --dangerously-bypass-hook-trust)
 ```
 
 마켓플레이스 미사용 시: `./install.sh --fallback` (skills → `~/.agents/`, hooks → `~/.codex/hooks.json`)
 
-플러그인 번들 훅은 non-managed라 설치만으로 무음 활성화되지 않는다 — **최초 1회 `/hooks`에서 trust**가 필요하다. 이후엔 부트스트랩·주입·가드가 모두 동작한다.
+플러그인 번들 훅은 non-managed라 설치만으로 활성화되지 않는다 — **최초 1회 `/hooks`에서 trust**가 필요하다. 이후엔 부트스트랩·주입·가드가 모두 동작한다. `config.toml [features] hooks=true`는 0.145.0에서 **불필요**하다(stable·기본 활성으로 승격). 마켓플레이스 매니페스트는 `.agents/plugins/marketplace.json`이 canonical이다.
 
 ### Cursor
 
 ```bash
-# .cursor-plugin/plugin.json → 공식 마켓플레이스 또는 ~/.cursor/plugins/local/
+# 1) 스킬: .cursor-plugin/plugin.json → 공식 마켓플레이스 또는 ~/.cursor/plugins/local/
+# 2) 훅: install.sh 필수 (플러그인으로는 등록되지 않는다)
+./install.sh --fallback          # 전역(User) → ~/.cursor/hooks.json
+./install.sh --vault <path>      # 프로젝트-로컬 → {vault}/.cursor/hooks.json + sandbox.json
 ```
 
-전역(User): `./install.sh --fallback` · 프로젝트-로컬: `./install.sh --vault <path>`
+⚠️ **훅은 `install.sh`로만 등록된다.** `.cursor-plugin/`은 스킬 전용 표면이다 — 매니페스트의 `hooks`를 cursor-agent가 파싱은 하나 훅 실행 엔진에 도달하지 않는다(실측).
 
 ⚠️ Cloud Agent는 `sessionStart`/user hooks를 지원하지 않는다 — 로컬 데스크톱 Agent를 사용한다.
+
+⚠️ 기본 sandbox(`workspace_readwrite`)는 워크스페이스 밖 R/W를 막아 `~/.llm-wiki/scripts` 호출이 실패할 수 있다. `--vault`가 배치하는 `.cursor/sandbox.json`이 그 경로를 허용한다.
 
 ### Antigravity
 
@@ -93,7 +131,7 @@ Antigravity 공식 플러그인 스펙은 `hooks.json`을 구조적으로 지원
 | 수집 | `wiki-capture` | 현재 대화의 지식을 남기고 싶을 때("capture this") | 진행 중인 대화를 요약해 `summaries/sessions/`에 보존 |
 | 조회·종합 | `wiki-query` | wiki에 쌓인 내용에 대해 질문할 때 | 저비용 index 검색부터 계층 검색까지, 근거를 인용하며 답변 |
 | 조회·종합 | `wiki-knowledge` | 흩어진 summaries/concepts/sessions를 정리하고 싶을 때 | 여러 소스를 종합해 `knowledge/` 페이지를 생성·갱신하고 충돌을 표면화 |
-| 유지보수 | `wiki-lint` | 볼트 상태를 점검/정리하고 싶을 때 | orphan 페이지·깨진 링크·포맷 오류·충돌·stale 페이지·PII·정리 가능한 raw 파일을 감사(report) 또는 수정(`--fix`) |
+| 유지보수 | `wiki-lint` | 볼트 상태를 점검/정리하고 싶을 때 | orphan 페이지·깨진 링크·포맷 오류·충돌·소스 변경 미반영(`source_drift`)·PII·정리 가능한 raw 파일을 감사(report) 또는 수정(`--fix`) |
 | 유지보수 | `wiki-status` | "뭐가 남았지?"가 궁금할 때 | ingest 대기 중인 raw, 최근 처리 내역, 볼트 전반 상태를 요약 |
 | 프로젝트 | `wiki-project-init` | 프로젝트를 새로 시작/재정의할 때 | 인터뷰 방식으로 `projects/{name}/`에 overview·context·goals 생성 |
 | 프로젝트 | `wiki-project-design` | 설계가 바뀌거나 발전할 때 | `projects/{name}/`의 architecture·도메인 모델·conventions를 change proposal 방식으로 갱신 |
@@ -138,11 +176,109 @@ llm-wiki-harness/
 │   └── install/smoke.sh             # install.sh 스모크 테스트
 │
 └── docs/
-    ├── spec.md                      # 하네스 스펙 — wiki 구조·문서 클래스·훅 계약의 단일 출처
-    ├── distribution-design.md       # 멀티플랫폼 배포 설계(근거·트레이드오프)
-    ├── hooks-and-scripts.md         # hooks/·scripts/ 파일별 상세 레퍼런스
+    ├── specs/spec.md                # 하네스 스펙 — wiki 구조·문서 클래스·훅 계약의 단일 출처
+    ├── specs/distribution-design.md # 멀티플랫폼 배포 설계(근거·트레이드오프)
+    ├── specs/hooks-and-scripts.md   # hooks/·scripts/ 파일별 상세 레퍼런스
+    ├── plans/                       # 실행 계획(작업 단위 스냅샷)
     └── best-practices.md            # 케이스별 사용 시나리오
 ```
+
+## 트러블슈팅
+
+### Config Gate 실패 (`E_*` 코드)
+
+모든 wiki 작업은 `bash ~/.llm-wiki/scripts/resolve-vault.sh`를 먼저 통과한다. 실패하면 stderr 첫 줄이 `E_CODE: 메시지` 형태로 복구 경로를 알려준다.
+
+| exit | 코드 | 뜻 | 복구 |
+|---|---|---|---|
+| 2 | `E_NO_CONFIG` | 볼트 설정이 없다 | `/wiki-setup` |
+| 3 | `E_BAD_POINTER` | 전역 포인터가 없는 경로를 가리킨다 | `/wiki-setup --update-path` |
+| 4 | `E_INVALID_CONFIG` | `.wiki-config.json`이 깨졌다 | `/wiki-setup --repair` |
+| 5 | `E_VERSION` | 설정 버전이 하네스보다 새롭다 | 하네스 `git pull` |
+| 6 | `E_NOT_A_VAULT` | 볼트 구조(`wiki/`)가 없다 | `/wiki-setup --repair` |
+
+스크립트 **파일 자체가 없으면** `./install.sh`를 재실행한다 — `~/.llm-wiki/scripts` 부트스트랩이 안 된 상태다.
+
+### `E_INVALID_CONFIG`인데 `--repair`가 듣지 않는다 → python3 확인
+
+`.wiki-config.json`이 정상인데도 `E_INVALID_CONFIG: config 파싱에 실패했습니다`가 반복되면 **원인은 config가 아니라 python3 부재**다. resolver가 파싱에 python3를 쓰기 때문에 없으면 파싱 실패로 보고된다.
+
+```bash
+python3 --version     # 없으면 설치 후 재시도
+```
+
+이 상태에서는 **raw/ 가드와 frontmatter 검증도 함께 발화하지 않는다** — 두 훅이 resolver 실패를 "볼트 밖 세션"으로 해석해 통과시키기 때문이다(비볼트 오탐 방지 설계). 즉 python3 하나가 없으면 보호 장치 전체가 조용히 풀리므로, 진단이 이상하면 가장 먼저 확인한다.
+
+### QMD 미설치·미등록 → Grep fallback
+
+QMD는 **선택적** 검색 인덱스다(markdown이 source of truth). 없어도 하네스는 동작하며, 스킬이 Grep으로 대체하고 상태 문자열을 남긴다.
+
+- `QMD skipped: qmd CLI unavailable` — `qmd`가 PATH에 없다. [요구사항](#선택--qmd-검색-인덱스)의 `npm install -g @tobilu/qmd`로 설치하거나, 그대로 Grep으로 쓴다.
+- `QMD skipped: collection not registered` — 볼트가 컬렉션으로 등록되지 않았다 → `/wiki-setup --update-qmd`
+- `QMD partial: …` / `QMD failed: …` — **단발이면 액션 불필요**하다. `qmd update`가 매번 전체 해시 스캔이라 다음 쓰기가 누락분을 흡수한다(self-healing). **2회 연속 실패**나 검색 결과가 stale하게 느껴질 때만 `/wiki-setup --update-qmd`.
+
+진단 순서:
+
+```bash
+qmd doctor                  # 설치·SQLite·모델 캐시 (help에는 안 나오지만 동작한다)
+qmd status                  # 인덱스 + 컬렉션 health
+qmd collection list         # 볼트 wiki/ 경로가 목록에 있는지
+```
+
+`qmd doctor`가 `model cache: missing N/3`을 보고하면 안내대로 `qmd pull`로 미리 받는다. 단 우리가 쓰는 `embed`에는 임베딩 모델만 필요하므로, 나머지 2개가 없어도 하네스의 QMD refresh는 정상 동작한다.
+
+> ⚠️ **`qmd collection add`는 경로를 생략하면 현재 디렉토리를 등록한다.** 수동으로 정리할 때 `qmd collection add`만 치면 엉뚱한 cwd가 컬렉션이 된다 — 경로를 항상 명시하고, 잘못 만들었으면 `qmd collection remove <name>`으로 지운다. `/wiki-setup`은 항상 볼트 경로를 명시하므로 이 함정에 걸리지 않는다.
+
+> 첫 QMD 사용 시 **GGUF 모델 ~2GB 다운로드**로 오래 멈춘 것처럼 보일 수 있다. 실패가 아니라 초기 1회 비용이다.
+
+### 훅이 발화하지 않는다
+
+먼저 어느 플랫폼인지에 따라 원인이 다르다.
+
+1. **등록 자체를 확인한다** — Claude는 `settings.json`의 `hooks` 블록(플러그인 설치면 자동), Codex는 `~/.codex/hooks.json`, Cursor는 `~/.cursor/hooks.json` 또는 `{vault}/.cursor/hooks.json`.
+2. **훅은 볼트 안에서만 주입한다** — `session-start`는 CWD가 볼트 밖이면 의도적으로 아무것도 하지 않는다(전역 등록 스팸 방지). raw/ 가드·frontmatter 검증은 볼트가 resolve되지 않으면 조용히 통과한다.
+3. **`bash`가 PATH에 있어야 한다** — 훅은 모두 bash 스크립트다(아래 Windows 항목).
+
+### Codex — `/hooks` trust 미완 시 **무경고 no-op**
+
+가장 헷갈리는 케이스다. 플러그인 번들 훅은 non-managed라서 **trust 하기 전까지 경고도 오류도 없이 조용히 아무 일도 하지 않는다.** "훅이 등록됐는데 raw/ 쓰기가 차단되지 않는다"면 먼저 이걸 확인한다.
+
+```
+/hooks          → 비관리 훅을 리뷰하고 trust (최초 1회)
+```
+
+비대화형 실행은 `codex exec --dangerously-bypass-hook-trust …`. `config.toml [features] hooks=true`는 0.145.0에서 **불필요**하다(stable·기본 활성).
+
+### Codex — `AGENTS.md`가 잘려 로드된다 (`project_doc_max_bytes`)
+
+Codex는 global/project `AGENTS.md`를 instruction chain으로 병합하며 기본 한도가 **32 KiB**다. 초과하면 규칙이 조용히 잘린다.
+
+```toml
+# ~/.codex/config.toml
+project_doc_max_bytes = 65536
+```
+
+이 저장소의 `AGENTS.md`는 축약판만 유지해 한도 안에 들어간다 — 상세는 각 `SKILL.md`로 위임한다.
+
+### Cursor — 로컬 Agent vs Cloud Agent
+
+- **훅은 플러그인으로 등록되지 않는다.** `install.sh`가 필수다(위 설치 매트릭스).
+- **Cloud Agent는 `sessionStart`·user hooks를 지원하지 않는다** — 부트스트랩 주입이 없으므로 로컬 데스크톱 Agent를 쓴다. Cloud에서 작업해야 하면 `AGENTS.md`가 규칙을 대신 로드한다.
+- Cursor는 훅 설정을 **7개 소스에서 병합**하며 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행한다 — 같은 훅을 Claude 설정과 중복 등록하면 **2회 발화**한다. 경로를 분리해 유지한다.
+
+### Cursor·Antigravity — sandbox 권한 승인
+
+기본 sandbox(`workspace_readwrite`)는 워크스페이스 밖 R/W를 차단하므로 `~/.llm-wiki/scripts/resolve-vault.sh` 호출이 실패할 수 있다. `install.sh --vault <path>`가 배치하는 `.cursor/sandbox.json`이 `~/.llm-wiki`와 볼트 경로를 허용 목록에 넣는다. Antigravity는 권한 프롬프트에서 해당 경로 접근을 **Allow** 한다.
+
+### Windows — Git Bash 또는 WSL bash가 PATH에 필요
+
+공유 스크립트와 훅은 전부 `.sh`(bash)다. `hooks/run-hook.cmd`가 cmd.exe에서 bash로 위임하는 폴리글랏 런처이지만, **bash 자체는 PATH에 있어야 한다.**
+
+```
+run-hook.cmd: bash를 찾을 수 없습니다. Git Bash 또는 WSL bash를 PATH에 추가하세요.
+```
+
+이 메시지가 보이면 Git for Windows 또는 WSL을 설치한다. Codex의 플러그인 훅은 비Windows 전제다. `.ps1`/`.bat` 패리티 버전은 향후 보완 항목이다.
 
 ## 철학
 

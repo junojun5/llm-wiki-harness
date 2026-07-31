@@ -1,0 +1,12 @@
+{
+  "_comment": "Codex 마켓플레이스 매니페스트 (canonical). Codex가 탐색하는 경로는 .agents/plugins/marketplace.json · .agents/plugins/api_marketplace.json · .claude-plugin/marketplace.json · .cursor-plugin/marketplace.json 4개뿐이며 .codex-plugin/marketplace.json은 읽지 않는다(2026-07-31 실측 — 공식 openai-curated도 .agents/plugins/ 사용). 플러그인 매니페스트 자체는 .codex-plugin/plugin.json이 정상 인식된다. 설치: codex plugin marketplace add <repo> → codex plugin add llm-wiki-harness@llm-wiki-harness → /hooks에서 trust(미완 시 무경고 no-op).",
+  "name": "llm-wiki-harness",
+  "owner": { "name": "junojun5" },
+  "plugins": [
+    {
+      "name": "llm-wiki-harness",
+      "source": "./",
+      "description": "LLM Wiki 하네스 — 12개 스킬·공유 스크립트·가드 훅 (Codex canonical 마켓플레이스)"
+    }
+  ]
+}

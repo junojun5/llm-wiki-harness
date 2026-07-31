@@ -21,9 +21,20 @@ errors = []
 LEDGER = {"index.md", "log.md", "hot.md", "decisions.md", "backlog.md"}
 if base in LEDGER:
     sys.exit(0)                      # 클래스③ 원장 — 검증 면제
-if "changes" in parts:
+
+# 클래스②의 범위는 projects/{name}/changes/* · projects/{name}/troubleshooting/* 로
+# **한정**된다 (§3-3). 세그먼트 단순 포함으로 판정하면 knowledge/ 의 대형 주제 서브폴더
+# (§3-3 "대형 주제는 서브폴더 허용")가 오판돼 정상 클래스① 페이지가 거부된다.
+# 따라서 projects 의 손자 위치에 정확히 놓였는지를 본다.
+def is_class2(name):
+    for i, p in enumerate(parts):
+        if p == "projects" and i + 3 <= len(parts) - 1 and parts[i + 2] == name:
+            return True
+    return False
+
+if is_class2("changes"):
     cls = "changes"                  # 클래스② changes
-elif "troubleshooting" in parts:
+elif is_class2("troubleshooting"):
     cls = "troubleshooting"          # 클래스② troubleshooting
 else:
     cls = "page"                     # 클래스① 풀세트
@@ -159,12 +170,29 @@ if "base_confidence" in d and isinstance(d["base_confidence"], str) and d["base_
 if "tier" in d and isinstance(d["tier"], str) and d["tier"] and d["tier"] not in TIER_ENUM:
     errors.append("tier enum 위반: %r" % d["tier"])
 
-# provenance 합 ≈ 1.0 (있을 때)
+# ── 표기 가드 (fail-loud) ───────────────────────────────────
+# 위 YAML 서브셋 파서는 인라인 flow mapping/sequence를 스칼라 문자열로 읽는다.
+# 그 상태로 아래 isinstance 게이트에 들어가면 검사 블록이 통째로 건너뛰어져
+# "합계가 틀려도 통과"한다. 키가 있는데 기대 타입으로 파싱되지 않으면 여기서 끊는다. (§3-3)
+if "provenance" in d and not isinstance(d["provenance"], dict):
+    errors.append("provenance가 블록 표기가 아닙니다 (인라인 { } 표기는 검사를 무력화합니다)")
+# relationships 는 타입 확인만으로 부족하다: 인라인 flow 시퀀스(`[{ ... }]`)는 위 파서의
+# `[ ... ]` 분기를 타 **문자열 리스트**로 파싱되므로 isinstance(list) 를 통과하고,
+# 그 상태로는 아래 type enum 루프의 isinstance(r, dict) 게이트가 무발화한다
+# (= 잘못된 type 이 조용히 통과). 원소가 전부 매핑인지까지 본다.
+if "relationships" in d and (
+    not isinstance(d["relationships"], list)
+    or not all(isinstance(r, dict) for r in d["relationships"])
+):
+    errors.append("relationships가 블록 리스트 표기가 아닙니다 (인라인 [ { } ] 표기는 검사를 무력화합니다)")
+
+# provenance 합 ≈ 1.0 (있을 때). 허용오차는 §3-8 PROVENANCE_TOLERANCE = ±0.05
+PROVENANCE_TOLERANCE = 0.05
 prov = d.get("provenance")
 if isinstance(prov, dict):
     try:
         s = sum(float(prov.get(k, 0) or 0) for k in ("extracted","inferred","ambiguous"))
-        if abs(s - 1.0) > 0.05:
+        if abs(s - 1.0) > PROVENANCE_TOLERANCE:
             errors.append("provenance 합이 1.0에서 벗어남: %.3f" % s)
     except ValueError:
         errors.append("provenance 값이 숫자가 아닙니다")

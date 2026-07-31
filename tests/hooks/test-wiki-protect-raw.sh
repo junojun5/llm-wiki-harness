@@ -72,6 +72,56 @@ eq "exit 0 (cursor)" "0" "$CODE"
 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
 cleanup
 
+# ── 상대경로 해석 (§5-4 실측: Codex·Cursor 경로는 대부분 cwd 상대경로) ──────────
+# 절대경로 전제 가드는 이 케이스들을 조용히 통과시켰다.
+
+echo "test: apply_patch 상대경로가 raw/ 를 가리키면 차단 (exit 2)"
+new_sandbox
+run_hook codex "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Add File: raw/articles/x.md\n+body\n*** End Patch\n\"}}"
+eq "exit 2" "2" "$CODE"; has "stderr 안내" "raw/" "$ERR"
+cleanup
+
+echo "test: apply_patch 상대경로가 wiki/ 를 가리키면 통과 (exit 0)"
+new_sandbox
+run_hook codex "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Add File: wiki/concepts/x.md\n+body\n*** End Patch\n\"}}"
+eq "exit 0" "0" "$CODE"
+cleanup
+
+echo "test: Write 상대경로가 raw/ 를 가리키면 차단 (cwd 기준 절대화)"
+new_sandbox
+run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT\",\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
+eq "exit 2" "2" "$CODE"
+cleanup
+
+echo "test: Write 상대경로가 wiki/ 를 가리키면 통과"
+new_sandbox
+run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT\",\"tool_input\":{\"file_path\":\"wiki/concepts/x.md\"}}"
+eq "exit 0" "0" "$CODE"
+cleanup
+
+echo "test: Cursor는 cwd 없이 workspace_roots[0] 기준으로 절대화 (§5-4)"
+new_sandbox
+run_hook cursor "{\"tool_name\":\"Write\",\"workspace_roots\":[\"$VAULT\"],\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
+eq "exit 0 (cursor)" "0" "$CODE"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
+cleanup
+
+echo "test: raw 형제 디렉토리(raw-backup/)는 오탐 없이 통과"
+new_sandbox
+run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT\",\"tool_input\":{\"file_path\":\"raw-backup/x.md\"}}"
+eq "exit 0 (오탐 없음)" "0" "$CODE"
+cleanup
+
+# ⚠️ 알려진 한계 (§5-2, 의도적 비목표): COMMAND 문자열 **안의** 상대경로는 탐지하지 않는다.
+#    TARGET은 BASE 기준으로 절대화하지만 셸 문법 전면 해석은 비목표이므로
+#    `printf 'x' > raw/a.md` 는 통과한다. 이 테스트는 그 한계를 고정해 둔다 —
+#    통과가 아니라 차단으로 바뀌길 원하면 먼저 spec §5-2를 개정해야 한다.
+echo "test: [알려진 한계] shell COMMAND 내 상대경로는 미탐지 → 통과 (exit 0)"
+new_sandbox
+run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"printf 'x' > raw/a.md\"}}"
+eq "exit 0 (§5-2 비목표)" "0" "$CODE"
+cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

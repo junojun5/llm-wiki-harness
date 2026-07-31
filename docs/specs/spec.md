@@ -26,7 +26,7 @@ LLM Wiki는 Andrej Karpathy의 LLM Wiki 패턴 기반 지식 베이스다. 사�
 
 ### Phase 1 완료 기준
 
-샘플 볼트에서 아래 end-to-end 시나리오가 사람 개입 없이 통과하면 Phase 1 완료로 본다:
+샘플 볼트에서 아래 end-to-end 시나리오가 **설계된 승인 지점 외의 예외·복구 개입 없이** 통과하면 Phase 1 완료로 본다. ("사람 개입 없이"가 아니다 — `wiki-project-init`은 한 번에 하나씩 묻는 인터뷰 스킬이고, `wiki-project-design`의 proposal 병합은 사용자 승인이 정의상 필수이며, `wiki-project-record`는 자동 append가 금지돼 있다. 이 승인들은 설계 산출물이지 결함이 아니다. 판정 기준은 "에러 복구·경로 추측·수동 파일 수선 같은 **계획에 없던 개입**이 필요했는가"다.)
 
 ```
 wiki-setup → wiki-ingest(문서 1개) → wiki-query(질문 1개)
@@ -39,7 +39,7 @@ wiki-setup → wiki-ingest(문서 1개) → wiki-query(질문 1개)
 
 추가 1회성 검증:
 - **frontmatter 스모크 테스트**: 선택 필드까지 전부 채운 샘플 페이지 1개로 ① Obsidian 파싱·표시 ② qmd 인덱싱 ③ frontmatter-scoped grep 동작을 확인한다 (§3-3 파서 호환성 실증).
-- **QMD 스모크 테스트**: ① 3단계+ 깊이 경로 페이지가 상대경로 그대로 인덱싱되는지 (§3-5 경로 매핑) ② 페이지 1개를 `archived/`로 이동 후 `qmd update` → `qmd ls`에서 구 경로 소멸·신 경로 등장 확인 (삭제·이동 반영 실증). stale 항목이 남는 것으로 판명되면 그때 대응을 설계한다 (미검증 가정 설계는 YAGNI).
+- **QMD 스모크 테스트 — ✅ 2026-07-31 소진 완료 (qmd 2.5.3).** ① 3단계+ 깊이 경로가 `qmd://{컬렉션}/summaries/articles/ai-ml/deep-topic/page.md`로 **flatten 없이 인덱싱**됨을 확인. ② 페이지를 `archived/`로 이동 후 `qmd update` → `1 new, 1 removed`, `qmd ls`에서 구 경로 소멸·신 경로 등장, 구 경로 조회는 `Document not found`. **stale 항목이 남지 않으므로 별도 대응 설계는 불필요**하다(YAGNI 유지). 이 항목은 CLI 메이저 버전이 바뀔 때만 재실행한다.
 
 ### 주요 용어
 
@@ -51,7 +51,7 @@ wiki-setup → wiki-ingest(문서 1개) → wiki-query(질문 1개)
 - **컬렉션(collection)** — QMD가 인덱싱하는 디렉토리 단위. `qmd collection add {vault}/{wiki_dir} --name wiki`로 **1회 등록** (§4-1 Step 9-a). 문서는 `qmd://{컬렉션}/{wiki/ 기준 상대경로}`로 조회된다 (flatten 없음).
 - **QMD 게이트** — QMD 사용 가능 여부의 런타임 판정 3단계 (§3-5): CLI 존재 → 컬렉션 등록(경로 매칭) → 컬렉션명 획득. 설정 파일 없음 — qmd 자체 레지스트리가 단일 출처. `QMD_WIKI_COLLECTION`은 이 게이트의 출력이다.
 - **`qmd update`** — 컬렉션 디렉토리를 해시 스캔해 신규·변경·삭제 파일을 **텍스트 인덱스(BM25 키워드 검색용)**에 반영. 텍스트 인덱싱뿐이라 **저비용** → 매 refresh마다 실행.
-- **`qmd embed`** — 인덱싱된 문서를 로컬 임베딩 모델에 통과시켜 **벡터 인덱스(시맨틱 검색용)** 생성. 모델 추론이라 **고비용** → 필요 시에만 실행. update와의 분리 이유는 이 **비용 비대칭**이다.
+- **`qmd embed`** — 인덱싱된 문서를 로컬 임베딩 모델에 통과시켜 **벡터 인덱스(시맨틱 검색용)** 생성. 모델 추론이라 **고비용** → 필요 시에만 실행. update와의 분리 이유는 이 **비용 비대칭**이다. 최초 실행 시 임베딩 모델을 내려받는다 (qmd 2.5.3 = EmbeddingGemma-300M Q8_0, **약 334MB**, `~/.cache/qmd/models/`). 벡터는 파일이 아니라 **콘텐츠 해시 단위**로 만들어져 동일 내용의 두 파일은 벡터 1개를 공유한다.
 - **BM25 vs 벡터 검색** — BM25 = 단어가 문자 그대로 등장하는 문서를 찾는 키워드 검색 (update만으로 항상 최신). 벡터 = 의미가 비슷한 문서를 찾는 시맨틱 검색 (embed 필요). embed가 stale이어도 **시맨틱 검색만** 구식이 된다 — "embed만 실패 → 무시 가능" 등급의 근거 (§3-5 실패 시 사용자 액션).
 - **QMD refresh** — 쓰기 스킬 실행의 **마지막 단계**에서 update(+필요 시 embed)로 인덱스를 볼트에 맞추는 공통 종료 절차 (§3-5). 단위는 파일이 아니라 **스킬 실행 1회**.
 - **self-healing** — `qmd update`가 매번 전체 해시 스캔이므로, 실패한 refresh의 누락분을 다음 refresh가 자동 흡수하는 성질. QMD 단발 실패에 즉시 액션이 불필요한 근거 (§3-5).
@@ -79,6 +79,9 @@ wiki-setup → wiki-ingest(문서 1개) → wiki-query(질문 1개)
 
 ```
 {vault}/
+  .wiki-config.json      ← 볼트 설정 (§3-1). gitignore 대상
+  .wiki-config.example.json ← 빈 템플릿 (git 추적). wiki-setup이 생성
+  .manifest.json         ← ingest 원장 (§3-7). 소스 1건 = 엔트리 1개
   raw/                   ← 불변 소스. LLM 쓰기 절대 금지
     articles/{주제}/
     books/{제목}/
@@ -100,9 +103,10 @@ wiki-setup → wiki-ingest(문서 1개) → wiki-query(질문 1개)
     knowledge/           ← 심층 지식 (사용자 주도 생성)
     entities/            ← 사람·조직
     projects/            ← 프로젝트별 지식 ({name}/ 하위 구조는 §4-9)
-    meetings/            ← 미팅 요약
-    archived/            ← 폐기 페이지 보관
+    archived/            ← 폐기 페이지 보관 (category는 원래 값 유지)
 ```
+
+> **`wiki/meetings/`는 폐지되었다 (2026-07-31).** 구 설계는 "raw 없는 전사·팀 미팅"의 자리로 이 폴더를 두었으나, ① 어떤 스킬도 여기에 쓰지 않았고 ② `category` enum에 대응 값이 없어 PostToolUse 훅이 무조건 차단하는 상태였다. 미팅의 자리는 두 곳뿐이다 — 전사본이 있으면 `raw/meetings/` → `summaries/meetings/`(wiki-ingest), 프로젝트 라이브 미팅은 `projects/{name}/meetings/`(wiki-project-record). 프로젝트에 속하지 않는 라이브 미팅은 전사본을 `raw/meetings/`에 넣어 ingest한다.
 
 **파일명 규칙 (canonicalization):**
 - `title:`(frontmatter) = 사람이 읽는 이름(한글 가능). **파일명 = slug**으로 분리한다.
@@ -265,8 +269,19 @@ status: verified | unverified | conflict | archived
 
 base_confidence: 0.0-1.0
 # ↑ 소스 유형별 신뢰도 점수. wiki-query 및 QMD 필터링에 활용
-#   paper=0.9 (학술 논문) / official=0.85 (공식 문서) / repository=0.75 (GitHub README)
-#   blog=0.55 (블로그) / conversation=0.42 (대화 기반) / forum=0.4 (Reddit·SO) / unknown=0.4 (기타·미분류, ingest-url fallback)
+#   paper=0.9 (학술 논문) / official=0.85 (공식 문서) / project=0.8 (프로젝트 스냅샷 문서)
+#   repository=0.75 (GitHub README) / blog=0.55 (블로그) / conversation=0.42 (대화 기반)
+#   forum=0.4 (Reddit·SO) / unknown=0.35 (기타·미분류, ingest-url fallback)
+#   change proposal=0.3 (changes/ 제안, 전역 최소값)
+#
+#   project=0.8 근거: projects/ 스냅샷 문서(overview·context·goals·architecture·domain·
+#     conventions)는 형식상 인터뷰(=대화) 산출물이지만, **해당 프로젝트에 관한 한 1차 사료**다.
+#     conversation=0.42를 쓰면 "내 프로젝트의 아키텍처 결정 근거"가 임의의 블로그(0.55)보다
+#     낮게 랭킹되는 왜곡이 생긴다. 문장 단위 신뢰도는 본문 (출처: [[page]])·⚠️ unverified가
+#     이미 담당하므로, 페이지 스칼라는 "이 문서가 이 주제에 갖는 권위"로 해석한다.
+#     sources: 는 ["conversation:YYYY-MM-DD"] 를 그대로 쓴다.
+#   unknown=0.35 근거: forum과 같은 0.4면 frontmatter만으로 두 유형을 구분할 수 없어
+#     "ingest-url fallback으로 들어온 페이지"를 감사할 수 없다. 값을 분리해 식별 가능하게 한다.
 
 # ─── 선택 필드 ─────────────────────────────────────────────
 tier: core | supporting | peripheral
@@ -276,7 +291,7 @@ tier: core | supporting | peripheral
 #   peripheral  → 간접 관련. 유일한 매치일 때만 읽힘
 
 relationships:
-  - target: "[[concepts/related]]"
+  - target: "[[related-concept]]"
     type: uses | contradicts | extends | depends_on | related_to
 # ↑ Relationship query 시 wiki-query가 탐색하는 typed edge
 #   방향·타입 명확할 때만 작성. 애매하면 related_to 또는 생략
@@ -294,7 +309,15 @@ provenance:
 #   extracted  → 원본에서 직접 추출한 주장 비율
 #   inferred   → 추론·일반화 비율 (본문에 ^[inferred] 마커)
 #   ambiguous  → 불확실·논쟁적 내용 비율 (본문에 ^[ambiguous] 마커)
-#   세 값의 합 ≈ 1.0. 공식 소스 ingest만 있는 페이지는 생략 (= 전부 extracted)
+#   세 값의 합은 1.0 ± 0.05 이내여야 한다 (validator 허용오차. "≈"의 정확한 값이다).
+#   공식 소스 ingest만 있는 페이지는 생략 (= 전부 extracted = 1.0으로 간주)
+#
+#   ⚠️ **표기는 반드시 블록 스타일이다.** 인라인 flow mapping
+#      `provenance: { extracted: 0.7, inferred: 0.2, ambiguous: 0.1 }` 로 쓰면
+#      validate-frontmatter.sh의 YAML 서브셋 파서가 이를 **문자열로 읽어** dict 검사
+#      블록 전체를 건너뛴다 — 합계가 틀려도 조용히 통과한다(실측 확인). 같은 함정이
+#      relationships 에도 있다. validator는 "키는 있는데 dict/list로 파싱되지 않으면 에러"
+#      가드를 두어 이 무검사 상태를 차단한다.
 #
 #   ── 산정 방식 (단일 출처. wiki-lint check 13이 그대로 재사용) ──
 #   분모 = claim 수: 본문의 문장 1개 또는 리스트 항목 1개 = claim 1개.
@@ -314,7 +337,7 @@ provenance:
 #             둘이 어긋나면 항상 본문 마커 기준으로 frontmatter를 고친다.
 #   wiki-lint drift 감지: 재계산값과 0.20 이상 차이 시 경고 (§4-6 check 13)
 
-superseded_by: "[[wiki/path/replacement-page]]"
+superseded_by: "[[replacement-page]]"
 # ↑ status: archived 페이지가 어떤 페이지로 대체됐는지 machine-readable 참조
 #   archived 페이지에만 사용. 본문의 사유 텍스트와 함께 사용 (보완 관계)
 
@@ -328,6 +351,13 @@ status_changed: YYYY-MM-DD
 
 ## Related pages
 - [[related-1]]
+
+#### 링크·index 표기 규칙 (정본)
+
+- **본문 링크 / 인용 / Related pages / Conflicts sources:** `[[slug]]` 파일명만. (Obsidian 그래프 소비)
+- **frontmatter `relationships.target` / `superseded_by`:** `[[slug]]` 파일명만. slug 전역 유일(§110)하고 build-link-graph.sh가 본문+frontmatter를 한 그래프로 통합(§4-6)하므로 경로 불필요.
+- **index.md 엔트리:** `## 카테고리` 섹션 아래 `| [표시명](wiki-루트-상대경로.md) | 한 줄 설명 |` 마크다운-표.
+- **예외:** decisions.md의 `변경 기록:`만 `[[changes/archive/YYYY-MM-DD-{slug}]]` folder-qualified(§4-9-2 링크 안정성 의무).
 
 #### 파서 호환성 — 수용된 한계
 
@@ -346,12 +376,15 @@ status enum이 클래스마다 다른 이유: 세 라이프사이클(출처 신�
 
 | 클래스 | 대상 | status enum | 필수 frontmatter |
 |---|---|---|---|
-| ① 페이지 | summaries·concepts·knowledge·entities + projects의 overview·context·goals·architecture·domain·conventions + 모든 meetings(summaries/meetings·wiki/meetings·projects/*/meetings) | `verified\|unverified\|conflict\|archived` | 풀세트 9키 |
+| ① 페이지 | summaries·concepts·knowledge·entities + projects의 overview·context·goals·architecture·domain·conventions + 모든 meetings(summaries/meetings·projects/*/meetings) | `verified\|unverified\|conflict\|archived` | 풀세트 9키 |
 | ② 라이프사이클 | projects/*/changes/* · projects/*/troubleshooting/* | changes=`proposed\|applied\|rejected` · troubleshooting=`open\|resolved` | 축소셋 |
 | ③ 원장(ledger) | projects/*/decisions.md · projects/*/backlog.md · index.md · log.md · hot.md | — | frontmatter 검증 제외 |
 
 - **① 풀세트(9키):** title / category / tags / sources / created / updated / summary / status / base_confidence
 - **② changes/ 축소셋:** title / category(=projects) / project / targets / status / created / status_changed / summary / base_confidence / tier — tags·sources·updated 비필수(델타 문서라 근거는 본문 `## 근거`의 [[링크]]가 담당)
+  - **`project`** — 대상 프로젝트의 **디렉토리명**(kebab-case). `wiki/projects/{project}/`와 정확히 일치해야 한다. §4-9의 "프로젝트 정본 식별자 = 디렉토리명"과 같은 값이며 별도 id·alias를 두지 않는다. 예: `project: "llm-wiki-harness"`
+  - **`targets`** — 이 제안이 바꾸는 파일의 **프로젝트 폴더 기준 상대경로 배열**. 확장자 포함, 하위 폴더는 슬래시 포함. 예: `targets: ["architecture.md"]` · `targets: ["domain/ordering.md", "conventions.md"]`. wiki-lint check 16이 각 원소의 실재 여부를 검증한다.
+  - (두 필드는 클래스 ② 전용이며 클래스 ①·③에는 쓰지 않는다.)
 - **② troubleshooting/ 축소셋:** title / category(=projects) / status / created / updated / summary — base_confidence·sources 없음(출처 파생 페이지가 아님)
 - **③ 원장:** decisions.md·backlog.md는 프로젝트당 1개 living/append 파일로 의미 단위가 파일이 아니라 항목(`## 헤딩`)이다. 파일 레벨 summary·base_confidence·status가 무의미하므로 frontmatter 검증에서 제외하고, 내부 구조(append-only·항목 형식·스냅샷-기록 짝)는 wiki-lint 전용 체크(§4-6 check 16 등)로 검증한다. index.md·log.md·hot.md는 여기에 더해 lint 스캔 자체에서도 제외(§4-6).
 
@@ -364,7 +397,8 @@ status enum이 클래스마다 다른 이유: 세 라이프사이클(출처 신�
 - 필수 키 존재 — 위 클래스별 키셋 (클래스 ①은 9키)
 - `summary` ≤ 400자, `tags` ≤ 5개(있을 때)
 - enum 유효성: category / **status(클래스별 enum)** / tier / relationship type
-- 형식: 날짜 `YYYY-MM-DD`, `base_confidence` 0.0~1.0(있을 때), provenance 합 ≈ 1.0(있을 때)
+- 형식: 날짜 `YYYY-MM-DD`, `base_confidence` 0.0~1.0(있을 때), provenance 합 **1.0 ± 0.05**(있을 때)
+- 구조: `provenance`·`relationships` 키가 존재하는데 dict/list로 파싱되지 않으면 **에러**. 인라인 flow mapping 표기가 검사를 조용히 무력화하는 것을 막는 가드다
 - 의미적 품질(요약 정확성·태그 적절성)은 검증하지 않는다 — LLM 작성 + wiki-lint 의미 체크의 몫
 
 **검증 로직은 한 곳, 트리거는 두 개:**
@@ -384,9 +418,12 @@ Archive(폐기)는 frontmatter "전반 변경"이 아니라 **status 계열만 �
   본문 상단       → 폐기 사유·날짜 노트
 
 보존 (변경 금지):
-  base_confidence / tier / tags / sources / created
+  category / base_confidence / tier / tags / sources / created
   — 소스 유형·내용의 속성이지 현행성이 아님 (폐기돼도 "그 논문이 논문이었다"는 사실은 불변).
     값을 바꾸면 복원 시 원래 값을 잃는다. 강등 메커니즘을 둘로 만들지 않는다.
+  — **category는 `archived/`로 옮겨도 원래 값을 유지한다.** "category = wiki/ 하위 폴더와
+    대응"이라는 일반 규칙의 **유일한 예외**다. archived/ 는 페이지 타입이 아니라 보관 위치이고,
+    enum에 archived 값을 추가하면 복원 시 원래 타입을 복구할 수 없어진다.
 
 파일 작업:
   wiki/archived/로 이동 → index.md 갱신 → log.md 기록 → QMD refresh (§3-5, 스킬 실행 마지막)
@@ -438,12 +475,12 @@ llm-wiki-harness/                  ← 전용 git repo (스펙·스킬·훅의 �
   install.sh
 ```
 
-**설치 (플러그인 마켓플레이스 우선 + install.sh는 부트스트랩/폴백):** 기본 경로는 **플러그인 마켓플레이스**(`plugin.json`→`hooks.json`)다 — 훅·스킬이 `${CLAUDE_PLUGIN_ROOT}` 경유로 자동 등록되고, 첫 SessionStart가 플러그인 루트의 `scripts/`를 도구 비종속 런타임 홈 `~/.llm-wiki/scripts/`로 부트스트랩하므로 **install.sh 없이도 동작**한다. `install.sh`는 얇은 폴백으로 강등됐다 — 기본 실행은 `~/.llm-wiki` 부트스트랩 + Antigravity 배치, `--fallback`에서만 Claude `~/.claude/skills/`·`~/.claude/hooks/` symlink를 건다. Codex/Cursor/Antigravity 매핑·플러그인 매니페스트 상세는 멀티플랫폼 배포 설계(`docs/distribution-design.md` §4·§7)가 담당한다. 어느 방식이든 canonical source는 git repo이고 런타임 타깃은 그 사본(symlink 또는 플러그인 루트 참조)일 뿐이므로:
+**설치 (플랫폼별로 다르다):** **Claude·Codex는 플러그인 마켓플레이스**가 기본 경로다 — 훅·스킬이 플러그인 루트(`${CLAUDE_PLUGIN_ROOT}` / `${PLUGIN_ROOT}`) 경유로 자동 등록되고, 첫 SessionStart가 플러그인 루트의 `scripts/`를 도구 비종속 런타임 홈 `~/.llm-wiki/scripts/`로 부트스트랩하므로 **install.sh 없이 동작**한다. **Cursor는 플러그인으로 훅을 등록할 수 없다**(2026-07-31 실측, §5-0) — `.cursor-plugin/`은 스킬만 싣고, 훅은 `install.sh`가 `~/.cursor/hooks.json`을 배치해야 한다. 즉 **Cursor에 한해 install.sh는 폴백이 아니라 필수**다. **Antigravity**는 훅 스키마 미공개로 install.sh가 `~/.llm-wiki` 부트스트랩과 스킬·rules 배치를 담당한다. `install.sh` 기본 실행은 `~/.llm-wiki` 부트스트랩 + Antigravity 배치, `--fallback`은 Claude/Codex/Cursor 홈 전역 배치, `--vault`는 프로젝트 로컬 배치다. **기존 설정 파일은 절대 덮어쓰지 않는다** — 존재하면 `<원본명>.llm-wiki.json`으로 옆에 두고 머지를 안내한다. 플랫폼 매핑·매니페스트 상세는 `docs/distribution-design.md` §4·§7이 담당한다. 어느 방식이든 canonical source는 git repo이고 런타임 타깃은 그 사본(symlink 또는 플러그인 루트 참조)일 뿐이므로:
 - **업데이트 = `git pull`.** 별도 sync 명령 불필요, 설치본 drift가 구조적으로 불가능.
-- **스킬 버전 = repo HEAD.** 설치된 버전 기록용 별도 manifest 불필요 — git이 버전 추적 그 자체다. 스킬 11개 + resolver + 훅이 항상 같은 커밋으로 원자적으로 움직인다.
+- **스킬 버전 = repo HEAD.** 설치된 버전 기록용 별도 manifest 불필요 — git이 버전 추적 그 자체다. 스킬 12개(허브 1 + 실행 11) + resolver + 훅이 항상 같은 커밋으로 원자적으로 움직인다.
 - config 스키마 버전(§3-1 `version`)과 스킬 버전이 자연 분리된다: 전자는 볼트 데이터의 나이, 후자는 repo HEAD.
 
-볼트가 프로젝트마다 달라질 수 있어 설치 타깃은 유저 글로벌(`~/.claude/skills/`)로 두고, 스킬 내부에서 resolver 스크립트(§3-2)로 볼트 경로를 resolve한다.
+볼트가 프로젝트마다 달라질 수 있어 설치 타깃은 **플랫폼별 유저 글로벌**(Claude `~/.claude/skills/`, Codex `~/.agents/skills/`, Cursor `~/.cursor/skills/`, Antigravity `~/.gemini/config/skills/`) 또는 플러그인 루트로 두고, 스킬 내부에서 resolver 스크립트(§3-2)로 볼트 경로를 resolve한다. 스킬이 참조하는 **공유 스크립트 경로만은 `~/.llm-wiki/scripts/` 하나로 고정**된다(스킬은 마크다운이라 플러그인 env var를 쓸 수 없기 때문).
 
 **스크립트 배치 원칙:** 여러 스킬·훅이 공용하는 스크립트(resolver 등)는 **repo 루트 `scripts/`**, 특정 스킬 전용 스크립트는 **그 스킬의 `scripts/`** 디렉토리에 둔다. 소유자 없는 별도 `lib/`는 두지 않는다.
 
@@ -492,29 +529,42 @@ CLI는 `$QMD_CLI`가 설정돼 있으면 그것을, 없으면 `qmd`를 사용한
 # 1) 인덱스 갱신 — 컬렉션 전체를 해시 기반으로 스캔, 바뀐 파일만 반영
 ${QMD_CLI:-qmd} update
 
-# 2) embed — update 출력이 "새 해시에 벡터가 필요하다"고 보고할 때만 실행
-#    ("페이지 수정 → stale 가능" 분기는 쓰기 스킬에서 항상 참이라 조건을 무력화 → 삭제.
-#     update가 변경된 해시만 임베딩하므로 이 단일 기준으로 update/embed 비용 분리 유지)
+# 2) embed — update stdout에 아래 라인이 있을 때만 실행 (qmd 2.5.3 실측 문자열)
+#      Run 'qmd embed' to update embeddings (N unique hashes need vectors)
+#    판정: stdout이 "unique hashes need vectors"를 포함하는가. exit code로는 판정할 수 없다.
 ${QMD_CLI:-qmd} embed
 
 # 3) 검증 — 생성·수정된 페이지 1개가 컬렉션에 실제로 보이는지 확인
-${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/<category>/<page>.md" -l 5
+${QMD_CLI:-qmd} get "qmd://$QMD_WIKI_COLLECTION/<wiki 기준 상대경로>.md" -l 5
 #    경로가 불확실하면:
 ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 ```
 
-> **`qmd update`는 컬렉션 전체 스캔이다.** 호출한 스킬이 쓴 페이지뿐 아니라 볼트에서 바뀐 모든 파일을 잡아낸다. 그래서 "전체 재인덱싱 전용 스킬"은 따로 두지 않는다 — 드리프트 복구가 필요하면 `wiki-setup --update-qmd`로 reconcile한다.
+> **경로는 `wiki/` 기준 상대경로 전체다.** `{category}/{page}.md` 2단계가 아니라 `summaries/articles/ai-ml/deep-topic/page.md`처럼 깊이가 그대로 유지된다 (실측 확인, flatten 없음).
+
+> **verify는 exit code가 아니라 stdout으로 판정한다.** `qmd get`은 문서가 없어도 **exit 0**을 반환하고 stdout에 `Document not found: …`를 출력한다 (qmd 2.5.3 실측). exit code 분기는 항상 성공으로 오판한다.
+
+> **embed 조건의 의미 (실측).** `N unique hashes need vectors`의 N은 "새로 추가된 해시 수"가 아니라 **"벡터가 아직 없는 해시 수"**다. 따라서 embed를 한 번도 돌리지 않았다면 변경이 없어도 이 라인이 계속 나오고(=벡터가 실제로 없으므로 정당하다), embed가 성공한 뒤에는 **라인이 사라지며** 페이지를 수정하면 다시 나타난다. 비용 비대칭 원칙이 유지됨을 실측으로 확인했다. 벡터는 파일이 아니라 **해시 단위**라 내용이 같은 두 파일은 벡터 1개를 공유한다.
+>
+> 더 견고한 대안으로 `${QMD_CLI:-qmd} status`의 `Pending: N need embedding` 행을 판정에 쓸 수 있다(호출 1회 추가). update stdout 파싱이 실패하는 환경에서는 이쪽을 쓴다.
+
+> **`qmd update`는 등록된 모든 컬렉션을 스캔한다** (`Updating N collection(s)`). 호출한 스킬이 쓴 페이지뿐 아니라 볼트에서 바뀐 모든 파일을 잡아낸다. 그래서 "전체 재인덱싱 전용 스킬"은 따로 두지 않는다 — 드리프트 복구가 필요하면 `wiki-setup --update-qmd`로 reconcile한다.
+>
+> 참고 출력 형식: `Indexed: A new, B updated, C unchanged, D removed`.
 
 #### 최종 리포트 상태 문자열
 
 쓰기 스킬은 작업 보고 끝에 QMD 상태를 아래 중 하나로 기록한다:
 
 - `QMD refreshed: update + embed + verified`
-- `QMD refreshed: update only + verified`
+- `QMD refreshed: update only + verified` — embed가 **불필요**해서 실행하지 않은 경우
+- `QMD partial: update 성공 · embed 실패 (시맨틱 검색만 구식 — 단발 무시, 반복 시 --update-qmd)`
 - `QMD partial: update 성공 · verify 실패 (인덱스 미반영 가능 — 단발 무시, 반복 시 --update-qmd)`
 - `QMD skipped: collection not registered`
 - `QMD skipped: qmd CLI unavailable`
 - `QMD failed: <짧은 에러 요약>`
+
+> `update only + verified`는 **"embed가 필요 없었다"**는 뜻이지 "embed가 실패했다"는 뜻이 아니다. embed를 시도했으나 실패한 경우는 반드시 `QMD partial: … embed 실패`를 쓴다 — 실패를 성공으로 위장하지 않기 위한 구분이다.
 
 #### 실패 시 사용자 액션 — self-healing 원칙
 
@@ -537,7 +587,12 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 | `wiki-knowledge` | ✅ | knowledge 생성·업데이트 후 |
 | `wiki-lint` | ⚠️ | `--fix`로 실제 쓰기가 발생한 경우만 |
 | `wiki-setup` | ✅ (update only) | 빈 볼트라 embed 불필요. `--update-qmd`는 전체 reconcile |
-| `wiki-query` / `wiki-status` | ❌ | read-only |
+| `wiki-project-init` | ✅ | overview/context/goals 생성 후 |
+| `wiki-project-design` | ✅ | proposal 생성·병합·archive 이동 후 |
+| `wiki-project-record` | ✅ | decisions/backlog/troubleshooting/meetings 기록 후 |
+| `wiki-query` / `wiki-status` | ❌ | read-only (log append만 예외, §3-6) |
+
+> 11개 스킬 전부가 이 표에 있다. `using-llm-wiki`는 실행 스킬이 아니라 규칙 허브라 대상이 아니다.
 
 ---
 
@@ -548,12 +603,31 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 ```
 1. 페이지 쓰기            ← 본체 (source of truth)
 2. index.md 갱신          ← 파생물
-3. log.md append          ← 파생물. [YYYY-MM-DD] ACTION key=value… (ACTION·필드는 스킬별 정의)
+3. log.md append          ← 파생물. [YYYY-MM-DD] ACTION key=value… (ACTION 어휘는 아래 표)
 4. hot.md 갱신            ← 파생물 (read-only 스킬은 §3-5 표와 동일하게 제외)
 5. QMD refresh (§3-5)     ← 인덱스 (파생물의 파생물)
 ```
 
 **순서 원칙 — 원본 먼저, 파생물 나중.** index/log/hot/QMD는 전부 페이지에서 재구성 가능한 파생물이다. 이 순서면 중간 실패가 항상 *"페이지는 있는데 파생물이 덜 갱신된"* 상태로 남는다 — wiki-lint가 orphan·index 불일치로 감지하고 `--fix`로 수리할 수 있는 상태다. 역순이면 *"기록은 있는데 페이지가 없는"* 상태가 생긴다 — 이건 수리 대상이 아니라 거짓 기록이다.
+
+**log.md ACTION 어휘 (단일 출처).** 날짜 토큰은 **항상 `[YYYY-MM-DD]`**다 — `[TIMESTAMP]` 같은 별도 토큰은 쓰지 않는다. 한 동작 = 한 줄이며 줄바꿈 금지(자동 파싱 대상).
+
+| ACTION | 발행 스킬 | 필드 |
+|---|---|---|
+| `INIT` | wiki-setup | `vault="{경로}"` |
+| `QMD-RECONCILE` | wiki-setup `--update-qmd` | `pages_indexed=N embedded=true\|false` |
+| `INGEST` | wiki-ingest | `source="{raw 경로}" pages_created=N pages_updated=M mode=append\|full` |
+| `INGEST-URL` | ingest-url | `url="{url}" page="{경로}"` |
+| `CAPTURE` | wiki-capture | `type=session page="{경로}" title="{제목}"` |
+| `KNOWLEDGE` | wiki-knowledge | `mode=create\|update page="{경로}" sources_used=N [changes="merge\|conflict\|restructure"]` |
+| `QUERY` | wiki-query | `query="{질문 요약}" result_pages=N mode=normal\|index_only escalated=true\|false` |
+| `LINT` | wiki-lint | `issues_found=N` + 17개 점검 키 (§4-6) |
+| `STATUS` | wiki-status | `unprocessed=N recent_ingest="{경로}" token_estimate=K` |
+| `PROJECT-INIT` | wiki-project-init | `name="{name}" files=[...] markers=N` |
+| `PROJECT-DESIGN` | wiki-project-design | `name="{name}" change="{slug}\|surface" files=[...]` |
+| `PROJECT-RECORD` | wiki-project-record | `name="{name}" type=decision\|troubleshooting\|meeting\|backlog target="{경로}"` |
+
+> 다른 스킬이 wiki-query를 **서브루틴으로 호출할 때는 `QUERY` 라인을 남기지 않는다** (§4-9 공통 원칙 2의 근거 수집 등). 호출한 스킬의 ACTION 한 줄이 그 세션을 대표한다 — 중첩 호출마다 로그를 남기면 원장이 노이즈로 덮인다.
 
 **Atomicity 수준 (Phase 1 결정): detect-and-repair.** staging·백업·롤백 트랜잭션은 미채택한다:
 - 1인 로컬 환경 — 동시 쓰기 없음. staging 절차 자체가 LLM 스킬의 새로운 실패 지점이 된다.
@@ -563,6 +637,83 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 - staging·백업이 필요해지는 조건(다중 사용자, 외부 동시 쓰기)이 생기면 재검토 — YAGNI.
 
 **read-only 스킬의 경계 (wiki-query·wiki-status):** read-only는 *"디스크에 한 바이트도 안 쓴다"*가 아니라 **"지식 콘텐츠를 바꾸지 않는다"**는 뜻이다. 페이지·index·hot·QMD는 건드리지 않되 `log.md` append는 예외로 허용한다 — log는 지식이 아니라 스킬이 자기 동작을 남기는 **관찰 기록(observability)**이고, 콘텐츠를 더럽히지 않으므로 §3-5에서 refresh 대상도 아니다. log append가 실패해도 답변은 이미 사용자에게 전달된 상태이므로 **log 실패는 스킬 실패가 아니다** (self-healing 일관).
+
+---
+
+### 3-7. `.manifest.json` — ingest 원장
+
+볼트 루트의 ingest 원장. **소스 1건 = 엔트리 1개**이고, 어떤 소스가 어떤 페이지를 낳았는지가 여기에만 남는다 (raw/는 14일 후 삭제되므로 영구 기록은 summaries `sources:` + 이 파일이다). 정의는 여기 한 곳에만 두고 `wiki-ingest`·`ingest-url`·`wiki-status`·`wiki-lint`가 인용한다.
+
+**동형 스키마 — raw 소스와 URL 소스가 같은 필드셋을 쓴다.** 소비자(§4-7 wiki-status Step 2, §4-6 check 15·17)가 모든 엔트리에 `content_hash`·`ingested_at`이 있다고 가정하므로, 유형별 분기를 만들지 않는다.
+
+```json
+{
+  "version": 1,
+  "raw/articles/ai-ml/attention.md": {
+    "source_type": "document",
+    "source_url": "https://example.com/attention",
+    "content_hash": "sha256:<64-hex>",
+    "ingested_at": "2026-07-31T10:00:00Z",
+    "size_bytes": 12345,
+    "modified_at": "2026-07-30T22:00:00Z",
+    "pages_created": ["summaries/articles/ai-ml/attention.md"],
+    "pages_updated": ["concepts/attention-mechanism.md"]
+  },
+  "https://karpathy.bearblog.dev/llm-wiki/": {
+    "source_type": "url",
+    "source_url": "https://karpathy.bearblog.dev/llm-wiki/",
+    "content_hash": "sha256:<64-hex>",
+    "ingested_at": "2026-07-31T11:00:00Z",
+    "pages_created": ["summaries/web/AI-ML/karpathy-llm-wiki.md"],
+    "pages_updated": []
+  }
+}
+```
+
+- **키** — raw 소스는 **볼트 루트 기준 raw 상대경로**, URL 소스는 **정규화된 URL**(§4-3 Step 1 규칙). 둘은 같은 맵에 공존하며 `source_type`으로 구분한다. 키가 `raw/`로 시작하지 않으면 URL 엔트리다.
+- **`source_type`** — `document` | `image` | `url`
+- **`content_hash`** — raw는 파일 바이트, URL은 **가져온 본문**의 SHA-256. URL도 해시를 두므로 재-ingest 시 변경 감지가 가능하다. **접근 실패 stub 페이지는 `null`** (본문이 없으므로).
+- **`ingested_at`** — ISO-8601. raw 삭제 후보 판정(§4-6 check 15, 14일)의 유일한 기준이다. 파일 mtime은 git checkout·복사·동기화로 깨지므로 쓰지 않는다.
+- **`size_bytes` / `modified_at`** — raw 엔트리 전용(파일 속성). URL 엔트리는 생략한다.
+- **`pages_created` / `pages_updated`** — 항상 배열. 없으면 `[]`. check 17이 `pages_created`의 실재를 검증한다.
+- `version`은 최상위 예약 키다. 값이 객체가 아니므로 엔트리 순회 시 제외된다.
+
+**소유·갱신:** `wiki-ingest`(raw)·`ingest-url`(URL)만 쓴다. `wiki-status`·`wiki-lint`는 읽기 전용이며, `wiki-lint --fix`만 check 15(raw 삭제)·17(엔트리 정리)에서 개별 확인 후 수정한다.
+
+---
+
+### 3-8. 공통 상수 — 단일 출처
+
+스펙 전반에 흩어진 매직 넘버를 한 표로 모은다. **값을 바꿀 때는 이 표만 고치고, 본문 각 절은 이 표를 인용한다.** 지금까지 같은 값(400자·14일 등)이 3~4곳에 독립 서술되어 한쪽만 바뀌는 드리프트가 가능했다.
+
+| 상수 | 값 | 적용 대상 | 상세 |
+|---|---|---|---|
+| `SUMMARY_MAX` | **400자** | `summary:` 길이 상한 | 초과 = 페이지 범위 과대 신호 → 분할 검토 (§3-3, §4-6 check 4, §4-8 분할 트리거) |
+| `TAGS_MAX` | **5개** | `tags:` 개수 상한 | §3-3 |
+| `PROVENANCE_TOLERANCE` | **±0.05** | provenance 세 값의 합 검증 허용오차 | §3-3, validator |
+| `PROVENANCE_DRIFT` | **0.20** | 저장값 vs 재계산값 필드별 차이 경고 임계 | §3-3, §4-6 check 13 |
+| `INFERRED_WARN` | **0.40** | `sources:` 없이 초과 시 "unsourced synthesis" | §4-6 check 13 |
+| `AMBIGUOUS_WARN` | **0.15** | 초과 시 "speculation-heavy" | §4-6 check 13 |
+| `PAGE_STALE_DAYS` | **90일** | `오늘 − updated` 초과 시 wiki-query가 stale 라벨 부착 | §3-3, §4-5. **소스 대비 구식(`source_drift`)과 다른 개념** (§4-6 check 10) |
+| `RAW_RETENTION_DAYS` | **14일** | `ingested_at` 경과 시 raw 삭제 후보 | §1, §4-6 check 15, §4-7 Step 2 |
+| `PROPOSAL_NEGLECT_DAYS` | **14일** | `status: proposed` 방치 경고 | §4-6 check 16 |
+| `LINT_RECOMMEND_DAYS` | **30일** | 마지막 LINT 이후 경과 시 점검 권장 | §4-7 Step 6 |
+| `TOKEN_WARN_THRESHOLD` | **100,000** | wiki 전체 로드 추정 토큰 초과 시 경고 | §4-7 Step 3. **전체 로드 추정에만 적용** — index-only·일반 쿼리 추정치는 대상 아님 |
+| `HOT_WORDS` | **~500단어** | `hot.md` 크기 목표 | §1, §4-1 Step 8 |
+| `HOT_RECENT_KEEP` | **3개** | `hot.md` Recent Activity 보관 개수 | 모든 쓰기 스킬 |
+| `HOT_REBUILD_READ` | **10개** | `hot.md` 재구성 시 log에서 읽는 항목 수 | §4-1 `--repair`. **읽기 범위이지 보관 개수가 아니다** — 읽은 뒤 `HOT_RECENT_KEEP`만 남긴다 |
+| `SLUG_MAX` | **50자** | 생성 slug 길이 상한 | §4-3(web), §4-4(sessions) |
+| `NEW_CONCEPT_APPROVAL` | **5개** | ingest 1회에서 초과 생성 시 전체 목록 승인 | §4-2 |
+| `CLARIFICATION_MAX` | **5개** | `[NEEDS CLARIFICATION]` 마커 전역 상한 | §4-9-1 |
+| `SELF_VERIFY_LOOPS` | **2회** | 자가검증 체크리스트 반복 상한 | §4-9 공통 원칙 7 |
+| `SPLIT_NEW_RATIO` | **30%** | 신규 내용이 기존 페이지 대비 이 비율 이상이면 분할 검토 | §4-8 |
+| `DOMAIN_SEED_TERMS` | **3개** | 용어·규칙이 이만큼 쌓이면 `domain.md` 생성 제안 | §4-9 생애주기 |
+| `QUERY_CANDIDATES` | **5~10개** | Index Pass 후보 수집 범위 | §4-5 Step 2 |
+| `QUERY_FULL_READ` | **3개** | Full Read 대상 상위 후보 수 | §4-5 Step 4 |
+| `QUERY_GREP_CONTEXT` | **-A 10 -B 2** | Section Pass grep 문맥 범위 | §4-5 Step 3 |
+| `LOG_TAIL` | **5개** | wiki-status가 읽는 최근 log 항목 수 | §4-7 Step 4 |
+| `QMD_VERIFY_LINES` | **5줄** | `qmd get … -l 5` 검증 출력 줄 수 | §3-5 |
+| `NEXT_ACTIONS_MAX` | **4개** | wiki-status "What to Do Next" 항목 상한 | §4-7 Step 6 |
 
 ---
 
@@ -587,7 +738,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
      남으므로 되돌리기는 그 경로로 --update-path 재실행 한 번이면 된다.
 5. 고정 wiki 서브디렉터리 생성 (없으면 생성, 있으면 유지)
    wiki/concepts/ wiki/knowledge/ wiki/entities/
-   wiki/projects/ wiki/meetings/ wiki/archived/
+   wiki/projects/ wiki/archived/
    ※ wiki/summaries/ 하위는 YAGNI — ingest 시 raw/ 구조에 맞게 생성
 6. wiki/index.md 없으면 초기 템플릿으로 생성 (있으면 유지)
 7. wiki/log.md 없으면 INIT 항목으로 생성 (있으면 유지)
@@ -599,7 +750,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
    # Hot Cache
    *A ~500-word semantic snapshot of recent activity.*
    ## Recent Activity
-   - [TIMESTAMP] INIT — vault created
+   - [YYYY-MM-DD] INIT — vault created
    ## Active Threads
    *None yet.*
    ## Key Takeaways
@@ -609,7 +760,9 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
    ※ 빈 템플릿이 올바른 초기 상태다 — hot.md는 파생물(§3-6)이고 새 볼트의 활동은 0.
      이후 채움은 setup이 아니라 각 쓰기 스킬의 §3-6 종료 시퀀스 4단계(hot 갱신)가 담당.
      예외: 기존 log.md가 있는 볼트에서 hot.md만 없으면(마이그레이션·--repair)
-     log.md 최근 ~10개 항목으로 Recent Activity를 재구성한다 (detect-and-repair).
+     log.md 최근 10개 항목을 읽어 Recent Activity를 재구성한다 (detect-and-repair).
+     ※ 10은 **읽기 범위**이고 보관은 3개다 (§3-8 HOT_REBUILD_READ / HOT_RECENT_KEEP) —
+       재구성 직후에도 Recent Activity에는 최신 3개만 남는다.
    ※ 이 템플릿이 hot.md의 단일 출처다 — 다른 쓰기 스킬은 "hot.md 없으면 §4-1 Step 8
      템플릿으로 생성"으로 이 위치를 인용한다 (중복 서술 금지, §1 DRY).
 9. QMD 설정 확인 및 안내
@@ -629,7 +782,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 > ⚠️ YAGNI 범위:
 > - `wiki/summaries/` 하위 (`articles/`, `books/`, `papers/`, `meetings/`, `web/`, `sessions/`)
 >   → `raw/`와 1:1 미러링이므로 ingest 시점에 필요한 경로만 생성
-> - `wiki/concepts/`, `wiki/knowledge/`, `wiki/entities/`, `wiki/projects/`, `wiki/meetings/`, `wiki/archived/`
+> - `wiki/concepts/`, `wiki/knowledge/`, `wiki/entities/`, `wiki/projects/`, `wiki/archived/` (5개)
 >   → raw 무관 고정 구조이므로 setup에서 생성. Obsidian 사이드바에서 구조 즉시 확인 가능.
 > - `index.md`, `log.md`, `hot.md` — 모든 스킬이 직접 참조하므로 setup에서 보장.
 
@@ -660,11 +813,14 @@ per-skill refresh가 누적적으로 인덱스를 유지하지만, 다음 경우
 1. QMD 게이트 판정 (§3-5)
    - CLI 미설치 → 설치 안내 후 종료
    - 컬렉션 미등록 → Step 9-a 등록부터 수행
-2. §3-5 명령 시퀀스를 컬렉션 전체에 적용:
+2. log.md 기록: [YYYY-MM-DD] QMD-RECONCILE pages_indexed=N embedded=true|false
+   ※ 볼트 쓰기(log)가 먼저다 — QMD는 파생물이므로 항상 마지막이다 (§3-6 순서 원칙).
+     실패해도 "log 있음 + 인덱스 미갱신"으로 남아 재실행이 흡수한다.
+3. §3-5 명령 시퀀스를 컬렉션 전체에 적용:
    ${QMD_CLI:-qmd} update         # 볼트 전체 해시 스캔 — 신규·변경·삭제 반영
-   ${QMD_CLI:-qmd} embed          # update가 벡터 필요 보고 시 (전체 reconcile은 대개 필요)
+   ${QMD_CLI:-qmd} embed          # update stdout에 "unique hashes need vectors"가 있을 때
+                                  # (전체 reconcile은 대개 해당된다)
    ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION"   # 컬렉션 전체 가시성 검증
-3. log.md 기록: [YYYY-MM-DD] QMD-RECONCILE pages_indexed=N embedded=true|false
 4. §3-5 상태 문자열로 결과 보고
 ```
 > per-skill refresh(§3-5)와 차이: per-skill은 쓰기 직후 증분 갱신, `--update-qmd`는 사용자가 명시 호출하는 전체 reconcile. 둘 다 같은 §3-5 명령을 쓰되 후자는 단일 페이지 검증 대신 컬렉션 전체(`qmd ls`)를 확인한다.
@@ -783,11 +939,11 @@ Step 5: 페이지 작성/업데이트
   meetings 라우팅 (raw/meetings/ 소스일 때):
     wiki-ingest는 항상 summaries/meetings/{file}.md 1:1 미러만 생성한다 (§2 미러링 불변식).
     프로젝트·전사 관련성은 복제가 아니라 [[링크]]로 표현 — 프로젝트 문서/인덱스에서
-      [[summaries/meetings/{file}]]를 참조하거나 relationships로 연결한다.
+      [[{meeting-slug}]]를 참조하거나 relationships로 연결한다.
     ※ 미팅 1개 = 산출물 1개 (QMD 이중 회수 방지). raw 트랜스크립트가 있는 미팅은 위 미러가
-      유일 산출물이다. raw 없는 라이브 미팅만 wiki/meetings/(전사·팀) 또는
-      projects/{name}/meetings/(프로젝트 안건)에 직접 기록되며, 이는 wiki-ingest가 아니라
-      라이브 캡처·wiki-project-record의 영역이다 (접근 매트릭스 §4-9).
+      유일 산출물이다. raw 없는 라이브 미팅은 projects/{name}/meetings/에만 직접 기록되며,
+      이는 wiki-ingest가 아니라 wiki-project-record의 영역이다 (접근 매트릭스 §4-9).
+      프로젝트에 속하지 않는 라이브 미팅은 전사본을 raw/meetings/에 넣어 ingest한다 (§2).
   ⚠️ knowledge/ 페이지는 ingest 시 자동 생성 금지
      사용자가 명시적으로 요청할 때만 생성·수정
 
@@ -836,8 +992,8 @@ Step 10: QMD refresh — §3-5 정책 적용
 #### 품질 체크리스트
 
 ```
-□ 모든 신규 페이지에 [[wiki-link]] 최소 2개
-□ 고아 페이지 없음 (인바운드 링크 0개)
+□ 연결할 대상이 실제로 있으면 신규 페이지마다 [[wiki-link]] 최소 2개 —
+  없으면 억지로 만들지 말고 gap report에 missing knowledge로 남긴다 (§4-9 공통 원칙 2와 동일 규칙)
 □ index.md 반영
 □ log.md 기록
 □ hot.md 갱신
@@ -910,9 +1066,13 @@ Step 4: 소스 유형 분류 → base_confidence 계산
 
 Step 5: 페이지 작성 (YAML frontmatter 포함)
   title, category: summaries, tags, sources, created, updated,
-  summary (≤400자, §3-3 표준), status: verified, base_confidence (Step 4 값)
+  summary (≤400자, §3-3 표준), base_confidence (Step 4 값)
+  status — 경로별 차등: defuddle/WebFetch **자동 fetch 성공 → verified**
+          (기계가 원본을 직접 읽음) / **사용자 수동 붙여넣기 → unverified**
+          (본문과 URL의 일치를 LLM이 대조 검증할 수 없다 — Step 2 참조) /
+          **접근 실패 stub → unverified**
   본문: ## Overview / ## Key Points / ## Concepts / ## Related
-  최소 2개 [[wiki-link]] 연결 (index.md 먼저 확인)
+  연결 대상이 있으면 [[wiki-link]] 최소 2개 (index.md 먼저 확인). 없으면 gap report
 
   저장 범위 (저작권 — 요약 중심):
     원문 전문 verbatim 저장 금지 — summaries는 요약이지 사본이 아님
@@ -922,10 +1082,12 @@ Step 5: 페이지 작성 (YAML frontmatter 포함)
 Step 6: 관련 wiki/knowledge/ 페이지 있으면 참고 자료로 추가
 
 Step 7: wiki/index.md summaries/web 섹션에 추가
+  wiki/index.md에 summaries/web 서브섹션이 없으면 새로 만들고 추가한다.
+  (wiki-setup은 최상위 카테고리 섹션만 시드하며 서브섹션을 하드코딩하지 않는다.)
 
 Step 8: .manifest.json + wiki/log.md 업데이트
   manifest: source_url (Step 1 정규화본), source_type: url, pages_created, ingested_at  # source_type enum = document|image|url (ingest 스킬별 확장)
-  log: [TIMESTAMP] INGEST-URL url="{url}" page="{경로}"
+  log: [YYYY-MM-DD] INGEST-URL url="{url}" page="{경로}"
 
 Step 9: wiki/hot.md 갱신
   wiki/hot.md 읽기 (없으면 §4-1 Step 8 템플릿으로 생성)
@@ -1006,6 +1168,8 @@ Step 2: summaries/sessions/ 에 세션 캡처
 
 Step 3: wiki/index.md, wiki/log.md 갱신
   index.md: summaries/sessions 섹션에 추가
+    wiki/index.md에 summaries/sessions 서브섹션이 없으면 새로 만들고 추가한다.
+    (wiki-setup은 최상위 카테고리 섹션만 시드하며 서브섹션을 하드코딩하지 않는다.)
   log 형식:
     [YYYY-MM-DD] CAPTURE type=session page="{sessions 경로}" title="{제목}"
 
@@ -1072,7 +1236,7 @@ Step 2: Index Pass (cheap)
   [Index-only 모드] 여기서 중단.
   summary: 필드 + index.md 설명만으로 답변 구성.
   답변 라벨: "(index-only — 페이지 본문 미읽음, 요약 기반 답변이므로 세부 내용 누락 가능)"
-  → Step 6으로 점프
+  → Step 5(답변 합성)를 거쳐 Step 6으로 간다 — 답변 포맷·라벨 규칙은 모든 경로에 적용된다
 
 Step 2b: QMD Semantic Pass (QMD 게이트 통과 시만)
 
@@ -1102,10 +1266,10 @@ Step 4: Full Read (expensive — 최후 수단)
 
 Step 5: 답변 합성
   표준 답변 포맷:
-    > Based on the wiki:
+    > 위키 기반:
     > [답변 + [[wikilinks]] 인용]
-    > Pages consulted: [[page-a]], [[page-b]]
-    > Gaps: [wiki가 커버하지 못하는 부분]
+    > 참고 페이지: [[page-a]], [[page-b]]
+    > 공백: [wiki가 커버하지 못하는 부분]
 
   인용 포맷: [[wikilink]] 기본 (Obsidian 1차 소비 환경 — 클릭 가능, 페이지 이동 시 자동 추적).
     section grep·full read를 실제 수행한 경우(Step 3·4)에 한해
@@ -1194,11 +1358,20 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
 
 [키: concept_gaps] 9. 개념 갭 (Concept Gaps) 🟡 REVIEW
    본문에서 [[링크]]로 참조되지만 파일이 없는 개념
-   체크: 링크 그래프 — 항목 2와 같은 데이터, 목적 다름("만들어야 할 페이지" 식별)
+   체크: 링크 그래프 — 항목 2와 **같은 데이터**, 목적만 다름("만들어야 할 페이지" 식별)
+   ⚠️ 총계 이중 계상 금지: `총 이슈`(T)는 **중복 제거된 고유 이슈 수**다. 항목 9는 항목 2의
+     재분류 뷰이므로 T에 두 번 더하지 않는다. 개별 항목의 (N건)은 각자 표시한다.
 
-[키: stale] 10. 오래된 페이지 (Stale Content) 🟡 REVIEW
-   updated가 sources의 raw 파일 수정일보다 오래된 페이지
-   추가: status: verified + stale → 더 높은 우선순위 경고 (신뢰도 높은 오래된 페이지가 더 위험)
+[키: source_drift] 10. 소스 변경 미반영 (Source Drift) 🟡 REVIEW
+   소스는 바뀌었는데 페이지가 따라가지 않은 상태.
+   판정: .manifest.json 의 content_hash 와 현재 소스의 해시가 다른데
+         해당 엔트리의 pages_created/pages_updated 페이지가 그대로인 경우.
+   ⚠️ 파일 mtime을 쓰지 않는다 — git checkout·복사·동기화로 깨진다 (항목 15와 동일 근거).
+   추가: status: verified + drift → 더 높은 우선순위 경고 (신뢰도 높은 구식 페이지가 더 위험)
+
+   ※ 이름이 `stale`이 아닌 이유: wiki-query 의 stale(= 오늘 − updated > 90일, §4-5)과
+     서로 다른 술어다. 한 단어를 두 개념이 공유해 "query에선 stale인데 lint는 깨끗"한
+     혼선이 있었다. 페이지 나이는 `stale`, 소스 대비 구식은 `source_drift` 로 분리한다.
 
 [키: pii_exposure] 11. PII 값 노출 감지 (PII Value Exposure) ℹ️ SOFT
    체크 — 단어가 아니라 "키워드 + 실제 값 할당" 패턴만:
@@ -1262,92 +1435,94 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
 ```markdown
 ## Wiki Lint Report — YYYY-MM-DD
 
-# ════ 🔴 ERROR (즉시 수정) ════
+### ════ 🔴 ERROR (즉시 수정) ════
 
-### 필수 frontmatter 누락 (N건)
+#### 필수 frontmatter 누락 (N건)
 - `wiki/summaries/articles/topic/baz.md` — 누락: tags, sources
 - `wiki/concepts/qux.md` — base_confidence 1.4 범위 초과 [0.0, 1.0]
   → 액션: 값 판단 필요(자동 수정 불가). 올바른 신뢰도로 직접 교정
 
-### Typed relationship 유효성 (N건)
+#### Typed relationship 유효성 (N건)
 - `wiki/concepts/foo.md` — relationships[0]: type "related" 유효하지 않음 (→ related_to)
 - `wiki/concepts/bar.md` — relationships[1]: target [[nonexistent]] 파일 없음
 - `wiki/entities/baz.md` — relationships[0]: 자기 참조
 
-# ════ 🟡 REVIEW (검토 필요) ════
+### ════ 🟡 REVIEW (검토 필요) ════
 
-### 고아 페이지 (N건)
+#### 고아 페이지 (N건)
 - `wiki/concepts/foo.md` — 인바운드 링크 없음
   → 액션: 관련 페이지에서 링크 추가 또는 archive (자동 수정 불가, 판단 필요)
 
-### 깨진 위키링크 (N건)
+#### 깨진 위키링크 (N건)
 - `wiki/entities/bar.md:15` — [[nonexistent-page]] 대상 없음
   → 액션: 링크 오타 수정 또는 대상 페이지 생성 (자동 수정 불가, 판단 필요)
 
-### 미처리 raw 소스 (N건)
+#### 미처리 raw 소스 (N건)
 - `raw/articles/topic/article.md` — ingest 대기
   → 액션: /wiki-ingest raw/articles/topic/article.md
 
-### index.md 불일치 (N건)
+#### index.md 불일치 (N건)
 - `wiki/concepts/new-page.md` — index.md 미등록  → 액션: --fix로 자동 등록
 
-### 충돌 페이지 (N건)
+#### 충돌 페이지 (N건)
 - `wiki/concepts/foo.md` — status: conflict (사용자 판단 대기)
   → 액션: 소스 채택 결정 후 §3-3 충돌 노트 resolved 갱신
 
-### 개념 갭 (N건)
+#### 개념 갭 (N건)
 - [[missing-concept]] — 참조되지만 파일 없음 (생성 검토)
 
-### 오래된 페이지 (N건)
+#### 소스 변경 미반영 (N건)
 - `wiki/summaries/papers/paper-x.md` — source 수정일 2026-01-10, updated 2025-12-01
 - `wiki/concepts/important.md` — STALE + status=verified ⚠️ 높은 우선순위
 
-### Supersession 무결성 (N건)
+#### Supersession 무결성 (N건)
 - `wiki/archived/old-page.md` — superseded_by: [[nonexistent]] 대상 없음
 - `wiki/concepts/foo.md` — superseded_by 있지만 status: verified (archived로 변경 필요)
 
-### Change proposal 무결성 (N건)
+#### Change proposal 무결성 (N건)
 - `wiki/projects/foo/changes/2026-06-01-stack-swap.md` — applied인데 decisions.md 링크 없음
 - `wiki/projects/foo/changes/2026-05-15-db-change.md` — proposed 20일 방치
 
-### Manifest 정합성 (N건)
-- `raw/papers/old.pdf` — manifest pages_created [[summaries/papers/old]] 디스크에 없음
+#### Manifest 정합성 (N건)
+- `raw/papers/old.pdf` — manifest pages_created [[old-paper-slug]] 디스크에 없음
   → 액션: 의도된 삭제면 manifest prune, 복구면 /wiki-ingest --full raw/papers/old.pdf (자동 수정 불가, 판단 필요)
 
-# ════ ℹ️ SOFT (소프트 경고) ════
+### ════ ℹ️ SOFT (소프트 경고) ════
 
-### summary: 필드 누락 (N건)
+#### summary: 필드 누락 (N건)
 - `wiki/concepts/old.md` — summary: 없음 (wiki-query cheap retrieval 불가)
 - `wiki/entities/tool.md` — summary 400자 초과 (페이지 분할 검토)
 
-### 미검증 주장 (N건)
+#### 미검증 주장 (N건)
 - `wiki/knowledge/idea.md` — ⚠️ unverified 포함
 
-### PII 값 노출 (N건)
+#### PII 값 노출 (N건)
 - `wiki/entities/user-data.md:12` — api_key: 실제 값 패턴 감지 → commit 전 확인/redaction 권고
 
-### Provenance drift (N건)
+#### Provenance drift (N건)
 - `wiki/knowledge/analysis.md` — ambiguous=0.22 > 0.15 (speculation-heavy, 재소싱 권고)
 - `wiki/concepts/theory.md` — drift: stored inferred=0.10, recomputed=0.38 (Δ=0.28)
 
-### 오래된 raw 파일 — 삭제 후보 (N건)
+#### 오래된 raw 파일 — 삭제 후보 (N건)
 - `raw/articles/topic/article.md` — ingest 완료, 수정일 2026-05-10 (19일 경과)
   → 액션: --fix (개별 확인, 비가역)
 
-총 이슈: N개 | 🔴 즉시 수정: M개 | 🟡 검토 필요: K개 | ℹ️ 소프트 경고: J개
-자동 수정 가능: M개 (--fix 옵션)
+총 이슈: T개 | 🔴 즉시 수정: E개 | 🟡 검토 필요: R개 | ℹ️ 소프트 경고: S개
+자동 수정 가능: F개 (--fix 옵션)
 ```
 
 **`--fix` 모드 — 기본 dry-run, 적용은 차등 확인:**
 - `--fix` 단독 = **dry-run** — 무엇을 바꿀지 보여주기만 (안전한 기본값)
 - 가역·저위험 (format 필드 추가, index.md 등록, relationship type 오타→related_to 폴백): 일괄 확인 1회. `--fix --yes`로 자동 적용
 - **비가역 (항목 15 raw 삭제): 항상 개별 확인 — `--yes`로도 건너뛰지 않음** (§4-1 비대화형 파괴적 변경 보수 원칙). 삭제 전 summaries/ 페이지 존재 재확인
-- 자동 수정 불가 (판단 필요): 항목 1·2·9·12 / ingest 필요: 항목 5 / 값 판단: 항목 3의 base_confidence 범위
+- 자동 수정 불가 (판단 필요): 항목 1·2·9 / ingest 필요: 항목 5 / 값 판단: 항목 3의 base_confidence 범위
+- 항목 12(relationship)는 **서브케이스별로 갈린다** — `type` 오타→`related_to` 폴백은 가역이라 자동 수정 대상,
+  깨진 target·자기참조는 어느 페이지를 가리키려 했는지 판단이 필요하므로 자동 수정 불가
 - **frontmatter 수정은 append-only:** 누락 필드를 frontmatter 끝에 추가만 한다. 기존 필드 순서·주석·정렬 보존, YAML 통째 재serialize 금지 (문서 churn 방지). 값 변경은 자동 수정 대상 아님
 
 **log.md 기록:**
 ```
-[YYYY-MM-DD] LINT issues_found=N orphans=A broken_links=B format_errors=C missing_summary=D unprocessed=E index_missing=F unverified=G conflicts=H concept_gaps=I stale=J pii_exposure=K relationship_issues=L provenance_drift=M supersession_issues=N raw_deletable=O change_proposal_issues=P manifest_integrity=Q
+[YYYY-MM-DD] LINT issues_found=N orphans=A broken_links=B format_errors=C missing_summary=D unprocessed=E index_missing=F unverified=G conflicts=H concept_gaps=I source_drift=J pii_exposure=K relationship_issues=L provenance_drift=M supersession_issues=N raw_deletable=O change_proposal_issues=P manifest_integrity=Q
 ```
 
 **QMD refresh — §3-5 정책 적용:**
@@ -1434,7 +1609,7 @@ Step 5: 리포트 출력
   ### 최근 작업 (log.md 최근 5개)
   {log.md 항목}
 
-Step 6: What to Do Next (우선순위 액션, 최대 5개)
+Step 6: What to Do Next (우선순위 액션, 최대 4개 — §3-8 NEXT_ACTIONS_MAX)
   아래 순서로 해당하는 항목만 출력:
 
   1. 📥 미처리 raw N개 → /wiki-ingest
@@ -1445,6 +1620,10 @@ Step 6: What to Do Next (우선순위 액션, 최대 5개)
 
   모두 해당 없으면:
   ✅ Wiki가 최신 상태입니다. 처리 대기 항목 없음.
+
+Step 7: wiki/log.md 상태 조회 기록 (read-only 예외 — 관찰 기록, §3-6)
+  [YYYY-MM-DD] STATUS unprocessed=N recent_ingest="{경로}" token_estimate=K
+  ※ log append 실패해도 리포트는 이미 전달됨 → 스킬 실패 아님 (self-healing)
 ```
 
 **출력 포맷 예시:**
@@ -1518,9 +1697,9 @@ summary: "≤400자 요약"
 status: verified | unverified | conflict
 base_confidence: 0.0-1.0
 relationships:
-  - target: "[[summaries/articles/topic/source-a]]"
+  - target: "[[source-a]]"
     type: depends_on
-  - target: "[[concepts/related-concept]]"
+  - target: "[[related-concept]]"
     type: extends
 ---
 
@@ -1673,7 +1852,7 @@ Step 8: QMD refresh — §3-5 정책 적용
 □ relationships: depends_on으로 합성 경로 추적
 □ 나의 노트 섹션의 추론·불확실 내용에 ^[inferred] / ^[ambiguous] 마커
 □ provenance: 블록 설정 (inferred/ambiguous 비중이 높은 경우)
-□ 최소 2개 [[wiki-link]] 연결
+□ 연결 대상이 있으면 [[wiki-link]] 최소 2개 (없으면 gap report — 억지 링크 금지)
 □ index.md 등록, log.md 기록
 □ summary: ≤400자
 □ hot.md 갱신 (Recent Activity + Key Takeaways + Active Threads)
@@ -2072,12 +2251,7 @@ Claude Code hooks로 반복 작업 자동화. 스킬이 "무엇을 할지"를 �
 
 스킬은 글로벌(`~/.claude/skills/`)이라 외부 프로젝트에서도 호출된다. 훅도 같은 cross-project 현실을 고려해야 한다. **CWD가 볼트라고 가정하는 훅을 각 프로젝트에 복제하면 안 된다** — 외부 프로젝트의 무관한 `raw/` 폴더를 오탐 차단하거나, 무관한 세션에 wiki 경고를 스팸한다.
 
-배치는 훅의 성격으로 갈린다:
-
-| 성격 | 위치 | 이유 |
-|---|---|---|
-| **가드** (위반 시에만 작동, 평소 침묵) | **글로벌** `~/.claude/settings.json` | 보호 대상(볼트 raw/)은 어느 세션에서든 건드려질 수 있음. 글로벌이어도 노이즈 0 |
-| **제안·컨텍스트** (정상 완료 시 발화) | **볼트 로컬** `{vault}/.claude/settings.json` | 볼트 밖에서 발화하면 잔소리·스팸. 볼트에 있을 때만 의미 |
+배치 기준은 원래 훅의 성격("가드는 글로벌, 컨텍스트는 볼트 로컬")이었으나, **세 훅 모두 글로벌로 수렴했다.** 컨텍스트 훅인 `session-start`도 전역 등록 + CWD-볼트 자가-게이팅으로 스팸 0을 달성하므로 볼트 로컬로 둘 이유가 없어졌다 (§5-1 설계 변경 기록). 따라서 **현재 볼트-로컬 등록 훅은 없다** — 볼트 로컬 경로는 `install.sh --vault`(프로젝트 단위 배포)에서만 쓰인다.
 
 | 훅 | 이벤트 | 위치 | 성격 |
 |---|---|---|---|
@@ -2085,7 +2259,9 @@ Claude Code hooks로 반복 작업 자동화. 스킬이 "무엇을 할지"를 �
 | `wiki-validate-frontmatter` | PostToolUse | 글로벌 | 가드 |
 | `session-start` | SessionStart | 글로벌 (자가-게이팅) | 컨텍스트 (부트스트랩 주입 + `~/.llm-wiki` 자가치유) |
 
-**글로벌 훅은 반드시 스킬과 동일한 vault resolution을 쓴다** — CWD에서 `.wiki-config.json` 상향 탐색 → 못 찾으면 `~/.llm-wiki/default-vault`. 그래야 외부 프로젝트의 `raw/`를 오탐하지 않고 *실제 볼트의* raw/만 보호한다. **SessionStart도 전역 등록하되 주입은 "CWD가 볼트 안일 때만" 자가-게이팅**하므로 볼트 밖 세션엔 스팸하지 않는다 (§5-1). 마켓플레이스(`plugin.json`→`hooks.json`)로 설치하면 세 훅이 `${CLAUDE_PLUGIN_ROOT}` 경유로 자동 등록되고, 첫 SessionStart가 `~/.llm-wiki/scripts`를 플러그인 루트에서 부트스트랩하므로 **install.sh 없이도 동작**한다.
+**글로벌 훅은 반드시 스킬과 동일한 vault resolution을 쓴다** — CWD에서 `.wiki-config.json` 상향 탐색 → 못 찾으면 `~/.llm-wiki/default-vault`. 그래야 외부 프로젝트의 `raw/`를 오탐하지 않고 *실제 볼트의* raw/만 보호한다. **SessionStart도 전역 등록하되 주입은 "CWD가 볼트 안일 때만" 자가-게이팅**하므로 볼트 밖 세션엔 스팸하지 않는다 (§5-1).
+
+**플러그인 자동 등록은 Claude·Codex만 가능하다** (2026-07-31 실측). Claude는 `.claude-plugin/plugin.json`→`hooks.json`, Codex는 `.codex-plugin/plugin.json`→`hooks-codex.json`이 설치만으로 등록되고 첫 SessionStart가 `~/.llm-wiki/scripts`를 부트스트랩하므로 **install.sh 없이 동작**한다. **Cursor는 플러그인 경유 훅 등록이 불가능하다** — cursor-agent가 매니페스트의 `hooks` 값을 파싱은 하나 그 결과를 훅 실행 엔진에 전달하지 않는다(내부 `getPluginHooks`가 호출되지 않는 미구현 상태). Cursor 훅은 아래 전용 설정 파일로만 등록된다 (§5-0 Cursor 항목·`docs/distribution-design.md` §4-3).
 
 **글로벌 설정** `~/.claude/settings.json` (마켓플레이스는 `plugin.json`이 자동 등록; install.sh는 이 블록의 `${CLAUDE_PLUGIN_ROOT}`를 `~/.claude`로 치환해 머지 안내):
 ```json
@@ -2096,23 +2272,31 @@ Claude Code hooks로 반복 작업 자동화. 스킬이 "무엇을 할지"를 �
         "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd session-start claude" } ] }
     ],
     "PreToolUse": [
-      { "matcher": "Write|Edit|Bash",
+      { "matcher": "Write|Edit|MultiEdit|NotebookEdit|Bash",
         "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd wiki-protect-raw.sh claude" } ] }
     ],
     "PostToolUse": [
-      { "matcher": "Write|Edit",
+      { "matcher": "Write|Edit|MultiEdit|NotebookEdit",
         "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd wiki-validate-frontmatter.sh" } ] }
     ]
   }
 }
 ```
 
-**Codex 플러그인 설정** `.codex-plugin/plugin.json`의 `hooks` 키 → `hooks/hooks-codex.json` (SessionStart·PreToolUse·PostToolUse). command는 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` 경유 — `/plugins` 설치 시 등록되나 **non-managed 훅이라 최초 1회 `/hooks` trust + `[features] hooks=true`(비Windows)** 필요. `--fallback`/`--vault`는 `${PLUGIN_ROOT..}`를 절대경로로 render:
+**Codex 플러그인 설정** `.codex-plugin/plugin.json`의 `hooks` 키 → `hooks/hooks-codex.json` (SessionStart·PreToolUse·PostToolUse). command는 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` 경유 — 훅 실행 시 `PLUGIN_ROOT`·`CLAUDE_PLUGIN_ROOT`가 **둘 다 동일 값으로 주입**되고, command는 `$SHELL -lc`로 실행되므로 셸 확장이 동작한다 (2026-07-31 실측):
 ```json
 { "hooks": { "SessionStart": [
   { "hooks": [ { "type": "command", "command": "\"${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd\" session-start codex" } ] } ] } }
 ```
-> 멀티플랫폼 훅 등록(Codex `${PLUGIN_ROOT}`·Cursor `./hooks/run-hook.cmd` self-locating)의 단일 출처는 `docs/distribution-design.md` §4-3.
+**Codex 훅 trust (실측):** 플러그인 훅은 non-managed라 설치만으로 발화하지 않는다. **미신뢰 상태에서는 경고 한 줄 없이 조용히 no-op** 하므로(파일 쓰기가 그대로 통과) "등록됐는데 왜 안 막히지"를 사용자가 알아챌 단서가 없다 — README 트러블슈팅에 반드시 명시한다. 대화형은 `/hooks`에서 1회 trust, 비대화형(CI·스모크)은 `codex exec --dangerously-bypass-hook-trust`. **`config.toml [features] hooks=true`는 더 이상 필요 없다** — codex-cli 0.145.0에서 `hooks`는 stable·기본 활성이다(구 스펙의 요구사항은 폐기).
+
+**Codex 마켓플레이스 매니페스트 경로 (실측 정정):** Codex가 탐색하는 경로는 `.agents/plugins/marketplace.json` → `.agents/plugins/api_marketplace.json` → `.claude-plugin/marketplace.json` → `.cursor-plugin/marketplace.json` **4개뿐이며 `.codex-plugin/marketplace.json`은 읽지 않는다.** 따라서 repo canonical 위치는 **`.agents/plugins/marketplace.json`**이다(공식 `openai-curated` 마켓플레이스도 같은 경로). 플러그인 매니페스트는 `.codex-plugin/plugin.json`이 정상 인식되며, 설치 루트는 `~/.codex/plugins/cache/<marketplace>/<plugin>/<version>/`으로 버전 스코프라 하드코딩할 수 없다.
+
+**Cursor 설정 — 플러그인 경유 불가 (실측):** `.cursor-plugin/plugin.json`의 `hooks` 키는 cursor-agent가 **소비하지 않는다**. Cursor 훅은 전용 설정 파일로만 등록한다 — 전역 `~/.cursor/hooks.json`, 프로젝트 `{workspace}/.cursor/hooks.json` (`install.sh --fallback`/`--vault`가 `hooks-cursor.json`을 절대경로로 render해 배치). `.cursor-plugin/`은 **스킬 전용 배포 표면**으로 강등된다(스킬 로딩은 정상 동작).
+
+> ⚠️ **이중 발화 주의.** Cursor는 훅 설정을 7개 소스에서 읽어 **병합**한다 — enterprise / team / `~/.cursor/hooks.json` / `{ws}/.cursor/hooks.json` / **`~/.claude/settings.json`** / **`{ws}/.claude/settings.json`** / **`{ws}/.claude/settings.local.json`**. 즉 Cursor는 Claude 포맷 설정도 그대로 실행한다(실측 확인). 따라서 같은 훅을 Claude 설정과 Cursor 설정에 **동시 등록하면 Cursor에서 2회 발화**한다(차단 메시지 중복·검증 2회). 본 하네스는 **Claude는 `~/.claude/settings.json`, Cursor는 `~/.cursor/hooks.json`으로 경로를 완전히 분리**해 이 조합을 구조적으로 배제한다.
+
+> 멀티플랫폼 훅 등록의 단일 출처는 `docs/distribution-design.md` §4-3.
 
 ---
 
@@ -2123,13 +2307,17 @@ Claude Code hooks로 반복 작업 자동화. 스킬이 "무엇을 할지"를 �
 세션 시작 시 두 가지를 한다. **① 부트스트랩(자가치유):** `~/.llm-wiki/scripts`가 없으면 배포본(플러그인 루트/repo)의 `scripts/`에서 symlink로 생성한다 — 마켓플레이스만으로 설치해도(install.sh 없이) 스킬·훅이 참조하는 공유 경로가 채워진다. **② 주입:** `skills/using-llm-wiki/SKILL.md` 본문을 `<EXTREMELY_IMPORTANT>`로 래핑해 컨텍스트로 주입한다(Config Gate·불변 규칙·라우팅 보장). **전역 등록되지만 주입은 "CWD가 볼트 안일 때만"** 한다 — 전역 등록(마켓플레이스)이어도 볼트 밖 세션엔 주입하지 않아 스팸이 없다(§5-0). 플랫폼별 stdout 필드가 다르다:
 
 - **Claude:** `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":<wrapped>}}`
-- **Codex:** `{"additional_context":<wrapped>}`
-- **Cursor:** `{"additional_context":<wrapped>,"env":{"LLM_WIKI_RESOLVER":"~/.llm-wiki/scripts/resolve-vault.sh"}}` — Cursor엔 `hookSpecificOutput` 래퍼가 없어 래핑 문자열을 직접 넣는다.
+- **Codex:** `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":<wrapped>}}` — **Claude와 동일 포맷이다.** (2026-07-31 실측 정정: 구 스펙의 `{"additional_context":…}`는 Codex가 거부해 `hook: SessionStart Failed`로 끝나고 **주입이 조용히 무효**가 된다.)
+- **Cursor:** `{"additional_context":<wrapped>,"env":{"LLM_WIKI_RESOLVER":"<절대경로>/resolve-vault.sh"}}` — Cursor엔 `hookSpecificOutput` 래퍼가 없어 래핑 문자열을 직접 넣는다(실측 확인). `env` 값은 **틸드가 확장되지 않으므로 절대경로로 render**한다.
 - **Antigravity:** 훅 미사용 — AGENTS.md 상시 로드로 동등 대체.
 
-SessionStart matcher는 `startup|resume|clear|compact`를 포함한다 — compact 이후에도 부트스트랩을 재주입한다. 플랫폼별 등록 JSON·이벤트 표기·골든 fixture는 멀티플랫폼 배포 설계(`docs/distribution-design.md` §4·§5·§9)가 단일 출처다.
+SessionStart matcher는 `startup|resume|clear|compact`를 포함한다 — compact 이후에도 부트스트랩을 재주입한다.
 
-> **설계 변경 기록:** 초기 §5-1 안은 "최근 작업 로그 + 미처리 raw 개수"를 알리는 단순 컨텍스트 훅이었으나, 멀티플랫폼(Claude/Codex/Cursor)에서 부트스트랩 핵심 규칙을 일관되게 로드하기 위해 **스킬 주입 방식으로 확정**되었다(distribution-design.md §5). 최근 작업·미처리 raw 현황 보고는 `wiki-status` 스킬이 담당한다. 또 초기엔 "볼트 로컬 등록"이었으나, 마켓플레이스(전역 등록)만으로 훅·부트스트랩이 동작하도록 **전역 등록 + CWD-볼트 자가-게이팅 + 첫 실행 부트스트랩**으로 재확정했다 — 이로써 Claude는 install.sh가 선택이 된다. **후속(2026-07-02):** Codex(`${PLUGIN_ROOT}`, 1회 trust)·Cursor(`./hooks/run-hook.cmd` self-locating, 로컬)도 플러그인 매니페스트가 훅을 자동 등록하도록 확장해 install.sh를 얇은 폴백으로 강등했다. Antigravity만 훅 스키마 미공개(404·0 handlers)로 install.sh 부트스트랩이 유지된다 (distribution-design.md §4-3·§7-1).
+**플랫폼 판별은 argv가 아니라 페이로드로 한다.** Cursor는 `~/.claude/settings.json`·`{ws}/.claude/settings.json`의 Claude 포맷 등록도 실행하므로(§5-0), 그 경로로 발화하면 argv는 `claude`인데 실제 런타임은 Cursor다. 페이로드에 `cursor_version` 키가 있으면 Cursor로 판정한다. 본 하네스는 경로를 분리해 이 상황을 만들지 않지만, 사용자가 수동 등록했을 때를 대비한 방어다.
+
+플랫폼별 등록 JSON·이벤트 표기·골든 fixture는 멀티플랫폼 배포 설계(`docs/distribution-design.md` §4·§5·§9)가 단일 출처다.
+
+> **설계 변경 기록:** 초기 §5-1 안은 "최근 작업 로그 + 미처리 raw 개수"를 알리는 단순 컨텍스트 훅이었으나, 멀티플랫폼(Claude/Codex/Cursor)에서 부트스트랩 핵심 규칙을 일관되게 로드하기 위해 **스킬 주입 방식으로 확정**되었다(distribution-design.md §5). 최근 작업·미처리 raw 현황 보고는 `wiki-status` 스킬이 담당한다. 또 초기엔 "볼트 로컬 등록"이었으나, 마켓플레이스(전역 등록)만으로 훅·부트스트랩이 동작하도록 **전역 등록 + CWD-볼트 자가-게이팅 + 첫 실행 부트스트랩**으로 재확정했다 — 이로써 Claude는 install.sh가 선택이 된다. **후속(2026-07-02):** Codex(`${PLUGIN_ROOT}`, 1회 trust)·Cursor(`./hooks/run-hook.cmd` self-locating, 로컬)도 플러그인 매니페스트가 훅을 자동 등록하도록 확장해 install.sh를 얇은 폴백으로 강등했다. **~~후속(2026-07-31) 실측으로 Cursor 부분은 폐기.~~** cursor-agent는 플러그인 매니페스트의 `hooks`를 소비하지 않으므로(§5-0) **Cursor 훅은 `install.sh`가 `~/.cursor/hooks.json`을 배치하는 경로만 유효**하다 — Cursor에 한해 install.sh는 폴백이 아니라 **필수**다. Claude·Codex는 플러그인만으로 완결되고, Antigravity는 훅 스키마 미공개(404·0 handlers)로 install.sh 부트스트랩이 유지된다 (distribution-design.md §4-3·§7-1).
 
 ---
 
@@ -2152,8 +2340,23 @@ RAW_DIR=$(echo "$RESOLVED" | grep '^RAW_DIR=' | cut -d= -f2-)
 RAW_ABS="$VAULT_ROOT/$RAW_DIR"
 
 INPUT=$(cat)
-TARGET=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // ""')
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
+# 페이로드 cwd — 상대경로 해석 기준. Cursor는 cwd 대신 workspace_roots[0]를 준다.
+BASE=$(echo "$INPUT" | jq -r '.cwd // .tool_input.cwd // .workspace_roots[0] // ""')
+[ -n "$BASE" ] || BASE="$PWD"
+
+# 타깃 후보 — 도구·플랫폼별 필드명 차이를 모두 흡수
+TARGET=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // .tool_input.filePath // .tool_input.file // ""')
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""')
+
+# apply_patch(Codex)는 file_path가 없다 — 패치 본문에서 대상 경로를 뽑는다
+if [ -z "$TARGET" ] && [ "$TOOL" = "apply_patch" ]; then
+  TARGET=$(printf '%s' "$COMMAND" \
+    | sed -n 's/^\*\*\* \(Add File\|Update File\|Delete File\|Move to\): //p' | head -1)
+fi
+
+# 상대경로 → 절대경로 (에이전트는 대부분 cwd 상대경로를 쓴다)
+case "$TARGET" in ""|/*) ;; *) TARGET="$BASE/$TARGET" ;; esac
 
 # raw/ 를 건드리지 않으면 통과
 if [[ "$TARGET" != "$RAW_ABS"* ]] && [[ "$COMMAND" != *"$RAW_ABS"* ]]; then
@@ -2165,12 +2368,18 @@ if [[ "$COMMAND" =~ (^|[[:space:]:;&|])rm[[:space:]] ]]; then
   exit 0
 fi
 
-echo "raw/는 읽기 전용입니다 (수정 금지). 삭제는 wiki-lint --fix를 경유하세요." >&2
-exit 1
+MSG="raw/는 읽기 전용입니다 (수정 금지). 삭제는 wiki-lint --fix를 경유하세요."
+case "${1:-claude}" in
+  cursor) printf '{"permission":"deny","user_message":"%s"}\n' "$MSG"; exit 0 ;;
+  *)      printf '%s\n' "$MSG" >&2; exit 2 ;;   # claude | codex
+esac
 ```
+
+**차단 신호 (2026-07-31 실측 확정):** Claude·Codex는 **stderr + `exit 2`**, Cursor는 **`{"permission":"deny","user_message":…}` + `exit 0`**. 세 경우 모두 메시지가 모델에게 전달된다. ~~구 스펙의 `exit 1`은 오류다~~ — Claude·Codex에서 exit 1은 non-blocking error로 취급되어 **raw/ 보호가 조용히 무력화**된다.
 
 **알려진 한계 + Phase 1 결정:**
 - **글로벌 오버헤드:** 모든 프로젝트의 Write/Edit/Bash마다 실행되지만, resolver의 **빠른 음성 경로**(파일 존재 체크만 후 즉시 비0 종료)가 비볼트 세션의 비용을 흡수한다 — jq·본 로직은 볼트 확정(resolver exit 0) 후에만 실행한다. 프로파일링에서 체감 렉이 확인되면 그때 순수 bash `.wiki-config.json` 선체크를 추가한다 (resolver 로직 복제는 drift라 기본은 미도입).
+- **`COMMAND` 내 상대경로는 여전히 탐지하지 못한다.** `TARGET`은 `BASE` 기준으로 절대화하지만, `printf 'x' > raw/a.md` 같은 셸 명령 문자열 안의 상대경로는 파싱하지 않는다(셸 문법 전면 해석은 비목표). accident-prevention 수준의 알려진 구멍이다.
 - **rm 복합 명령 우회(`rm; echo > raw/x`)는 차단하지 못한다 — 의도적 비목표.** 이 훅은 **accident-prevention 수준**이다(적대적 우회는 표적 아님). 파일시스템 레벨 강제(chmod)는 Phase 1 비목표 — 1인 로컬 전제 + Content Trust Boundary(§4-2) + CLAUDE.md 규칙 병행으로 충분. 다중 사용자·신뢰 경계 변화 시 재검토 (YAGNI).
 - 파이프·변수 치환 경유 간접 쓰기도 완전 차단 불가 — 위와 같은 수준.
 
@@ -2190,7 +2399,18 @@ VAULT_PATH=$(echo "$RESOLVED" | grep '^VAULT_PATH=' | cut -d= -f2-)
 WIKI_DIR=$(echo "$RESOLVED" | grep '^WIKI_DIR=' | cut -d= -f2-)
 
 INPUT=$(cat)
-TARGET=$(echo "$INPUT" | jq -r '.tool_input.file_path // ""')
+TOOL=$(echo "$INPUT" | jq -r '.tool_name // ""')
+BASE=$(echo "$INPUT" | jq -r '.cwd // .tool_input.cwd // .workspace_roots[0] // ""')
+[ -n "$BASE" ] || BASE="$PWD"
+
+# 타깃 후보 — §5-2와 동일한 추출 규칙을 쓴다 (두 훅의 필드 탐색 범위가 갈리면
+# 한쪽만 조용히 죽는다. 실제로 Codex apply_patch에서 그 사고가 났다.)
+TARGET=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.path // .tool_input.filePath // .tool_input.file // ""')
+if [ -z "$TARGET" ] && [ "$TOOL" = "apply_patch" ]; then
+  TARGET=$(echo "$INPUT" | jq -r '.tool_input.command // ""' \
+    | sed -n 's/^\*\*\* \(Add File\|Update File\|Move to\): //p' | head -1)
+fi
+case "$TARGET" in ""|/*) ;; *) TARGET="$BASE/$TARGET" ;; esac
 
 # 볼트 wiki/ 하위 .md가 아니면 통과
 case "$TARGET" in
@@ -2208,21 +2428,42 @@ bash "$HOME/.llm-wiki/scripts/validate-frontmatter.sh" "$TARGET" >&2 || exit 2
 
 ---
 
-### Codex Finding
-- **훅 입력 JSON 스키마 검증 필요:** PreToolUse 입력에서 `.tool_input.file_path`, `.tool_input.path`, `.tool_input.command`만 보는 것으로 충분한지 Claude Code 실제 이벤트 샘플로 검증해야 합니다. 도구별 필드명이 다르면 보호가 조용히 무력화됩니다.
-- **Bash 명령 파싱 한계 인정 범위 결정 필요:** 훅에서 shell command를 안전하게 파싱하는 것은 어렵습니다. accident-prevention 수준으로 둘지, raw 디렉토리 파일 권한까지 바꾸는 stronger guard로 갈지 운영 정책을 정해야 합니다.
-- **SessionStart 근사치 정확도 보완 필요:** `RAW_COUNT - SUMMARY_COUNT`는 raw와 summaries가 1:1이 아닌 web/sessions, multiple pages per source에서 틀릴 수 있습니다. manifest 기반 계산으로 바꾸거나 "약 N개"라는 표현의 허용 오차를 문서화해야 합니다.
+### 5-4. 훅 페이로드 계약 — 실측 확정 (2026-07-31)
+
+`probe-hook.sh`로 Codex 0.145.0 / cursor-agent 2026.07.23을 실측한 결과다. 골든 픽스처는 `tests/fixtures/{codex,cursor}-hooks/`.
+
+| | Codex | Cursor |
+|---|---|---|
+| 이벤트명 (페이로드) | `hook_event_name`: `SessionStart`·`PreToolUse`·`PostToolUse` (PascalCase) | `hook_event_name`: `sessionStart`·`preToolUse`·`postToolUse` (camelCase) |
+| 작업 디렉토리 | `cwd` | **`cwd` 없음** → `workspace_roots[]` (Shell 도구는 `tool_input.cwd`도 제공) |
+| 도구명 | `shell` · `apply_patch` · `Write` · `Edit` | `Shell` · `Write` · `Read` · `Edit` |
+| 파일 경로 | `tool_input.file_path` — **`apply_patch`엔 없음**(패치 본문에 상대경로로 내장) | `tool_input.file_path` (**절대경로**) |
+| PostToolUse 결과 | `tool_response` (문자열) | `tool_output` + `duration` |
+| 공통 필드 | `session_id`·`turn_id`·`transcript_path`·`tool_use_id`·`model`·`permission_mode` | `session_id`·`conversation_id`·`generation_id`·`transcript_path`·`tool_use_id`·`model`·`cursor_version`·`user_email` |
+
+**구현이 반드시 흡수해야 하는 두 가지:**
+1. **경로는 대부분 상대경로다.** Codex는 `shell`(`printf 'x' > a.md`)도 `apply_patch`(`*** Add File: a.md`)도 cwd 기준 상대경로를 쓴다. 절대경로 전제 가드는 조용히 통과된다 → `cwd`/`workspace_roots[0]` 기준으로 절대화한다 (§5-2·§5-3).
+2. **`apply_patch`는 `file_path`를 주지 않는다.** 패치 본문의 `*** Add File:`/`*** Update File:`/`*** Move to:` 라인에서 대상을 추출해야 한다. 두 훅의 추출 규칙은 **반드시 동일**해야 한다 — 한쪽만 좁으면 그쪽 검증만 조용히 죽는다.
+
+**주의 사항:** Cursor `tool_use_id`에는 **개행이 포함**된다(두 ID 연결). 페이로드에 **`user_email`이 실린다** — 픽스처 커밋 시 마스킹한다.
+
+**해소된 구 Finding:** ①"훅 입력 JSON 스키마 검증 필요" → 위 표로 확정. ②"Bash 명령 파싱 한계 범위 결정" → **accident-prevention 수준 유지**로 확정(§5-2 알려진 한계). ③"SessionStart `RAW_COUNT − SUMMARY_COUNT` 근사치 정확도" → **무효**. 해당 SessionStart 설계 자체가 스킬 주입 방식으로 대체되었고(§5-1), 미처리 raw 보고는 `wiki-status`가 manifest 기준으로 수행한다.
 
 ---
 
 ## 6. Phase 로드맵
 
-### Phase 1 — 현재 (스킬 11개 + Hooks)
+### Phase 1 — 현재 (스킬 12개 + Hooks + 배포)
 
 공통 계층을 먼저 만들고, 스킬은 그 위에 얹는다 (§3-6 — drift 방지를 위한 구현 순서).
 
+> **범위 정정 (2026-07-31).** 아래 표는 원래 스킬·훅·스크립트만 담고 있었고, 2026-06-25·07-02 배포 결정 이후에도 갱신되지 않아 **플러그인 매니페스트·install.sh·run-hook.cmd·AGENTS.md·README·tests·4플랫폼 스모크가 전부 빠져 있었다.** "무엇이 Phase 1인가"의 단일 출처는 **`docs/distribution-design.md` §9(11단계)**이며, 아래 표는 그 §9의 ④⑤단계(부트스트랩 스킬 + 11개 스킬)를 세분한 하위 목록이다. 두 문서가 어긋나면 §9가 이긴다.
+>
+> **스킬 수는 12개다** — 실행 스킬 11개 + 부트스트랩 허브 `using-llm-wiki` 1개. 구 표기 "11개"는 허브를 계수에서 빼는 관행이었으나, `skills/` 아래 SKILL.md는 12개이므로 배포·설치 문맥에서는 12로 센다. §4는 실행 스킬 11개만 다룬다.
+
 | 순서  | 작업                             |
 | --- | ------------------------------ |
+| 0   | `using-llm-wiki` SKILL.md + `references/` 3종 작성 — 모든 스킬이 인용하는 규칙 허브 |
 | 1   | 공용 스크립트 2개 작성 (resolve-vault·validate-frontmatter) — **공통 계층 먼저** |
 | 2   | Hook 스크립트 3개 작성 (protect-raw·session-start·validate-frontmatter wrapper) + 훅 설정 — 세 훅 모두 **글로벌 등록** (`~/.claude/settings.json`; 마켓플레이스는 `plugin.json`이 자동 등록), session-start만 CWD가 볼트일 때 주입하도록 자가-게이팅 (§5-0·§5-1) |
 | 3   | `.wiki-config.example.json` 생성 |
@@ -2237,6 +2478,13 @@ bash "$HOME/.llm-wiki/scripts/validate-frontmatter.sh" "$TARGET" >&2 || exit 2
 | 12  | `wiki-project-init` SKILL.md 작성 (§4-9-1) |
 | 13  | `wiki-project-design` SKILL.md 작성 (§4-9-2, references/mermaid-conventions.md 동봉) |
 | 14  | `wiki-project-record` SKILL.md 작성 (§4-9-3) |
+| 15  | **훅 페이로드 probe** — `probe-hook.sh`로 Codex/Cursor 실측 → 골든 픽스처 확정 (§5-4). **가드 훅 확정보다 선행한다** |
+| 16  | 플러그인 매니페스트 3종 + `.agents/plugins/marketplace.json` + `run-hook.cmd` + `cursor-sandbox.template.json` |
+| 17  | `install.sh` (기본=`~/.llm-wiki` 부트스트랩 + Antigravity, `--fallback`, `--vault`) |
+| 18  | `AGENTS.md` / `CLAUDE.md`(=`@AGENTS.md`) |
+| 19  | `README.md` — **트러블슈팅 섹션 필수** (`E_*` 복구 · QMD 미설치 · 훅 미등록 · Codex `/hooks` trust 미완 시 무경고 no-op · `project_doc_max_bytes` · Cursor 로컬 vs Cloud · sandbox 승인 · Windows Git Bash/WSL) |
+| 20  | `tests/` — 스크립트·훅 단위 테스트 + `install/smoke.sh` |
+| 21  | 4-플랫폼 스모크 + §1 end-to-end 시나리오 |
 
 ### Phase 2 — 자동화 확장
 
@@ -2386,7 +2634,7 @@ raw/ 파일이 삭제되면 manifest가 "이 소스가 언제 어떤 wiki 페이
 | 2026-06-04 | wiki-lint check 15 추가 (Change Proposal Integrity, Phase 1) | applied인데 decisions 링크 없음(짝 누락)/proposed 14일 방치/targets 부재/archive 미이동 4종. log 필드 change_proposal_issues 추가 |
 | 2026-06-04 | 코드 sync 모드 Phase 2 보류 확정 | `wiki-project-sync`로 §6 Phase 2 로드맵 등재. author(문서 주도)와 입력 소스(파일시스템 스캔)가 달라 별도 스킬 |
 | 2026-06-04 | Phase 1 완료 기준에 wiki-project 시나리오 추가 | init(프로젝트 1개)→design(change proposal 1건 병합)→record(decision 1건 append). §1 동기화 |
-| 2026-06-04 | 4-2 meetings 라우팅 분기 반영 | Step 5에 추가: 전사·팀→wiki/meetings/, 프로젝트 안건 중심→projects/{name}/meetings/, 모호하면 사용자 질문. summaries/meetings/ 1:1 미러링은 불변 |
+| 2026-06-04 | ~~4-2 meetings 라우팅 분기 반영~~ **(2026-07-31 폐기)** | 구 결정: Step 5에 전사·팀→wiki/meetings/ 분기 추가. 이후 §4-2가 "ingest는 항상 summaries/meetings/ 1:1 미러만"으로 바뀌어 분기가 사라졌고, wiki/meetings/ 폴더만 소유 스킬·유효 category 없이 남아 §2에서 폐지됨. summaries/meetings/ 1:1 미러링은 불변 |
 | 2026-06-06 | `.wiki-config.json` 스키마 최소주의 원칙 채택 (§3-1) | "이 머신에서 볼트가 어디 있는가"만 저장. QMD·스킬 버전 등 기능 설정 추가 금지(별도 파일). config↔전 스킬 강결합 우려에 대한 답 — 스키마가 작을수록 breaking change·version bump가 희귀 이벤트화. §4-1 Step 9 QMD 저장 위치는 해당 Finding 처리 시 조정 |
 | 2026-06-06 | version 필드 의미 확정: config 스키마 버전 (스킬 버전 아님) | bump 기준 = "구버전 스키마만 아는 reader가 읽으면 오동작하는 breaking change일 때만". additive 변경은 bump 없음. 스킬은 version을 직접 읽지 않음 — resolver 내부 디테일로 강등. 기존 Step 4 "불일치 → 중단" 게이트는 "상위 버전만 차단, 하위는 경고 후 진행"으로 완화 |
 | 2026-06-06 | Config Gate를 `resolve-vault.sh` 단일 스크립트로 재설계 (§3-2) | 11개 SKILL.md에 복붙되던 탐색·검증 로직을 코드 단일 출처로. 표준 exit code 6종(E_NO_CONFIG/E_BAD_POINTER/E_INVALID_CONFIG/E_VERSION/E_NOT_A_VAULT)+stderr `E_CODE: 메시지` 형식으로 §3-2 Finding 4건(경로 무효화 복구·에러 전파·경로 신뢰 경계·실패 코드 표준화) 일괄 해소. vault 서명 검증(index.md/log.md) 포함. raw-protect 훅(§5-2)도 동일 스크립트 재사용. "스킬=순수 마크다운, 별도 런타임 없음" 전제를 결정론적 검증에 한해 완화 (사용자 승인) |
@@ -2425,3 +2673,12 @@ raw/ 파일이 삭제되면 manifest가 "이 소스가 언제 어떤 wiki 페이
 | 2026-06-25 | 런타임 홈 일반화: 공유 스크립트·전역 포인터를 `~/.claude/` → 도구 비종속 `~/.llm-wiki/`로 이전 | 멀티플랫폼 배포 설계 §2 결정 반영(코드 선행 조건). `~/.claude/scripts/` → `~/.llm-wiki/scripts/`(resolver·validator·link-graph), `~/.claude/wiki-default-vault` → `~/.llm-wiki/default-vault`. 4개 도구(Claude/Codex/Cursor/Antigravity)가 `$HOME` 공유·bash 실행 → 스킬·훅이 단일 경로만 참조해 drift 0, 마켓플레이스·install.sh 설치 동일 동작. resolver의 "상태 미저장·매번 fresh resolve" 원칙 불변 — 위치만 일반화. **유지**: 스킬·훅 설치 타깃은 Claude 기준 `~/.claude/skills`·`~/.claude/hooks`(타 플랫폼 매핑은 배포 설계 §4), `~/.claude/settings.json` 훅 등록 경로 불변. L2391·L2431 changelog의 구 경로는 작성시점 사실로 보존 |
 | 2026-07-02 | 플러그인-우선 훅 배포로 확장 — Codex/Cursor도 플러그인 매니페스트가 훅 자동 등록, install.sh는 얇은 폴백/부트스트랩으로 강등 | 공식 문서·popular repo 검증 결과 반영. Cursor `.cursor-plugin/plugin.json`에 `skills`+`hooks` 키 추가, `hooks-cursor.json`을 `./hooks/run-hook.cmd`(self-locating, cwd 버그 회피)로 전환. `hooks-codex.json`을 `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd`로 전환 + SessionStart 추가(Codex는 non-managed라 `/hooks` trust + `[features] hooks` 필요, 비Windows). `hooks-session.json` 제거(hooks-codex.json이 SessionStart 흡수). install.sh: 기본=`~/.llm-wiki` 부트스트랩+Antigravity 번들, `--fallback`=Claude/Codex/Cursor 홈 전역(플러그인 루트 참조를 python `render()`로 절대경로 치환), `--vault`=프로젝트 로컬. **Antigravity는 훅 스키마 미공개(schemas/v1/hooks.json=404, agy 0 handlers)로 제외** — 플러그인은 skills+rules만, install.sh가 `~/.llm-wiki` 부트스트랩 유지, raw/ 가드는 AGENTS.md 소프트 룰. 단일 출처 distribution-design.md §4-3·§7-1 |
 
+| 2026-07-31 | **플랫폼 실측(probe) 반영 — 훅 계약 4건 정정.** ① Codex SessionStart 출력은 Claude 포맷 `hookSpecificOutput.additionalContext`(구 `additional_context`는 `Failed` → 주입 무효) ② PreToolUse 차단은 `exit 2`(구 `exit 1`은 non-blocking → 보호 무력화) ③ `apply_patch`는 `file_path` 미제공, 대상은 패치 본문에 상대경로로 내장 ④ 경로는 대부분 cwd 상대경로 → `cwd`/`workspace_roots[0]` 기준 절대화 필수 | `probe-hook.sh`로 codex-cli 0.145.0 · cursor-agent 2026.07.23 실측. 페이로드 계약표는 §5-4, 골든 픽스처는 `tests/fixtures/{codex,cursor}-hooks/`. Codex 페이로드가 Claude와 동일 스키마임이 확인되어 "훅 bash 로직 공유" 설계는 유지 |
+| 2026-07-31 | **Cursor 플러그인 훅 자동 등록 폐기 — install.sh가 Cursor에 한해 필수로 복귀** | cursor-agent가 `.cursor-plugin/plugin.json`의 `hooks`를 파싱은 하나 소비하지 않는다(내부 `getPluginHooks`가 번들 전체에서 호출 0회 — 미구현). `--plugin-dir`·`~/.cursor/plugins/local/` 양쪽 실측 모두 훅 미발화. 스킬 로딩은 정상(`getAllAgentSkills` 19회 배선)이므로 `.cursor-plugin/`은 **스킬 전용 표면**으로 강등. 2026-07-02 결정 중 Cursor 부분만 되돌림 |
+| 2026-07-31 | Cursor는 훅 설정을 7개 소스에서 **병합**하며 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행한다 → **경로 완전 분리로 이중 발화 차단** | 실측 확인(Claude 포맷 등록이 Cursor에서 그대로 발화). 같은 훅을 양쪽에 등록하면 Cursor에서 2회 발화(차단 메시지 중복·검증 2회). 본 하네스는 Claude=`~/.claude/settings.json`, Cursor=`~/.cursor/hooks.json`으로 분리. 페이로드는 등록 경로와 무관하게 항상 Cursor 스키마이므로 플랫폼 판별은 argv가 아니라 `cursor_version` 키로 한다 |
+| 2026-07-31 | Codex 마켓플레이스 매니페스트 경로 정정 + `[features] hooks=true` 요구 폐기 + trust 무경고 no-op 명문화 | Codex 탐색 경로는 `.agents/plugins/marketplace.json`·`api_marketplace.json`·`.claude-plugin/`·`.cursor-plugin/` 4개뿐 — `.codex-plugin/marketplace.json`은 **읽히지 않는 죽은 파일**(공식 openai-curated도 `.agents/plugins/` 사용). `hooks` feature는 0.145.0에서 stable·기본 활성. 미신뢰 훅은 경고 없이 no-op 하므로 README 트러블슈팅 필수, 비대화형은 `--dangerously-bypass-hook-trust` |
+| 2026-07-31 | QMD 계약 확정 — embed 판정 문자열·verify 판정 방식·상태 문자열 7종 | qmd 2.5.3 실측. embed 조건 = update stdout의 `Run 'qmd embed' to update embeddings (N unique hashes need vectors)`(N은 "새 해시"가 아니라 **벡터 없는 해시** 수). embed 성공 후 라인 소멸·수정 시 재등장 확인 → 비용 비대칭 유지. `qmd get`은 미존재 시에도 **exit 0** + stdout `Document not found` → verify는 stdout 판정. `QMD partial: … embed 실패` 상태 문자열 신설(구 6종은 embed 실패를 표현 못 해 성공으로 위장) |
+| 2026-07-31 | QMD 스모크 테스트 소진 — 깊은 경로 보존·archived 이동 반영 확인, **stale 대응 설계 불필요 확정** | 3단계+ 깊이가 flatten 없이 인덱싱됨. `archived/` 이동 후 `1 new, 1 removed` + 구 경로 `Document not found` → stale 잔존 없음. §1의 "stale이 남으면 그때 설계" 조건 미발생으로 YAGNI 유지. CLI 메이저 버전 변경 시에만 재실행 |
+| 2026-07-31 | `wiki/meetings/` 폐지 · `.manifest.json` 동형 스키마 §3-7 신설 · `base_confidence`에 `project=0.8` 추가·`unknown` 0.4→0.35 · provenance 블록 표기 강제 + 허용오차 ±0.05 · `changes/`의 `project`·`targets` 정의 신설 · archived 이동 시 `category` 보존 명문화 | 스펙 정합성 감사(레포↔스펙 3자 대조) 결과 반영. `wiki/meetings/`는 소유 스킬도 유효 category도 없어 훅이 무조건 차단하던 상태. manifest는 §2 트리에 경로조차 없이 4개 스킬이 서로 다른 스키마를 가정하고 있었음. provenance 인라인 표기는 validator를 **조용히 무력화**함이 실측으로 확인됨(합계 오류도 통과) |
+| 2026-07-31 | Phase 1 범위의 단일 출처를 `distribution-design.md` §9로 확정 · 스킬 수 표기 12개로 통일 · Phase 1 완료 기준의 "사람 개입 없이"를 "설계된 승인 지점 외의 예외·복구 개입 없이"로 정정 | §6 로드맵이 2026-06-25·07-02 배포 결정 이후 미갱신이라 매니페스트·install.sh·README·tests·스모크가 전부 누락돼 있었음. 완료 기준은 인터뷰(init)·승인(design)·확인(record)이 설계상 필수인 스킬 3개를 "사람 개입 없이" 통과시키라는 자기모순 상태였음 |
+| 2026-08-01 | **Phase 3 E2E 실측 — validator 결함 2건 정정.** ① `relationships`의 **인라인 flow 시퀀스**(`[{ … }]`)가 표기 가드와 `type` enum 검사를 **동시에 우회**했다 → 리스트 원소가 전부 매핑인지까지 검사한다 ② 클래스② 판정이 경로의 아무 세그먼트나 매칭해 `knowledge/` 대형 주제 서브폴더(`knowledge/api/changes/`)를 오판했다 → `projects/{name}/{changes\|troubleshooting}/` 손자 위치 인접성으로 한정한다 | 격리 샘플 볼트에서 setup→ingest→query→lint 완주 + 문서 클래스 ①②③ × (validator·PostToolUse 훅) 스모크로 확인. ①은 2026-07-31에 provenance만 닫히고 relationships는 열린 채 남아 있었음 — 인라인 `{ }`는 스칼라로 읽혀 가드가 걸리지만 인라인 `[ ]`는 **문자열 리스트**로 파싱돼 `isinstance(list)`를 통과하고, 그 상태로는 `isinstance(r, dict)` 게이트가 무발화해 잘못된 `type`이 조용히 통과했음. ②는 §3-3이 클래스②를 `projects/*/changes/*`로 한정했는데 구현이 더 넓었음. 회귀 테스트 10건 추가(31→41). 같은 스모크에서 `wiki/meetings/` 폐지(2026-07-31)가 `wiki-setup`(생성 Step·품질 체크·안티패턴)·`wiki-ingest`에 미반영으로 남아 있음을 발견해 함께 정정 |
