@@ -110,7 +110,7 @@ if [ "$FALLBACK" = 1 ]; then
     for d in "$REPO"/skills/*/; do link "$d" "$HOME/.cursor/skills/$(basename "$d")"; done
     for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$HOME/.cursor/hooks/$f"; done
     if [ ! -f "$HOME/.cursor/hooks.json" ]; then
-      render "$REPO/hooks/hooks-cursor.json" './hooks/run-hook.cmd' "$HOME/.cursor/hooks/run-hook.cmd" "$HOME/.cursor/hooks.json"
+      render "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$HOME/.cursor/hooks" "$HOME/.cursor/hooks.json"
       say "~/.cursor/hooks.json 생성 (User 레벨, 전역, 절대경로)"
     else
       say "기존 ~/.cursor/hooks.json 발견 → hooks 블록 수동 머지 (~/.cursor/hooks/run-hook.cmd 절대경로 사용)"
@@ -144,7 +144,7 @@ if [ -n "$VAULT" ]; then
   fi
   # Cursor 볼트 로컬 훅 + 스크립트
   for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$VAULT/.cursor/hooks/$f"; done
-  render "$REPO/hooks/hooks-cursor.json" './hooks/run-hook.cmd' "$VAULT/.cursor/hooks/run-hook.cmd" "$VAULT/.cursor/hooks.json"
+  render "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$VAULT/.cursor/hooks" "$VAULT/.cursor/hooks.json"
   # Cursor sandbox: 템플릿의 {{VAULT_ABS}} 치환
   sed "s|{{VAULT_ABS}}|$VAULT|g" "$REPO/hooks/cursor-sandbox.template.json" > "$VAULT/.cursor/sandbox.json"
   say ".agents/skills/, 루트 AGENTS.md(+.agents/ symlink), .codex/hooks(+hooks.json), .cursor/hooks(+hooks.json), .cursor/sandbox.json"

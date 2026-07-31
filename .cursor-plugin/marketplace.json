@@ -1,0 +1,12 @@
+{
+  "_comment": "Cursor 마켓플레이스 매니페스트. Cursor 공식 마켓플레이스(cursor.com/marketplace/publish)·~/.cursor/plugins/local 로컬 테스트 경로에서 쓰인다. 이 경로는 Codex의 마켓플레이스 탐색 경로 4개 중 하나이기도 하다(2026-07-31 실측). ⚠️ 여기서 배포되는 것은 **스킬뿐이다** — Cursor 훅은 매니페스트로 등록되지 않으므로 install.sh가 .cursor/hooks.json을 배치해야 한다(.cursor-plugin/plugin.json 주석 참조).",
+  "name": "llm-wiki-harness",
+  "owner": { "name": "junojun5" },
+  "plugins": [
+    {
+      "name": "llm-wiki-harness",
+      "source": "./",
+      "description": "LLM Wiki 하네스 — 12개 스킬. 훅은 install.sh로 별도 배치(Cursor 필수)"
+    }
+  ]
+}
