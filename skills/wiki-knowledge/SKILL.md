@@ -113,6 +113,14 @@ Step 5: 페이지 작성·업데이트
   충돌 확정 → status: conflict + 충돌 노트 삽입 + status_changed 갱신
   구조 변경 확정 → 아래 "분할"
 
+Step 5.5: 역링크 — 재료 페이지가 이 knowledge 페이지를 가리키게 한다
+  신규 생성 시 필수다. 재료 summaries·concepts 중 **가장 관련 깊은 1~2개**의
+  `## Related pages`에 [[새-knowledge-페이지]]를 추가한다 (전부에 달지 않는다 — 링크 인플레).
+  ⚠️ 이걸 빠뜨리면 새 페이지가 **태생적 고아**가 된다: `index.md` 등록은 마크다운 링크라
+    링크 그래프가 인바운드로 세지 않고, `hot.md`는 파생물이라 계수에서 제외된다(§4-6).
+    즉 스킬을 정확히 따랐는데도 직후 wiki-lint가 orphans=1을 보고한다.
+  업데이트 모드는 이미 인바운드가 있으면 생략한다.
+
 Step 6: wiki/index.md + wiki/log.md 갱신
   [YYYY-MM-DD] KNOWLEDGE mode=create|update page="{경로}" sources_used=N
   (업데이트 시) changes="merge|conflict|restructure"
@@ -150,6 +158,7 @@ wiki/knowledge/{주제}/
 □ 나의 노트의 추론·불확실 내용에 ^[inferred] / ^[ambiguous] 마커
 □ provenance: 블록 설정 (inferred/ambiguous 비중이 높은 경우)
 □ [[wiki-link]] 최소 2개 · summary ≤ 400자
+□ (신규) 재료 페이지 1~2개에서 이 페이지로 역링크 — 인바운드 0이면 고아다
 □ index.md 등록 · log.md 기록 · hot.md 갱신
 □ QMD refresh 실행 + 상태 문자열 보고
 ```
@@ -165,3 +174,4 @@ wiki/knowledge/{주제}/
 | 분할할 때 원본을 `index.md`로 먼저 바꾼다 | 하위 페이지가 없는 채로 목차만 남는다 | 신규 페이지를 먼저 쓰고 검증한 뒤 전환 |
 | 합성 재료 페이지를 `sources:`에 넣는다 | 외부 출처와 합성 경로가 섞여 provenance 추적이 무너진다 | 재료는 `relationships: depends_on` |
 | ingest 흐름에서 knowledge를 자동 생성한다 | 사용자 주도 원칙이 무너진다 | 명시 요청 시만 |
+| 아웃바운드 링크만 달고 `index.md` 등록으로 연결을 갈음한다 | 새 페이지가 태생적 고아가 되어 직후 lint가 orphans를 보고한다 | Step 5.5 역링크 — 재료 1~2개에서 이 페이지로 |

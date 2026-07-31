@@ -9,7 +9,7 @@ description: 프로젝트의 사건이나 작업 항목을 기록할 때 사용�
 
 시작 전 두 가지를 로드한다:
 - `using-llm-wiki` — Config Gate, 종료 시퀀스, QMD refresh, 페이지 포맷
-- `using-llm-wiki` 의 `references/project-docs.md` — 컨셉·공통 원칙 9개·디렉토리 구조·생애주기·접근 권한 매트릭스 + **decisions.md·backlog.md·troubleshooting 형식**(이 스킬이 형식 소유자다)
+- `using-llm-wiki` 의 `references/project-docs.md` — 컨셉·공통 원칙 10개·디렉토리 구조·생애주기·접근 권한 매트릭스 + **decisions.md·backlog.md·troubleshooting 형식**(이 스킬이 형식 소유자다)
 
 ## 라우팅 테이블 — 자동 판단, 확신 없으면 질문
 

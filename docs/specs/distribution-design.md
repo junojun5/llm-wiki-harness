@@ -317,9 +317,11 @@ best-skill-creator의 Iron Law(테스트 없는 스킬 금지) 준수. 순서:
 - **compact 재주입 반영** — Codex/Cursor의 `compact`/`preCompact` 이후 `additional_context` 주입이 실제 모델 컨텍스트에 반영되는지 §9-11 스모크로 검증. **2026-08-01 상태: 미착수.** Phase 3 4플랫폼 스모크에서 다루지 않았다(리포트에 `compact` 언급 0건). SessionStart는 `startup` 경로만 실측됐다.
 - ~~**마켓플레이스 + `~/.llm-wiki/` 부트스트랩 타이밍**~~ — **해결:** Claude/Codex 플러그인의 첫 SessionStart 훅이 `~/.llm-wiki/scripts`를 플러그인 루트에서 자가-부트스트랩(§5-0 session-start ①). Antigravity는 훅이 없어 `install.sh`(§7-1 [1]·[2])가 담당. Cursor 로컬은 sessionStart로 부트스트랩(Cloud Agent는 install.sh 폴백). **2026-08-01 실측 뒷받침:** 설치 전 `~/.llm-wiki/` 미존재 → 설치 후 `scripts/` 생성, symlink 3개가 플러그인 캐시를 가리키고 `cmp` 일치(리포트 §4-1).
 - **Windows `.ps1`/`.bat` 패리티 (향후)** — 1차는 Git Bash/WSL 요구로 처리. 네이티브 cmd/PowerShell 에이전트 수요가 확인되면 `resolve-vault`·`validate-frontmatter`의 PowerShell 대응본 + 런처 OS 분기 추가. **현행 `hooks/run-hook.cmd`의 cmd.exe 분기는 정적 검토만 됐다** — macOS/Linux에서 cmd.exe를 실행할 수 없다(Phase 2 T5 이래 계속 열림). Unix 분기는 회귀 테스트가 있다.
-- **Phase 3에서 새로 열린 검증 항목** (리포트 §5) — 위 항목들과 별개로 아래가 미측정으로 남았다:
-  - **§1 시나리오 나머지 5스킬** — `wiki-status`·`wiki-knowledge`·`wiki-project-{init,design,record}`. §9-5 우선순위의 후반부이고, project 3종은 인터뷰·승인이 정의상 필수라 사람 개입 구간과 겹친다.
-  - **Claude의 SessionStart 규칙 주입** — 세션 CWD가 볼트 밖이라 게이트가 의도대로 no-op 했다. 부트스트랩 ①만 확인됐다.
-  - **Cursor 전역 경로**(`install.sh --fallback` → `~/.cursor/hooks.json`) — 전역 오염을 피해 프로젝트-로컬(`--vault`)만 검증.
-  - **QMD refresh 실행 경로** — 컬렉션을 등록하지 않아 게이트 ②가 실패하는 Grep fallback 경로만 확인.
-  - **`wiki-query` index-only 모드 · `wiki-lint --fix`** — normal 모드·report-only만 실행.
+- ~~**Phase 3에서 새로 열린 검증 항목**~~ — **대부분 해결(2026-08-01 Phase 3b, [리포트](../reports/2026-08-01-phase3b-e2e-5skills.md)):**
+  - ~~§1 시나리오 나머지 5스킬~~ → **완주.** `wiki-status`·`wiki-knowledge`·`wiki-project-{init,design,record}` 전부. change proposal 전 주기(proposed→승인→병합→`decisions.md` 짝→archive 박제)와 `decisions.md` append-only 불변성까지 확인. 9/12스킬 커버.
+  - ~~Claude의 SessionStart 규칙 주입~~ → **확인.** 볼트 안 CWD에서 7961자 주입(포맷·래핑·frontmatter 제거·규칙 포함), 볼트 밖에서 stdout 0바이트.
+  - ~~QMD refresh 실행 경로~~ → **확인.** `update`→`embed`→`get` 전 구간. 사용자 레지스트리가 착수 시 컬렉션 0개였으므로 등록·제거로 오염 0을 달성했다.
+  - ~~`wiki-query` index-only · `wiki-lint --fix`~~ → **확인.** dry-run→`--yes` 수리 2건, LINT 17필드 라인.
+  - **Cursor 전역 경로**(`install.sh --fallback` → `~/.cursor/hooks.json`) — **여전히 열림.** 전역 오염을 피해 프로젝트-로컬(`--vault`)만 검증.
+  - **`ingest-url`·`wiki-capture`** — 범위 밖으로 남았다(12스킬 중 3종 미검증).
+- **쓰기 종료 시퀀스 순서를 기계적으로 강제하는 것이 없다** (Phase 3b 신규 발견) — 산문 규칙만 있고 훅·테스트가 검사하지 않아 잘못된 순서가 조용히 통과한다. mtime은 판정 근거로 약하고 훅은 stateless라 설계가 필요하다 — `docs/superpowers/specs/2026-08-01-phase2-deferred-design.md` §4로 이관.

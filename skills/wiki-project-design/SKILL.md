@@ -9,7 +9,7 @@ description: 프로젝트의 설계 문서를 만들거나 진화시킬 때 사�
 
 시작 전 두 가지를 로드한다:
 - `using-llm-wiki` — Config Gate, 종료 시퀀스, QMD refresh, 페이지 포맷
-- `using-llm-wiki` 의 `references/project-docs.md` — 컨셉·공통 원칙 9개·디렉토리 구조·생애주기·접근 권한 매트릭스·decisions.md 항목 형식
+- `using-llm-wiki` 의 `references/project-docs.md` — 컨셉·공통 원칙 10개·디렉토리 구조·생애주기·접근 권한 매트릭스·decisions.md 항목 형식
 
 다이어그램 문법·C4 표기 규칙은 이 스킬의 `references/mermaid-conventions.md`.
 

@@ -67,6 +67,8 @@ Step 7: 종료 시퀀스 (아래 "종료")
 | 16 | `change_proposal_issues` | change proposal 무결성 | 🟡 | 아래 4종 |
 | 17 | `manifest_integrity` | manifest↔페이지 정합성 | 🟡 | `pages_created` 경로가 디스크에 부재 (항목 5의 역방향) |
 
+**항목 3 vs 항목 12 — 소유권.** `validate-frontmatter.sh`는 relationship `type` enum 위반도 보고하므로 한 출력이 두 항목의 후보가 된다. **relationship 관련 위반(타입·target·자기참조)은 항목 12가 소유**하고, 항목 3은 그 외(클래스별 필수 키·`category`/`status` enum·형식·`base_confidence` 범위)만 계수한다. 같은 위반을 두 항목에 동시 계상하지 않는다 — `T`는 물론이고 **항목별 `(N건)`도 한쪽에만 잡힌다.**
+
 **항목 9 — 총계 이중 계상 금지.** 항목 9는 항목 2와 **같은 데이터의 재분류 뷰**다("만들어야 할 페이지" 식별). 각 항목의 `(N건)`은 각자 표시하되 `총 이슈`(T)는 **중복 제거된 고유 이슈 수**이므로 항목 9를 T에 두 번 더하지 않는다.
 
 **항목 10 — 이름이 `stale`이 아닌 이유.** `wiki-query`의 stale(= 오늘 − `updated` > 90일, §4-5 `PAGE_STALE_DAYS`)과 **서로 다른 술어**다. 한 단어를 두 개념이 공유해 "query에선 stale인데 lint는 깨끗"한 혼선이 있었다 — 페이지 나이는 `stale`, 소스 대비 구식은 `source_drift`로 분리한다. 판정은 manifest `content_hash` 비교이며 **파일 mtime은 쓰지 않는다**(git checkout·복사·동기화로 깨진다 — 항목 15와 동일 근거).
@@ -129,7 +131,7 @@ severity 그룹(🔴 → 🟡 → ℹ️)으로 묶고, 각 섹션에 **다음 �
 - **비가역 (항목 15 raw 삭제): 항상 개별 확인 — `--yes`로도 건너뛰지 않는다.** 삭제 전 대응 `summaries/` 페이지 존재를 재확인한다.
 - **항목 12는 서브케이스별로 갈린다.** `type` 오타 → `related_to` 폴백은 가역이라 **자동 수정 대상**이고, 깨진 target·자기 참조는 어느 페이지를 가리키려 했는지 판단이 필요해 **자동 수정 불가**다.
 - **자동 수정 불가:** 판단 필요(항목 1·2·9·17 + 항목 12의 깨진 target·자기 참조) / ingest 필요(항목 5) / 값 판단(항목 3의 base_confidence 범위).
-- **frontmatter 수정은 append-only.** 누락 필드를 frontmatter 끝에 추가만 한다. 기존 필드 순서·주석·정렬을 보존하고 YAML을 통째로 재serialize하지 않는다(문서 churn 방지). 값 변경은 자동 수정 대상이 아니다.
+- **frontmatter 수정은 append-only + 예외 1건.** 누락 필드를 frontmatter 끝에 추가만 한다. 기존 필드 순서·주석·정렬을 보존하고 YAML을 통째로 재serialize하지 않는다(문서 churn 방지). **값 변경의 자동 수정 대상은 항목 12의 relationship `type` 오타 → `related_to` 폴백 하나뿐이다** — 해당 줄만 치환하고 다른 값은 건드리지 않는다. `base_confidence`·`status`·`summary` 같은 의미 값은 어떤 경우에도 자동 변경하지 않는다(값 판단이 필요하다).
 
 ## 종료
 

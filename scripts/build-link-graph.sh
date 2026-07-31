@@ -54,6 +54,25 @@ def resolve(target):
 
 WIKILINK = re.compile(r'\[\[([^\]]+)\]\]')
 
+def strip_code(body):
+    """코드 블록·인라인 코드 스팬 제거 — 표기용 [[링크]]를 실제 링크로 세지 않는다.
+
+    스킬 문서가 `[[knowledge]]` 같은 표기를 산문에 쓰므로, 에이전트가 그 문구를
+    따라 쓰면 존재하지 않는 페이지를 가리키는 BROKEN이 생긴다. 코드 스팬은
+    "링크가 아니라 링크에 대한 언급"이므로 그래프에서 제외한다.
+    frontmatter의 target: "[[...]]" 는 YAML 인용이라 이 함수를 거치지 않는다.
+    """
+    out, infence = [], False
+    for ln in body.split("\n"):
+        s = ln.lstrip()
+        if s.startswith("```") or s.startswith("~~~"):
+            infence = not infence
+            continue
+        if infence:
+            continue
+        out.append(re.sub(r'`[^`\n]*`', '', ln))
+    return "\n".join(out)
+
 def split_frontmatter(text):
     m = re.match(r'^---\n(.*?)\n---\n?(.*)$', text, re.S)
     if m:
@@ -86,8 +105,8 @@ for p in pages:
     text = open(os.path.join(wiki, p), encoding="utf-8").read()
     fm, body = split_frontmatter(text)
 
-    # 본문 [[링크]]
-    for raw in WIKILINK.findall(body):
+    # 본문 [[링크]] — 코드 블록·인라인 스팬 제외
+    for raw in WIKILINK.findall(strip_code(body)):
         r = resolve(raw)
         if r is None:
             broken.append((p, raw))
