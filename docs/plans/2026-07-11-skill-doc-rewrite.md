@@ -561,7 +561,7 @@ Expected: 첫 grep 출력 없음(OK). 각 키워드가 `skill`·`agents` 양쪽 
 3. **QMD refresh** — §3-5 요지 동일한가
 4. **라우팅 표** — 11개 스킬 의도→스킬 매핑이 1:1 일치하는가
 
-불일치 발견 시: AGENTS.md가 정본(Task 2)이므로 **skill 쪽을 AGENTS.md에 맞춘다**. (AGENTS.md는 축약, skill은 상세 — 표현 길이는 달라도 규칙 내용은 같아야 함.)
+불일치 발견 시: **정본 계층은 `docs/specs/spec.md` → `skills/using-llm-wiki/`(+`references/`) → `AGENTS.md` → 개별 SKILL.md** 순이다. 따라서 skill 허브와 AGENTS.md가 어긋나면 **AGENTS.md 쪽을 허브에 맞춘다** — AGENTS.md는 비-Claude 도구용 축약 미러이지 정본이 아니다(현행 `AGENTS.md` 머리말도 "공통 절차의 본문은 `skills/using-llm-wiki/`"라고 선언한다). 둘 다 spec과 어긋나면 spec을 기준으로 양쪽을 고친다. (표현 길이는 달라도 규칙 내용은 같아야 함.)
 
 - [ ] **Step 3: 커밋**
 

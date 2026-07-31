@@ -52,7 +52,7 @@
 
 **근거:**
 - 4개 도구 모두 bash를 실행하고 `$HOME`을 공유한다. 스킬·훅은 어느 플랫폼에서든 `~/.llm-wiki/scripts/...` **한 경로**만 참조하면 된다 — drift 0.
-- **스킬**은 LLM이 실행하는 마크다운이라 플러그인 환경변수를 못 쓴다 → 고정 공유 경로 `~/.llm-wiki/scripts/...` 하나만 참조한다(drift 0). **훅**은 세 플랫폼 모두 `plugin.json`의 `hooks` 키로 자동 등록되며 command가 플러그인 루트를 참조해 **플러그인 설치만으로 등록·동작**한다 — Claude `${CLAUDE_PLUGIN_ROOT}`(무음), Codex `${PLUGIN_ROOT}`(1회 `/hooks` trust + `[features] hooks`), Cursor `./hooks/run-hook.cmd`(로더가 플러그인 루트 기준 spawn → self-locating; 로컬 전용). Claude/Codex의 첫 SessionStart가 플러그인 루트의 `scripts/`를 `~/.llm-wiki/scripts/`로 symlink해 스킬이 쓰는 공유 경로까지 자가치유하므로 install.sh 없이 완결된다. `--fallback`(수동) 경로는 그 플러그인 루트 참조를 실제 설치 절대경로로 render해 동일 등록을 안내한다. (구설계는 `${CLAUDE_PLUGIN_ROOT}` 회피를 택했으나, 그 경우 마켓플레이스가 스크립트를 배치하지 않아 훅이 조용히 no-op 되는 결함이 있어 위 방식으로 정정. **Antigravity만** 훅 스키마 미공개로 이 자동화에서 빠지고 `install.sh`가 `~/.llm-wiki` 부트스트랩을 대신한다.)
+- **스킬**은 LLM이 실행하는 마크다운이라 플러그인 환경변수를 못 쓴다 → 고정 공유 경로 `~/.llm-wiki/scripts/...` 하나만 참조한다(drift 0). **훅은 플랫폼마다 다르다 (2026-07-31 실측)** — **Claude**는 `plugin.json`→`hooks.json`이 `${CLAUDE_PLUGIN_ROOT}` 경유로 무음 자동 등록되고, **Codex**도 `${PLUGIN_ROOT}` 경유로 등록되나 non-managed라 **최초 1회 `/hooks` trust**가 필요하며 그전까지는 **경고 없이 조용히 no-op** 한다(비대화형은 `--dangerously-bypass-hook-trust`). **Cursor는 플러그인 경유 훅 등록이 불가능하다** — cursor-agent가 매니페스트의 `hooks`를 파싱은 하나 내부 `getPluginHooks`가 호출되지 않아(번들 전체 등장 1회 = 정의부뿐) 훅 실행 엔진에 도달하지 않는다. `--plugin-dir`·`~/.cursor/plugins/local/` 양쪽 실측 모두 미발화. 따라서 Cursor 훅은 `install.sh`가 `~/.cursor/hooks.json`(또는 `{ws}/.cursor/hooks.json`)을 배치하는 경로만 유효하다. Claude/Codex의 첫 SessionStart가 플러그인 루트의 `scripts/`를 `~/.llm-wiki/scripts/`로 symlink해 공유 경로를 자가치유하므로 그 둘은 install.sh 없이 완결된다. **Antigravity**는 훅 스키마 미공개로 자동화에서 빠지고 `install.sh`가 `~/.llm-wiki` 부트스트랩을 대신한다.
 - 하네스 스펙 §3-2의 "resolver는 상태를 저장하지 않고 매번 fresh resolve" 원칙은 그대로 유지된다 — 위치만 `~/.claude/` → `~/.llm-wiki/`로 일반화.
 
 ### 스펙 동기화
@@ -111,14 +111,18 @@ llm-wiki-harness/                      ← 새 repo (canonical source)
   .claude-plugin/
     plugin.json                        ← Claude 플러그인 매니페스트
     marketplace.json                   ← Claude 마켓플레이스 (source: "./")
+  .agents/plugins/
+    marketplace.json                   ← Codex 마켓플레이스 (canonical). ⚠️ Codex는 .codex-plugin/marketplace.json을
+                                          읽지 않는다 — 탐색 경로는 .agents/plugins/{marketplace,api_marketplace}.json,
+                                          .claude-plugin/marketplace.json, .cursor-plugin/marketplace.json 4개뿐 (2026-07-31 실측)
   .codex-plugin/
-    plugin.json                        ← Codex 플러그인 매니페스트 (skills/hooks 명시 선언)
-    marketplace.json                   ← Codex 마켓플레이스 → 설치 시 ~/.agents/plugins/marketplace.json (§7-2)
+    plugin.json                        ← Codex 플러그인 매니페스트 (skills/hooks 명시 선언). 이 경로는 정상 인식됨
   .cursor-plugin/
     plugin.json                        ← Cursor 플러그인 매니페스트 (name 필수 + optional). 공식 마켓플레이스(cursor.com/marketplace/publish)·~/.cursor/plugins/local 로컬 테스트 지원 (cursor.com/docs/plugins)
-  # ⚠️ 정정: 직전 설계는 "Cursor는 마켓플레이스 없음"이라 .cursor-plugin/을 제거했으나, 이는 사실이 아니다 —
-  #   Cursor는 플러그인 시스템(Rules+Skills+Hooks+MCP 번들)과 공식 마켓플레이스를 가진다. 매니페스트 복원.
-  #   Cursor 배포 표면 = 전역(~/.cursor/hooks.json·skills) + 프로젝트(.cursor/) + 플러그인(.cursor-plugin/).
+  # ⚠️ 정정(2026-07-31 실측): Cursor 플러그인은 **스킬 전용 표면**이다. 매니페스트의 hooks 키는
+  #   cursor-agent가 소비하지 않으므로(§4-3) 훅은 반드시 .cursor/hooks.json 계열로 배치해야 한다.
+  #   Cursor 배포 표면 = 훅: 전역 ~/.cursor/hooks.json + 프로젝트 {ws}/.cursor/hooks.json (install.sh 담당)
+  #                      스킬: ~/.cursor/skills · .agents/skills · 플러그인(.cursor-plugin/)
 
   docs/
     spec.md                            ← 하네스 스펙 이관본 (심볼릭 또는 복사)
@@ -164,17 +168,17 @@ SKILL.md frontmatter = `name` + `description`만 → 4개 도구 공통이라 �
 
 ### 4-3. 훅 위치 — Claude·Codex·Cursor 기계적 가드 + Antigravity만 우아한 강등
 
-**정정:** 직전 설계는 Cursor를 강등 대상으로 묶었으나, Cursor는 Claude/Codex와 동급의 네이티브 훅을 지원한다. 세 플랫폼 모두 **플러그인 매니페스트가 훅을 자동 등록**한다(아래 command 메커니즘). **훅(기계적 차단)을 못 싣는 플랫폼은 Antigravity 하나뿐**이고, 이는 우리 사정이 아니라 **플랫폼 한계**다 — 공식 훅 스키마(`antigravity.google/schemas/v1/hooks.json`)가 **404(미공개)**이고, 실측상 `agy`가 `hooks.json`을 파싱은 하나 **`0 handlers`만 등록해 훅이 발화하지 않는다**(agy v1.0.3; superpowers도 Antigravity를 instructions-file(skills+rules)로만 배포). Google이 handler 스키마를 공개하면 `probe-hook.sh` 실측 후 Antigravity 훅을 플러그인에 추가한다. 스킬·rules·플러그인 배포 자체는 Antigravity도 완전 지원되며 강등 대상이 아니다.
+**정정 (2026-07-31 실측으로 재정정):** Cursor는 네이티브 훅 자체는 Claude/Codex와 동급으로 지원하지만, **플러그인 매니페스트를 통한 자동 등록은 지원하지 않는다**(위 §4-3 참조 — `getPluginHooks` 미호출). 따라서 **플러그인 설치만으로 훅이 도는 플랫폼은 Claude·Codex 둘뿐**이고, Cursor는 설정 파일 배치(=install.sh)가 필수다. **훅을 아예 못 싣는 플랫폼은 Antigravity 하나**이며 이는 플랫폼 한계다 — 공식 훅 스키마(`antigravity.google/schemas/v1/hooks.json`)가 **404(미공개)**이고, 실측상 `agy`가 `hooks.json`을 파싱은 하나 **`0 handlers`만 등록해 훅이 발화하지 않는다**(agy v1.0.3). Google이 handler 스키마를 공개하면 `probe-hook.sh` 실측 후 Antigravity 훅을 추가한다. 스킬·rules 배포는 Cursor·Antigravity 모두 정상 동작한다(`getAllAgentSkills`는 활성).
 
 | 훅 | Claude | Codex | Cursor | Antigravity |
 |---|---|---|---|---|
-| `wiki-protect-raw` | ✅ 플러그인 자동등록 `hooks.json` PreToolUse (`${CLAUDE_PLUGIN_ROOT}`) | ✅ 플러그인 자동선언 PreToolUse (`${PLUGIN_ROOT}`) — 최초 1회 `/hooks` trust + `[features] hooks` | ✅ 플러그인 자동등록 `preToolUse`→`permission:deny`+`user_message` (`./hooks/run-hook.cmd`, 로컬) | ⚠️ 훅 스키마 미공개(404·0 handlers) → AGENTS.md 소프트 룰 |
+| `wiki-protect-raw` | ✅ 플러그인 자동등록 `hooks.json` PreToolUse (`${CLAUDE_PLUGIN_ROOT}`) — 차단은 stderr+`exit 2` | ✅ 플러그인 자동선언 PreToolUse (`${PLUGIN_ROOT}`) — 최초 1회 `/hooks` trust 필요, 미신뢰 시 **무경고 no-op**. 차단은 stderr+`exit 2` | ⚠️ **플러그인 경유 불가** → `install.sh`가 `~/.cursor/hooks.json` 배치. 차단은 `{"permission":"deny","user_message":…}`+`exit 0` | ⚠️ 훅 스키마 미공개(404·0 handlers) → AGENTS.md 소프트 룰 |
 | `wiki-validate-frontmatter` | ✅ PostToolUse | ✅ (trust 필요) | ✅ `postToolUse` | ⚠️ 미공개 → `wiki-lint` 일괄 검증 |
 | `session-start` (부트스트랩 주입) | ✅ `SessionStart` `startup\|resume\|clear\|compact` (전역, CWD-in-vault 자가게이팅) | ✅ `SessionStart` (trust) | ✅ `sessionStart`→`additional_context`+`env` (Cloud Agent 미지원) | ⚠️ 미공개 → AGENTS.md 상시 로드 대체 |
 
 - **훅 로직(bash)은 공유**, **등록 JSON만 플랫폼별 3종** (`hooks.json` / `hooks-codex.json` / `hooks-cursor.json`). 셋 다 플러그인 매니페스트(`plugin.json`의 `hooks` 키)가 가리켜 **설치 시 자동 등록**되고, command는 모두 self-locating `run-hook.cmd`를 경유한다. 이벤트명·응답 필드·matcher 문법·플러그인 루트 참조가 다르다:
   - Claude: PascalCase 이벤트 + `hookSpecificOutput.additionalContext`. command `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd` — 설치 즉시 무음 등록.
-  - Codex: 동일 페이로드 계열. command `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd`(`PLUGIN_ROOT`=Codex 공식 env var; 설치 경로 `~/.codex/plugins/cache/<mkt>/<name>/<version>/`가 버전 스코프라 하드코딩 금지). **non-managed 훅은 `/hooks` trust + `[features] hooks=true`(비Windows) 후 실행** (등록만으로 즉시 차단 아님).
+  - Codex: 페이로드 스키마가 Claude와 동일하다(실측). command `${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/run-hook.cmd` — 두 env var 모두 동일 값으로 주입되며 command는 `$SHELL -lc`로 실행돼 셸 확장이 동작한다. 설치 경로 `~/.codex/plugins/cache/<mkt>/<name>/<version>/`가 버전 스코프라 하드코딩 금지. **non-managed 훅은 `/hooks` trust 후 실행**(등록만으로 즉시 차단 아님, 그전까지 무경고 no-op). **`[features] hooks=true`는 0.145.0에서 불필요** — `hooks`가 stable·기본 활성으로 승격됨. 마켓플레이스 매니페스트는 `.agents/plugins/marketplace.json`이어야 한다(`.codex-plugin/marketplace.json`은 읽히지 않음).
   - Cursor: camelCase 이벤트 + `permission:deny`/`additional_context`/`env`, **matcher는 JavaScript 정규식**(POSIX 아님). command `./hooks/run-hook.cmd` — Cursor는 플러그인 루트 env var가 없고 프로세스 cwd가 워크스페이스로 잡히므로(cwd 버그), 로더가 매니페스트 경로를 플러그인 루트 기준으로 spawn한 뒤 `run-hook.cmd`가 `$0`로 자가위치해 형제 스크립트를 실행한다. `<EXTREMELY_IMPORTANT>` 래핑은 훅이 `additional_context` 문자열에 직접 포함.
 - `SessionStart` matcher에 **`compact` 포함** — compact 이후에도 부트스트랩 재주입 (실제 컨텍스트 반영 여부는 §9 스모크로 검증).
 - Antigravity만 훅의 *자동 강제력*을 포기하고 부트스트랩 스킬 가드 규칙 + AGENTS.md로 동등한 *지침*을 제공한다. 손실되는 것은 "기계적 차단"뿐 — 사용자가 선택한 우아한 강등.
@@ -248,7 +252,7 @@ SKILL.md frontmatter = `name` + `description`만 → 4개 도구 공통이라 �
 ### 7-2. 마켓플레이스 (Claude/Codex 병행)
 
 - Claude: `.claude-plugin/marketplace.json` (`source: "./"`) → `/plugin marketplace add <owner/repo>` → `/plugin install`
-- Codex: `.codex-plugin/plugin.json`(skills+hooks 명시 선언) + `.codex-plugin/marketplace.json` → `codex plugin marketplace add <repo>` → `/plugins` 설치. 훅은 `${PLUGIN_ROOT}/hooks/run-hook.cmd` 경유로 등록되나 **non-managed라 최초 1회 `/hooks` trust + `[features] hooks=true`(비Windows)** 필요.
+- Codex: `.codex-plugin/plugin.json`(skills+hooks 명시 선언) + **`.agents/plugins/marketplace.json`** → `codex plugin marketplace add <repo>` → `codex plugin add <plugin>@<marketplace>`. ⚠️ **`.codex-plugin/marketplace.json`은 Codex가 읽지 않는다** — 탐색 경로는 `.agents/plugins/marketplace.json` · `.agents/plugins/api_marketplace.json` · `.claude-plugin/marketplace.json` · `.cursor-plugin/marketplace.json` 4개뿐이다(공식 openai-curated도 `.agents/plugins/` 사용). 훅은 `${PLUGIN_ROOT}/hooks/run-hook.cmd` 경유로 등록되나 **non-managed라 최초 1회 `/hooks` trust** 필요(미신뢰 시 무경고 no-op).
 - **Cursor: 마켓플레이스 있음(정정).** `.cursor-plugin/plugin.json`이 `skills`+`hooks`(→`hooks-cursor.json`)를 선언해 플러그인 설치만으로 스킬·훅이 자동 등록된다(로컬 데스크톱). 공식 마켓플레이스 또는 `~/.cursor/plugins/local/`로 배포. 직전 설계의 "Cursor 마켓플레이스 없음 → install.sh가 실질 배포 표면"은 **오류였고**, install.sh는 이제 폴백(§7-1 `--fallback`)일 뿐이다.
 - 마켓플레이스 설치 시에도 공유 스크립트는 `~/.llm-wiki/`에 있어야 하므로, Claude/Codex 플러그인은 첫 SessionStart 훅이 `~/.llm-wiki/`를 자가-부트스트랩한다. **Antigravity는 훅이 없어 자가치유 불가** → `install.sh`(§7-1 [2]) 1회가 유일 경로.
 
