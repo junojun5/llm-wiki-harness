@@ -67,6 +67,20 @@ echo "test: Codex 골든 픽스처(cursor_version 없음) → codex 포맷 유�
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" codex < "$REPO_ROOT/tests/fixtures/codex-hooks/sessionstart.json" 2>/dev/null)"
 jpath "codex 포맷 유지" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 
+# stdin 회귀 — 훅은 페이로드를 읽되 **절대 무한 대기하지 않아야** 한다.
+# 닫히지 않은 파이프를 상속하면(수동 실행·래퍼 경유) 세션 시작 자체가 멈춘다.
+if command -v timeout >/dev/null 2>&1; then
+  echo "test: 열린 idle 파이프를 stdin으로 받아도 블로킹하지 않는다"
+  FIFO="$SB/idle.pipe"; rm -f "$FIFO"; mkfifo "$FIFO"
+  ( sleep 30 > "$FIFO" & )   # 파이프를 열어두고 아무것도 쓰지 않는 writer
+  OUT="$(timeout 10 bash -c "cd '$VAULT' && HOME='$HOMESB' bash '$HOOK' claude < '$FIFO'" 2>/dev/null)"; CODE=$?
+  [ "$CODE" != 124 ] && ok "타임아웃 없이 종료 (exit $CODE)" || no "여전히 블로킹(124)"
+  jpath "블로킹 없이도 주입은 정상" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
+  rm -f "$FIFO"
+else
+  echo "test: (skip) timeout 명령 없음 — stdin 블로킹 회귀 테스트 생략"
+fi
+
 # run-hook.cmd 폴리글랏 런처 — Unix 분기가 <hook> [platform] 을 그대로 위임하는지.
 # (Windows/cmd 분기는 macOS·Linux에서 실행할 수 없어 정적 검토로만 확인 — hooks/run-hook.cmd 주석 참조)
 echo "test: run-hook.cmd Unix 분기 — 플랫폼 인자가 훅에 그대로 전달"
