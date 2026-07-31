@@ -41,7 +41,8 @@ Step 2: Index Pass (cheap)
 
   [Index-only 모드] 여기서 중단하고 summary: 필드 + index.md 설명만으로 답변을 구성한다.
     답변 라벨: "(index-only — 페이지 본문 미읽음, 요약 기반 답변이므로 세부 내용 누락 가능)"
-    → Step 6으로 점프
+    → **Step 5(답변 합성)를 거쳐** Step 6으로 간다 — 답변 포맷·stale/proposed 라벨은
+      모드와 무관하게 모든 경로에 적용된다 (Step 5를 건너뛰면 라벨이 통째로 누락된다)
 
 Step 2b: QMD Semantic Pass (게이트 통과 시만)
   미통과 → 스킵, Step 3으로
@@ -79,11 +80,13 @@ Step 7: 답변이 새 지식이면 저장을 제안한다
 ## 답변 포맷
 
 ```
-> Based on the wiki:
+> 위키 기반:
 > [답변 + [[wikilinks]] 인용]
-> Pages consulted: [[page-a]], [[page-b]]
-> Gaps: [wiki가 커버하지 못하는 부분]
+> 참고 페이지: [[page-a]], [[page-b]]
+> 공백: [wiki가 커버하지 못하는 부분]
 ```
+
+이 포맷은 **모든 경로에 적용된다** — index-only·hot.md 단독 답변도 Step 5를 거친다.
 
 - **인용은 `[[wikilink]]` 기본이다** (Obsidian 1차 소비 환경 — 클릭 가능하고 페이지 이동 시 자동 추적된다). Step 3·4를 실제 수행한 경우에 한해 검증 편의로 `file_path:line` 힌트를 옆에 부가 표기할 수 있다 — 기본은 wikilink, 라인은 보조다.
 - **검색 단계를 인용 뒤에 표시한다:** `found in summary` | `section grep` | `full page read`
@@ -99,7 +102,7 @@ Step 7: 답변이 새 지식이면 저장을 제안한다
 □ 가장 싼 경로에서 멈춤 (hot → index → QMD → section → full 중 필요한 단계까지만)
 □ 최종 인용을 파일 본문에서 확인 (QMD 캐시 텍스트로 답하지 않음)
 □ 인용마다 검색 단계 표시 + stale/proposed/미확정 라벨
-□ 커버하지 못한 부분을 Gaps에 명시
+□ 커버하지 못한 부분을 `공백:`에 명시
 □ 페이지·index·hot·QMD 무수정 (log append만)
 ```
 
@@ -111,6 +114,6 @@ Step 7: 답변이 새 지식이면 저장을 제안한다
 | QMD가 돌려준 텍스트로 답변한다 | 인덱스가 stale하면 이미 없는 내용을 인용한다 | QMD는 후보 수집만. 인용은 파일 본문에서 확인한다 |
 | proposed·`[NEEDS CLARIFICATION]` 페이지를 그냥 인용한다 | 미확정 설계와 가정이 사실로 회수된다 | "(proposed — 미확정 설계)" / "(미확정: 가정 포함)" 표시 |
 | 90일 넘은 페이지를 현행처럼 인용한다 | 낡은 정보가 최신 사실로 읽힌다 | `(stale: last updated YYYY-MM-DD)` 인라인 표시 |
-| 볼트에 없는 부분을 일반 지식으로 메꾼다 | wiki 기반 답변과 모델 지식이 구분되지 않는다 | "wiki에 해당 내용이 없습니다" + Gaps |
+| 볼트에 없는 부분을 일반 지식으로 메꾼다 | wiki 기반 답변과 모델 지식이 구분되지 않는다 | "wiki에 해당 내용이 없습니다" + `공백:` |
 | 답이 좋으니 `knowledge/`에 정리해 저장한다 | 조회가 볼트를 바꿔 read-only 경계가 무너진다 | 저장은 제안만. 실행은 `wiki-knowledge`·`wiki-capture` |
 | `log.md` append가 실패해 답변을 취소·재시도한다 | 이미 전달된 답변을 없던 일로 만든다 | log 실패는 스킬 실패가 아니다 |
