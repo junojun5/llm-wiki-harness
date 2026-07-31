@@ -217,4 +217,4 @@ if [ "${#MERGE_TODO[@]}" -gt 0 ]; then
   echo "  각 사본의 내용을 원본에 반영한 뒤 사본은 삭제하세요."
 fi
 echo ""
-echo "다음: 볼트에서 \`/wiki-setup\`(또는 wiki-setup --vault <path>)으로 .wiki-config.json·~/.llm-wiki/default-vault·QMD를 설정하세요."
+echo "다음: 볼트에서 \`wiki-setup\`(또는 wiki-setup --vault <path>)으로 .wiki-config.json·~/.llm-wiki/default-vault·QMD를 설정하세요."

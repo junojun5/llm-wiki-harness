@@ -28,11 +28,11 @@ CONFIG="$(find_config_upward || true)"
 
 if [ -z "$CONFIG" ]; then
   POINTER="$HOME/.llm-wiki/default-vault"
-  [ -f "$POINTER" ] || fail 2 E_NO_CONFIG "볼트 설정을 찾을 수 없습니다. /wiki-setup을 먼저 실행하세요"
+  [ -f "$POINTER" ] || fail 2 E_NO_CONFIG "볼트 설정을 찾을 수 없습니다. wiki-setup 스킬을 먼저 실행하세요"
   TARGET="$(head -n1 "$POINTER" 2>/dev/null || true)"
-  [ -n "$TARGET" ] && [ -d "$TARGET" ] || fail 3 E_BAD_POINTER "전역 포인터가 가리키는 볼트 경로가 없습니다. /wiki-setup --update-path로 볼트 위치를 재지정하세요"
+  [ -n "$TARGET" ] && [ -d "$TARGET" ] || fail 3 E_BAD_POINTER "전역 포인터가 가리키는 볼트 경로가 없습니다. wiki-setup 스킬을 --update-path로 실행해 볼트 위치를 재지정하세요"
   CONFIG="$TARGET/.wiki-config.json"
-  [ -f "$CONFIG" ] || fail 3 E_BAD_POINTER "전역 포인터 경로에 .wiki-config.json이 없습니다. /wiki-setup --update-path로 볼트 위치를 재지정하세요"
+  [ -f "$CONFIG" ] || fail 3 E_BAD_POINTER "전역 포인터 경로에 .wiki-config.json이 없습니다. wiki-setup 스킬을 --update-path로 실행해 볼트 위치를 재지정하세요"
 fi
 
 # --- 2) config 파싱 + 필수 키/형식 검증 (python3) --------------------------
@@ -65,16 +65,16 @@ print("RAW=%s" % v["raw_dir"])
 PY
 )"
 
-[ -z "$PARSED" ] && fail 4 E_INVALID_CONFIG "config 파싱에 실패했습니다. /wiki-setup --repair를 실행하세요"
+[ -z "$PARSED" ] && fail 4 E_INVALID_CONFIG "config 파싱에 실패했습니다. wiki-setup 스킬을 --repair로 실행하세요"
 
 STATUS="$(printf '%s\n' "$PARSED" | head -n1)"
 case "$STATUS" in
-  "ERR PARSE")        fail 4 E_INVALID_CONFIG "config JSON 파싱 실패. /wiki-setup --repair를 실행하세요" ;;
-  "ERR MISSING"*)     fail 4 E_INVALID_CONFIG "필수 키 누락(${STATUS#ERR MISSING }). /wiki-setup --repair를 실행하세요" ;;
-  "ERR PATH")         fail 4 E_INVALID_CONFIG "vault.path가 절대경로가 아니거나 존재하지 않습니다. /wiki-setup --repair를 실행하세요" ;;
-  "ERR VERSION")      fail 4 E_INVALID_CONFIG "version 값이 정수가 아닙니다. /wiki-setup --repair를 실행하세요" ;;
+  "ERR PARSE")        fail 4 E_INVALID_CONFIG "config JSON 파싱 실패. wiki-setup 스킬을 --repair로 실행하세요" ;;
+  "ERR MISSING"*)     fail 4 E_INVALID_CONFIG "필수 키 누락(${STATUS#ERR MISSING }). wiki-setup 스킬을 --repair로 실행하세요" ;;
+  "ERR PATH")         fail 4 E_INVALID_CONFIG "vault.path가 절대경로가 아니거나 존재하지 않습니다. wiki-setup 스킬을 --repair로 실행하세요" ;;
+  "ERR VERSION")      fail 4 E_INVALID_CONFIG "version 값이 정수가 아닙니다. wiki-setup 스킬을 --repair로 실행하세요" ;;
   OK) : ;;
-  *)                  fail 4 E_INVALID_CONFIG "알 수 없는 config 오류. /wiki-setup --repair를 실행하세요" ;;
+  *)                  fail 4 E_INVALID_CONFIG "알 수 없는 config 오류. wiki-setup 스킬을 --repair로 실행하세요" ;;
 esac
 
 # 파싱 결과 추출
@@ -87,12 +87,12 @@ RAW_DIR="$(printf '%s\n' "$PARSED" | sed -n 's/^RAW=//p')"
 if [ "$VERSION" -gt "$KNOWN_VERSION" ]; then
   fail 5 E_VERSION "config version($VERSION)이 스킬이 아는 버전($KNOWN_VERSION)보다 높습니다. harness repo를 업데이트하세요 (git pull)"
 elif [ "$VERSION" -lt "$KNOWN_VERSION" ]; then
-  printf 'E_WARN: config version(%s)이 구버전입니다. 진행은 하지만 /wiki-setup --repair 권장\n' "$VERSION" >&2
+  printf 'E_WARN: config version(%s)이 구버전입니다. 진행은 하지만 wiki-setup 스킬 --repair 권장\n' "$VERSION" >&2
 fi
 
 # --- 4) vault 서명 검증 ---------------------------------------------------
 if [ ! -f "$VAULT_PATH/$WIKI_DIR/index.md" ] || [ ! -f "$VAULT_PATH/$WIKI_DIR/log.md" ]; then
-  fail 6 E_NOT_A_VAULT "wiki 서명($WIKI_DIR/index.md, log.md)이 없습니다. /wiki-setup --repair를 실행하세요"
+  fail 6 E_NOT_A_VAULT "wiki 서명($WIKI_DIR/index.md, log.md)이 없습니다. wiki-setup 스킬을 --repair로 실행하세요"
 fi
 
 # --- 5) 성공 -------------------------------------------------------------

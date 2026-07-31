@@ -76,6 +76,35 @@ assert_contains "SUMMARY 라인 존재"          "SUMMARY" "$OUT"
 # index.md가 lonely를 링크해도 인바운드로 세지 않으므로 lonely는 여전히 고아
 cleanup
 
+# ── 코드 스팬·코드 블록 안의 [[링크]]는 링크가 아니다 ─────────────────
+# 스킬 문서가 `[[knowledge]]` 표기를 산문에 쓰므로 에이전트가 그 문구를 따라 쓰면
+# 존재하지 않는 페이지를 가리키는 BROKEN이 생겼다 (2026-08-01 E2E 실측).
+new_sandbox
+page "concepts/target.md" '---
+title: "대상"
+---
+내용.
+'
+page "concepts/mentions.md" '---
+title: "언급만"
+---
+일반 개념은 `[[knowledge]]` 링크로 둔다.
+
+```
+[[fenced-not-a-link]]
+```
+
+실제 링크: [[concepts/target]]
+'
+OUT2="$(bash "$GRAPH" "$WIKI" 2>/dev/null)"
+
+echo "test: 코드 스팬·코드 블록 안의 [[링크]] 제외"
+assert_absent   "인라인 코드 스팬은 BROKEN 아님"  "BROKEN${TAB}concepts/mentions.md${TAB}knowledge" "$OUT2"
+assert_absent   "코드 블록 안도 BROKEN 아님"      "BROKEN${TAB}concepts/mentions.md${TAB}fenced-not-a-link" "$OUT2"
+assert_absent   "코드 밖 실제 링크는 계수됨"       "ORPHAN${TAB}concepts/target.md" "$OUT2"
+assert_contains "broken 총계 0"                  "broken=0" "$OUT2"
+cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

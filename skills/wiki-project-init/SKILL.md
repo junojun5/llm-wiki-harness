@@ -9,7 +9,7 @@ description: wiki에서 프로젝트를 시작하거나 재프레이밍할 때 �
 
 시작 전 두 가지를 로드한다:
 - `using-llm-wiki` — Config Gate, 종료 시퀀스, QMD refresh, 페이지 포맷
-- `using-llm-wiki` 의 `references/project-docs.md` — 컨셉·공통 원칙 9개·디렉토리 구조·생애주기·접근 권한 매트릭스
+- `using-llm-wiki` 의 `references/project-docs.md` — 컨셉·공통 원칙 10개·디렉토리 구조·생애주기·접근 권한 매트릭스
 
 설계 문서(architecture·domain·conventions)에는 직접 쓰지 않는다 — 그건 `wiki-project-design`이다.
 

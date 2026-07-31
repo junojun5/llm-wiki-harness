@@ -48,7 +48,7 @@ Step 7: 종료 시퀀스 (아래 "종료")
 각 항목의 `[키]`는 log 필드명과 1:1 매칭된다. severity: 🔴 ERROR(즉시 수정) / 🟡 REVIEW(검토 필요) / ℹ️ SOFT(소프트 경고).
 
 | # | 키 | 항목 | sev | 체크 |
-|---|---|---|:--:|---|
+|---|---|---|---|---|
 | 1 | `orphans` | 고아 페이지 | 🟡 | 링크 그래프 인바운드 0 |
 | 2 | `broken_links` | 깨진 `[[wiki-link]]` | 🟡 | 링크 그래프 — 대상 .md 부재 |
 | 3 | `format_errors` | page format 위반 | 🔴 | validator(클래스별 필수 키·enum·형식). 추가: `base_confidence`가 [0.0, 1.0] 밖 |
@@ -66,6 +66,8 @@ Step 7: 종료 시퀀스 (아래 "종료")
 | 15 | `raw_deletable` | 삭제 대기 raw | ℹ️ | 아래 3조건 |
 | 16 | `change_proposal_issues` | change proposal 무결성 | 🟡 | 아래 4종 |
 | 17 | `manifest_integrity` | manifest↔페이지 정합성 | 🟡 | `pages_created` 경로가 디스크에 부재 (항목 5의 역방향) |
+
+**항목 3 vs 항목 12 — 소유권.** `validate-frontmatter.sh`는 relationship `type` enum 위반도 보고하므로 한 출력이 두 항목의 후보가 된다. **relationship 관련 위반(타입·target·자기참조)은 항목 12가 소유**하고, 항목 3은 그 외(클래스별 필수 키·`category`/`status` enum·형식·`base_confidence` 범위)만 계수한다. 같은 위반을 두 항목에 동시 계상하지 않는다 — `T`는 물론이고 **항목별 `(N건)`도 한쪽에만 잡힌다.**
 
 **항목 9 — 총계 이중 계상 금지.** 항목 9는 항목 2와 **같은 데이터의 재분류 뷰**다("만들어야 할 페이지" 식별). 각 항목의 `(N건)`은 각자 표시하되 `총 이슈`(T)는 **중복 제거된 고유 이슈 수**이므로 항목 9를 T에 두 번 더하지 않는다.
 
@@ -120,7 +122,7 @@ severity 그룹(🔴 → 🟡 → ℹ️)으로 묶고, 각 섹션에 **다음 �
 
 집계 문자는 서로 겹치지 않게 쓴다 — `T`(총 이슈, 중복 제거) · `E`/`R`/`S`(severity별) · `F`(자동 수정 가능). 아래 LINT 라인의 항목 문자(`A`~`Q`)와도 구분된다.
 
-액션 문구 예: conflict → "소스 채택 결정 후 충돌 노트 resolved 갱신" · PII → "값 확인 후 redaction/.gitignore" · 미처리 raw → "`/wiki-ingest <경로>`" · 고아 → "링크 추가 또는 archive" · manifest 정합성 → "의도된 삭제면 manifest prune, 복구면 `/wiki-ingest --full <raw경로>`".
+액션 문구 예: conflict → "소스 채택 결정 후 충돌 노트 resolved 갱신" · PII → "값 확인 후 redaction/.gitignore" · 미처리 raw → "`wiki-ingest <경로>`" · 고아 → "링크 추가 또는 archive" · manifest 정합성 → "의도된 삭제면 manifest prune, 복구면 `wiki-ingest --full <raw경로>`".
 
 ## `--fix` — 기본 dry-run, 적용은 차등 확인
 
@@ -129,7 +131,7 @@ severity 그룹(🔴 → 🟡 → ℹ️)으로 묶고, 각 섹션에 **다음 �
 - **비가역 (항목 15 raw 삭제): 항상 개별 확인 — `--yes`로도 건너뛰지 않는다.** 삭제 전 대응 `summaries/` 페이지 존재를 재확인한다.
 - **항목 12는 서브케이스별로 갈린다.** `type` 오타 → `related_to` 폴백은 가역이라 **자동 수정 대상**이고, 깨진 target·자기 참조는 어느 페이지를 가리키려 했는지 판단이 필요해 **자동 수정 불가**다.
 - **자동 수정 불가:** 판단 필요(항목 1·2·9·17 + 항목 12의 깨진 target·자기 참조) / ingest 필요(항목 5) / 값 판단(항목 3의 base_confidence 범위).
-- **frontmatter 수정은 append-only.** 누락 필드를 frontmatter 끝에 추가만 한다. 기존 필드 순서·주석·정렬을 보존하고 YAML을 통째로 재serialize하지 않는다(문서 churn 방지). 값 변경은 자동 수정 대상이 아니다.
+- **frontmatter 수정은 append-only + 예외 1건.** 누락 필드를 frontmatter 끝에 추가만 한다. 기존 필드 순서·주석·정렬을 보존하고 YAML을 통째로 재serialize하지 않는다(문서 churn 방지). **값 변경의 자동 수정 대상은 항목 12의 relationship `type` 오타 → `related_to` 폴백 하나뿐이다** — 해당 줄만 치환하고 다른 값은 건드리지 않는다. `base_confidence`·`status`·`summary` 같은 의미 값은 어떤 경우에도 자동 변경하지 않는다(값 판단이 필요하다).
 
 ## 종료
 

@@ -196,11 +196,11 @@ vault resolution은 마크다운 프롬프트가 아니라 **단일 resolver 스
 | exit | 코드 | 의미 | stderr 복구 안내 |
 |---|---|---|---|
 | 0 | `OK` | 정상 | — |
-| 2 | `E_NO_CONFIG` | CWD·전역 포인터 모두에서 config 못 찾음 | "/wiki-setup을 먼저 실행하세요" |
-| 3 | `E_BAD_POINTER` | 전역 포인터가 가리키는 경로가 실재하지 않거나 권한 에러 | "/wiki-setup --update-path로 볼트 위치를 재지정하세요" |
-| 4 | `E_INVALID_CONFIG` | config 파싱 실패·필수 키 누락·vault.path 무효 | "/wiki-setup --repair를 실행하세요" |
+| 2 | `E_NO_CONFIG` | CWD·전역 포인터 모두에서 config 못 찾음 | "wiki-setup 스킬을 먼저 실행하세요" |
+| 3 | `E_BAD_POINTER` | 전역 포인터가 가리키는 경로가 실재하지 않거나 권한 에러 | "wiki-setup 스킬을 --update-path로 실행해 볼트 위치를 재지정하세요" |
+| 4 | `E_INVALID_CONFIG` | config 파싱 실패·필수 키 누락·vault.path 무효 | "wiki-setup 스킬을 --repair로 실행하세요" |
 | 5 | `E_VERSION` | config version이 스크립트가 아는 버전보다 높음 | "harness repo를 업데이트하세요 (git pull)" |
-| 6 | `E_NOT_A_VAULT` | vault 서명 검증 실패 (index.md/log.md 없음) | "/wiki-setup --repair를 실행하세요" |
+| 6 | `E_NOT_A_VAULT` | vault 서명 검증 실패 (index.md/log.md 없음) | "wiki-setup 스킬을 --repair로 실행하세요" |
 
 stderr 첫 줄은 `E_CODE: 메시지` 형식으로 고정한다 — 에이전트와 훅이 기계적으로 분기할 수 있고, 실패 유형별 복구 전략("setup 필요" vs "경로 재지정" vs "스킬 업데이트")이 섞이지 않는다.
 
@@ -513,7 +513,7 @@ QMD를 쓰는 스킬은 refresh·검색 전에 3단계로 판정한다:
 1. command -v ${QMD_CLI:-qmd} 실패
    → Grep fallback ("QMD skipped: qmd CLI unavailable")
 2. ${QMD_CLI:-qmd} collection list 출력에 {vault}/{wiki_dir} 경로와 매칭되는 컬렉션 없음
-   → Grep fallback + "/wiki-setup --update-qmd로 등록하세요" 안내
+   → Grep fallback + "wiki-setup --update-qmd로 등록하세요" 안내
      ("QMD skipped: collection not registered")
 3. 둘 다 통과 → 매칭된 컬렉션명을 QMD_WIKI_COLLECTION으로 사용
    (이름이 "wiki"가 아니어도 경로 매칭으로 찾으므로 동작)
@@ -724,7 +724,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 **description:**
 > "Use when initializing a new wiki vault or repairing broken vault configuration. Must be run before any other wiki skill. Creates .wiki-config.json at vault root."
 
-**트리거:** `/wiki-setup`, "wiki 초기화", "볼트 설정", "set up wiki"
+**트리거:** `wiki-setup`, "wiki 초기화", "볼트 설정", "set up wiki"
 
 **워크플로:**
 ```
@@ -773,7 +773,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
      b. qmd update 실행
      ※ QMD 설정은 어디에도 저장하지 않는다 — qmd 자체 레지스트리가 단일 출처 (§3-5 QMD 게이트).
      ※ 빈 볼트는 임베딩할 내용이 없으므로 update만으로 충분 (embed 불필요). 정책은 §3-5 참조.
-   → 미설치 시: "Grep fallback으로 동작합니다. 설치 후 /wiki-setup --update-qmd 실행 가능" 안내
+   → 미설치 시: "Grep fallback으로 동작합니다. 설치 후 wiki-setup --update-qmd 실행 가능" 안내
 10. .manifest.json 없으면 version: 1 로 신규 생성 (있으면 유지)
 11. Sanity check: 생성/확인된 항목 목록 출력
 12. .wiki-config.example.json 생성 (절대경로 제거한 빈 템플릿, git 추적용)
@@ -788,7 +788,7 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 
 **기존 파일 보존 정책 — 존재 여부만 본다:** setup과 `--repair`는 `index.md`/`log.md`/`hot.md`의 **존재만 확인**한다. 있으면 내용 불문 유지 — 포맷이 낡았거나 frontmatter가 없어도 setup은 손대지 않는다. 포맷 노후의 진단·보강은 `wiki-lint --fix`의 책임이다(§3-6 detect-and-repair) — setup이 내용 검사까지 하면 책임이 중복된다. "백업 후 재생성"은 미채택: 사용자 데이터를 LLM이 재생성하는 건 위험하고, 백업은 git의 일이다.
 
-**비대화형 모드:** `/wiki-setup --vault <path> [--yes]`
+**비대화형 모드:** `wiki-setup --vault <path> [--yes]`
 ```
 --vault <path>  → Step 1 질의 스킵, 해당 경로 사용
 --yes           → Step 2 기본값(raw/wiki) 등 모든 확인을 기본값 수락으로 진행
@@ -1108,7 +1108,7 @@ Step 10: QMD refresh — §3-5 정책 적용
 **description:**
 > "Use when the user wants to preserve knowledge from the current conversation into the wiki. Always saves to summaries/sessions/ first. Promotes to knowledge/concepts/entities/projects only when the user explicitly requests it."
 
-**트리거:** "이거 wiki에 저장해줘", "capture this", `/wiki-capture`, "wiki에 기록해줘"
+**트리거:** "이거 wiki에 저장해줘", "capture this", `wiki-capture`, "wiki에 기록해줘"
 
 **입력:** 현재 대화 컨텍스트 — 스킬 실행 주체가 대화를 컨텍스트 윈도우에 들고 있는 LLM 자신이므로, 트랜스크립트 API·파일 경유·stdin 같은 별도 획득 파이프라인은 불필요하다.
 > ⚠️ 한계 — 컨텍스트 압축: 긴 세션의 초반부는 압축 후 요약본만 남는다. 캡처는 빠를수록 충실하며, 압축 이후 캡처 시 초반부가 요약 수준으로만 저장됨을 사용자에게 고지한다.
@@ -1197,7 +1197,7 @@ Step 6: 저장 경로 + QMD 상태를 사용자에게 확인 보고
 **description:**
 > "Use when the user asks a question about knowledge stored in the wiki, or asks to find information about a topic. Searches hierarchically to minimize token cost."
 
-**트리거:** wiki 기반 질문, "wiki에서 X 찾아줘", `/wiki-query`, "X에 대해 알고 있어?"
+**트리거:** wiki 기반 질문, "wiki에서 X 찾아줘", `wiki-query`, "X에 대해 알고 있어?"
 
 > **read-only 경계:** wiki-query는 페이지·index·hot·QMD를 건드리지 않는다. Step 6의 `log.md` append만 예외(관찰 기록) — 정의·근거는 §3-6 "read-only 스킬의 경계" 참조.
 > **QMD source of truth 원칙:** QMD는 **후보 수집(discovery)에만** 쓰고, 최종 인용·답변 근거는 **항상 파일 본문에서 확인**한다. QMD가 캐시한 텍스트로 답하지 않는다.
@@ -1247,7 +1247,7 @@ Step 2b: QMD Semantic Pass (QMD 게이트 통과 시만)
 
   ⚠️ stale 인덱스 가드: QMD가 가리킨 경로가 실재하지 않거나(삭제·이동)
      본문에 해당 내용이 없으면 → 그 후보 폐기 +
-     "QMD 인덱스가 stale할 수 있음, /wiki-setup --update-qmd 권장" 1줄 (§3-5 self-healing)
+     "QMD 인덱스가 stale할 수 있음, wiki-setup --update-qmd 권장" 1줄 (§3-5 self-healing)
 
 Step 3: Section Pass (medium cost — Step 2/2b 불충분 시)
   각 후보 파일에 대해:
@@ -1296,7 +1296,7 @@ Step 6: wiki/log.md 쿼리 기록 (read-only 예외 — 관찰 기록, §3-6)
 
 Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
   - 관련 knowledge/ 페이지 있음 → 해당 페이지에 추가 제안
-  - 없음 → 새 knowledge/ 페이지 생성 또는 /wiki-capture 호출 제안
+  - 없음 → 새 knowledge/ 페이지 생성 또는 wiki-capture 호출 제안
 ```
 
 ---
@@ -1306,7 +1306,7 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
 **description:**
 > "Use when auditing the wiki for structural issues: broken links, orphan pages, missing format fields, unprocessed sources, stale content, PII exposure, or relationship errors."
 
-**트리거:** "wiki 상태 점검", "lint 실행", `/wiki-lint`, "wiki 감사", "wiki health check"
+**트리거:** "wiki 상태 점검", "lint 실행", `wiki-lint`, "wiki 감사", "wiki health check"
 
 **스캔 원칙:** frontmatter-scoped grep(`^---` 범위) 우선. 섹션 anchored read 활용. 불필요한 전체 페이지 읽기 지양.
 
@@ -1427,11 +1427,11 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
     manifest의 pages_created에 적힌 summary 페이지가 디스크에 실재하는지 검증
     체크: 각 manifest 항목의 pages_created 경로 → 파일 부재 시 정합성 위반 (raw/manifest 스캔 시 함께, 항목 5의 역방향)
     원인: 사용자가 summary를 수동 삭제 → manifest는 ingest 완료로 기록 → 재ingest 시 해시 일치로 스킵(영영 미복구되는 silent 손실)
-    → 다음 액션: 의도된 삭제면 manifest 항목 prune, 복구 원하면 /wiki-ingest --full <raw경로>로 재생성
+    → 다음 액션: 의도된 삭제면 manifest 항목 prune, 복구 원하면 wiki-ingest --full <raw경로>로 재생성
     자동 수정 불가 (의도 판단 필요)
 ```
 
-**출력 형식:** severity 그룹(🔴 → 🟡 → ℹ️)으로 묶어 출력한다. 각 섹션에는 **다음 액션 1줄**을 부착한다 — 특히 `--fix` 불가 항목은 사용자가 바로 해결을 시작할 수 있도록 액션을 명시한다 (conflict→"소스 채택 결정 후 §3-3 resolved 갱신", PII→"값 확인 후 redaction/.gitignore", 미처리 raw→"/wiki-ingest <경로>", 고아→"링크 추가 또는 archive").
+**출력 형식:** severity 그룹(🔴 → 🟡 → ℹ️)으로 묶어 출력한다. 각 섹션에는 **다음 액션 1줄**을 부착한다 — 특히 `--fix` 불가 항목은 사용자가 바로 해결을 시작할 수 있도록 액션을 명시한다 (conflict→"소스 채택 결정 후 §3-3 resolved 갱신", PII→"값 확인 후 redaction/.gitignore", 미처리 raw→"wiki-ingest <경로>", 고아→"링크 추가 또는 archive").
 ```markdown
 ## Wiki Lint Report — YYYY-MM-DD
 
@@ -1459,7 +1459,7 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
 
 #### 미처리 raw 소스 (N건)
 - `raw/articles/topic/article.md` — ingest 대기
-  → 액션: /wiki-ingest raw/articles/topic/article.md
+  → 액션: wiki-ingest raw/articles/topic/article.md
 
 #### index.md 불일치 (N건)
 - `wiki/concepts/new-page.md` — index.md 미등록  → 액션: --fix로 자동 등록
@@ -1485,7 +1485,7 @@ Step 7: 답변이 새 지식이면 knowledge/ 저장 제안
 
 #### Manifest 정합성 (N건)
 - `raw/papers/old.pdf` — manifest pages_created [[old-paper-slug]] 디스크에 없음
-  → 액션: 의도된 삭제면 manifest prune, 복구면 /wiki-ingest --full raw/papers/old.pdf (자동 수정 불가, 판단 필요)
+  → 액션: 의도된 삭제면 manifest prune, 복구면 wiki-ingest --full raw/papers/old.pdf (자동 수정 불가, 판단 필요)
 
 ### ════ ℹ️ SOFT (소프트 경고) ════
 
@@ -1537,7 +1537,7 @@ report-only를 넘어 act-and-report로 전환하는 "dream cycle". 고아 페�
 **description:**
 > "Use when the user wants to know what raw files are pending ingest, what was recently processed, or the overall state of the wiki. Answers 'what's left?' not 'what's broken?'"
 
-**트리거:** "wiki 상태", "뭐 쌓여있어", "ingest 뭐 남았어", `/wiki-status`
+**트리거:** "wiki 상태", "뭐 쌓여있어", "ingest 뭐 남았어", `wiki-status`
 
 **wiki-lint와 차이:** status = "무엇이 남았나" (진행 상황), lint = "무엇이 잘못됐나" (품질).
 **경계 원칙:** status는 **보고 전용(read-only)**이다. 탐지 기준이 겹치는 항목(삭제 대기 raw, manifest↔파일 정합성)도 status는 개수·목록만 보고하고, 판정 기준의 단일 출처와 수정 권한은 항상 wiki-lint에 둔다.
@@ -1552,7 +1552,7 @@ Step 0.5: wiki/hot.md 읽기 (있으면)
 Step 1: .manifest.json 읽기
   - 마지막 ingest 타임스탬프
   - 총 소스 수, 총 wiki 페이지 수
-  - manifest 없으면 → "아직 ingest된 파일 없음. /wiki-ingest를 먼저 실행하세요" 출력 후 Step 4로
+  - manifest 없으면 → "아직 ingest된 파일 없음. wiki-ingest를 먼저 실행하세요" 출력 후 Step 4로
 
 Step 2: raw/ 스캔 vs .manifest.json 비교 (content_hash 기반)
   각 raw 파일에 대해:
@@ -1612,9 +1612,9 @@ Step 5: 리포트 출력
 Step 6: What to Do Next (우선순위 액션, 최대 4개 — §3-8 NEXT_ACTIONS_MAX)
   아래 순서로 해당하는 항목만 출력:
 
-  1. 📥 미처리 raw N개 → /wiki-ingest
-  2. 🔄 갱신 필요 raw N개 → /wiki-ingest
-  3. 🗑️ 삭제 대기 raw N개 → /wiki-lint --fix
+  1. 📥 미처리 raw N개 → wiki-ingest
+  2. 🔄 갱신 필요 raw N개 → wiki-ingest
+  3. 🗑️ 삭제 대기 raw N개 → wiki-lint --fix
   4. 🩺 wiki-lint 마지막 실행: {날짜} (30일 이상이면 "점검 권장" 표시)
      ※ log.md에서 마지막 `LINT` 라인 grep (Step 4의 최근 5개에 없을 수 있음)
 
@@ -1662,9 +1662,9 @@ index-only 패스: ~3,200 tokens
 ...
 
 ## What to Do Next
-1. 📥 미처리 raw 3개 → /wiki-ingest
-2. 🔄 갱신 필요 raw 1개 → /wiki-ingest
-3. 🗑️ 삭제 대기 raw 2개 → /wiki-lint --fix
+1. 📥 미처리 raw 3개 → wiki-ingest
+2. 🔄 갱신 필요 raw 1개 → wiki-ingest
+3. 🗑️ 삭제 대기 raw 2개 → wiki-lint --fix
 4. 🩺 wiki-lint 마지막 실행: 2026-05-01 (28일 경과 — 점검 권장)
 ```
 
@@ -1675,7 +1675,7 @@ index-only 패스: ~3,200 tokens
 **description:**
 > "Use when the user wants to create or update a knowledge/ page by synthesizing from multiple summaries, concepts, or sessions. Handles deduplication, conflict detection, and structural reorganization."
 
-**트리거:** "knowledge 페이지 만들어줘", "이 주제 정리해줘", `/wiki-knowledge`, "summaries 종합해줘", "knowledge 업데이트해줘"
+**트리거:** "knowledge 페이지 만들어줘", "이 주제 정리해줘", `wiki-knowledge`, "summaries 종합해줘", "knowledge 업데이트해줘"
 
 **wiki-ingest와 차이:** ingest는 소스 1개를 summaries에 저장. wiki-knowledge는 여러 summaries·concepts를 재료로 심층 knowledge 페이지를 생성·유지.
 
@@ -1955,7 +1955,7 @@ context.md                        domain.md         decisions.md (첫 결정부�
 **범례:** **W**=직접 생성·수정(소유) · **W\***=조건부 직접 쓰기(각주) · **△**=직접 쓰기 금지(proposal 경유 또는 타 스킬 안내) · **R**=읽기 · **—**=해당 없음
 
 | 스킬 | overview·context·goals | architecture·domain·conventions | changes/ | decisions.md | backlog.md | troubleshooting·meetings |
-|------|:--:|:--:|:--:|:--:|:--:|:--:|
+|------|---|---|---|---|---|---|
 | `wiki-project-init` | **W** | R · △¹ | — | △→record² | — | — |
 | `wiki-project-design` | R | **W**³ | **W** | **W\***⁴ | R | R |
 | `wiki-project-record` | R | R · △¹ | R | **W** | **W** | **W** |
@@ -1977,7 +1977,7 @@ context.md                        domain.md         decisions.md (첫 결정부�
 **description:**
 > "Use when starting or (re)framing a project in the wiki — creates `projects/{name}/` with overview, context, and goals through a guided interview. Use when the user says 'start a project', 'plan project X', or asks to set up project docs."
 
-**트리거:** "프로젝트 기획하자", "X 프로젝트 시작", `/wiki-project-init`, "프로젝트 문서 세팅"
+**트리거:** "프로젝트 기획하자", "X 프로젝트 시작", `wiki-project-init`, "프로젝트 문서 세팅"
 
 **인터뷰 패턴** (spec-kit `[NEEDS CLARIFICATION]` 패턴 채택, `benchmark/spec-kit/analysis.md`):
 - 파일별 필수 질문 체크리스트를 한 번에 하나씩. 가능하면 추천답 제시 ("yes"로 수락 가능하게).
@@ -2024,7 +2024,7 @@ Step 7: 공통 종료 시퀀스 — index/log/hot/QMD
 **description:**
 > "Use when creating or evolving a project's design docs — architecture, domain model (glossary + domain/business rules), conventions — in `projects/{name}/`. Pulls evidence from the wiki (knowledge/summaries), proposes changes as ADDED/MODIFIED/REMOVED deltas in `changes/`, and merges after approval. Use when the user says 'design the architecture', 'update the design', 'capture the domain rules', or discusses the logical structure of a project."
 
-**트리거:** "아키텍처 잡자", "설계 업데이트", `/wiki-project-design`, "도메인 용어·규칙 정리", "비즈니스 로직 정리", "이 결정 설계에 반영"
+**트리거:** "아키텍처 잡자", "설계 업데이트", `wiki-project-design`, "도메인 용어·규칙 정리", "비즈니스 로직 정리", "이 결정 설계에 반영"
 
 **변경 유형 판별 — 표면 vs 의미:**
 - **표면 변경** (오타, 현황 숫자, 링크 보수, 표현 다듬기) → change proposal 생략, 바로 통합 갱신.
@@ -2145,7 +2145,7 @@ Step 8: 공통 종료 시퀀스 — index/log/hot/QMD
 **description:**
 > "Use when recording a project event or work item — a decision, a troubleshooting case, or a meeting summary — into `projects/{name}/`. Routes to decisions.md (append-only), troubleshooting/, meetings/, or the living backlog.md, and never rewrites immutable past entries. Use when the user says 'record this decision', 'log this issue', or after a problem is solved."
 
-**트리거:** "이거 결정으로 기록", "트러블슈팅 남겨줘", "할 일/위험 백로그에 추가", `/wiki-project-record`, "미팅 내용 프로젝트에 정리", 논의 수렴 시 Claude의 제안
+**트리거:** "이거 결정으로 기록", "트러블슈팅 남겨줘", "할 일/위험 백로그에 추가", `wiki-project-record`, "미팅 내용 프로젝트에 정리", 논의 수렴 시 Claude의 제안
 
 **정체성:** record는 "불변 로거"가 아니라 **프로젝트 기록·작업 sink**다 — 대화에서 나온 기록거리를 올바른 파일로 라우팅한다. 통합 형질은 *불변성*이 아니라 *"라우팅 후 기록"*이고, 불변성은 파일별 차등(아래 "불변성 예외").
 
@@ -2620,7 +2620,7 @@ raw/ 파일이 삭제되면 manifest가 "이 소스가 언제 어떤 wiki 페이
 | 2026-06-02 | 훅 배치를 성격별 글로벌/볼트-로컬 분리 (§5-0) | 스킬이 글로벌이라 훅의 CWD=볼트 가정이 cross-project에서 깨짐. 복제 시 외부 `raw/` 오탐·무관 세션 스팸. 가드(raw-protect)→글로벌, 컨텍스트(session-start)→볼트 로컬 |
 | 2026-06-02 | raw-protect 훅 글로벌 승격 + 실제 vault resolution | 외부 프로젝트에서 wiki 스킬 호출 시에도 실제 볼트 raw/ 보호. 스킬과 동일 resolution(.wiki-config 상향탐색→wiki-default-vault). 위반 시에만 작동해 글로벌이어도 노이즈 0 |
 | 2026-06-02 | raw-protect 삭제 허용 분기 추가 (라이브 모순 수정) | 기존 훅은 raw/ 포함 Bash 전체 차단 → 2주 cleanup 정책(`wiki-lint --fix` rm)을 막던 모순. `rm` 통과, 수정·덮어쓰기는 차단. 안전 판단은 wiki-lint에 위임 |
-| 2026-06-02 | Stop capture-nudge 훅 미채택 | 검토 후 제거. 제안형 훅은 정상 종료마다 발화해 가치 대비 노이즈 부담이 큼. capture는 사용자가 `/wiki-capture` 명시 호출로 처리. QMD dirty marker·manifest 가드도 동일 사유로 미채택 |
+| 2026-06-02 | Stop capture-nudge 훅 미채택 | 검토 후 제거. 제안형 훅은 정상 종료마다 발화해 가치 대비 노이즈 부담이 큼. capture는 사용자가 `wiki-capture` 명시 호출로 처리. QMD dirty marker·manifest 가드도 동일 사유로 미채택 |
 | 2026-06-02 | `wiki-project` 스킬 추가 (Phase 1, 9번째 — author 특화 / §2 Codex finding 반영) | projects/가 소유 스킬 없는 구멍이었음. sync(기존 코드 흡수) vs author(빈 프로젝트를 문서로 구축) 중 **author 특화**로 결정 — wiki-knowledge·wiki-capture와 타깃 구조·의미가 달라 별도 스킬. 초안(§4-9)만 작성, 대화 주도형 고도화는 별도 브레인스토밍에서 |
 | 2026-06-03 | wiki-project 벤치마크 3종 분석 수행 | spec-kit(⭐108k)·BMAD-METHOD(⭐48.5k)·OpenSpec(⭐52.6k)을 `benchmark/`에 분석. 도구 도입은 안 함(출력 목적지·생애주기 종착점이 다름 — 그들은 코드 구현, 우리는 살아있는 프로젝트 지식) — 패턴만 이식. 코드 단계 진입 시 볼트 문서가 해당 도구들의 입력이 되는 핸드오프 관계로 정리 |
 | 2026-06-03 | §4-9 전면 재설계: 단일 wiki-project → 3스킬 분할 (init/design/record) | 분할 기준은 파일별이 아닌 **변경 의미론**(저빈도 스냅샷/고빈도 진화/append-only 기록). 파일별 1스킬은 description 경쟁으로 오발동 위험. 자동성은 발동(사용자·제안·훅)/라우팅(스킬 자동)/승인(영향도 차등) 3계층으로 정의 |
@@ -2652,7 +2652,7 @@ raw/ 파일이 삭제되면 manifest가 "이 소스가 언제 어떤 wiki 페이
 | 2026-06-09 | wiki-lint taxonomy·성능·--fix 모델·PII 정밀도 확정 — §4-6 Finding 7건 해소 | ① 고아·깨진링크·개념갭·typed relationship(1·2·9·11)을 single-pass 링크 그래프로 통합 — `scripts/build-link-graph.sh`(O(N), 본문 [[link]]+frontmatter relationships 통합), 파일별 전체 grep(O(N×M)) 폐기. 결정론적이라 validator·resolver와 같은 코드 단일 출처 ② 번호 1~16 연속 재배열(3a·"11가지" 오류 수정), 각 항목에 [키]=log 필드명 1:1 + severity 태그(🔴/🟡/ℹ️), 출력을 severity 그룹으로 묶음(하드/소프트 격리) ③ 수정불가 항목에 "다음 액션" 1줄 부착(conflict→resolved 갱신, PII→redaction, raw→ingest, 고아→링크/archive) ④ --fix 기본 dry-run, 가역은 --yes 일괄, 비가역(raw 삭제)은 --yes로도 개별 확인. frontmatter 수정은 append-only(순서·주석 보존, 재serialize 금지) ⑤ PII는 "키워드+실제 값 할당" 패턴만(설명 텍스트·placeholder 제외), <!-- lint-ignore: pii --> 마커 지원, allowlist 파일 기각(스키마 최소주의) |
 | 2026-06-09 | provenance 산정 방식·책임 확정 — §4-8 Finding "provenance 계산 책임" 해소 | ① 산정 단위 = claim(문장 + 리스트 항목 1개). heading·코드블록·인용블록·frontmatter·Related pages는 분모 제외 — 마커가 주장 끝에 붙으므로 claim이 자연 단위, 문단/단어 단위는 마커 위치와 불일치라 기각 ② 진실 기준 = 본문 ^[inferred]/^[ambiguous] 마커, frontmatter 수치는 마커에서 도출된 캐시값 ③ 책임 분업 = wiki-capture(쓰기)가 마커 달고 비율 추정 저장(눈대중·저비용) → wiki-lint check 13(검산)이 마커로 재계산해 0.20↑ 차이 시 frontmatter 교정(정밀). "LLM 추정만"/"lint 계산만" 단독 모델 기각 — 매 쓰기 정밀 계산은 과비용, lint 단독은 쓰기 시점 신호 부재 ④ check 13이 이미 전제하던 재계산식을 §3-3 provenance 정의에 단일 출처로 명문화해 #13과 화해(스펙 내부 모순 제거) |
 | 2026-06-09 | wiki-status 경계·sessions·synthesis·raw 기준 확정 — §4-7 Finding 5건 해소 | ① status = 보고 전용(read-only) 경계 명문화: 삭제 대기 raw·manifest 정합성처럼 탐지 기준이 겹치는 항목도 status는 개수·목록만 보고, 판정 단일 출처·수정 권한은 wiki-lint (Codex "status/lint 경계") ② raw 삭제 기준 mtime→manifest ingested_at 전환(§4-7 Step 2 + §4-6 check 15 동시 변경, 단일 출처 유지) — mtime은 git checkout·복사·동기화로 깨짐 (Codex "raw 삭제 기준") ③ sessions를 status에서 완전 제거(Step 3 수집·리포트 Sessions 현황·What to Do Next 항목 전부 삭제) — §4-4 "미승격=정상"·CLAUDE.md "승격은 사용자 명시 요청 시만"과 충돌, status가 정상 상태를 종용하던 문제 해소. 어디에도 소비되지 않는 수집 단계라 통째 제거 ④ synthesis 기회 체크(Step 0.5·4.5) 삭제 — synthesis 디렉토리·스킬·hot.md 필드·스캔 메커니즘 모두 부재(벤치마크 "Synthesis gaps" 미채택 잔재), status 범위("what's left") 밖 ⑤ token_warn_threshold = "wiki 전체 로드" 기준 명문화(index-only·쿼리 추정은 참고용), size/4 근사는 "추정치" 표기로 오차 명시(tiktoken은 순수 마크다운 전제 위반 YAGNI) (Codex "threshold 범위"·Antigravity "토큰 정확도") ⑥ Step 재번호(3=토큰, 4=log, 5=리포트, 6=What to Do Next), lint 마지막 실행일은 log.md 마지막 LINT 라인 grep으로 보정 |
-| 2026-06-09 | §4-6 wiki-lint 항목 17 신설 — Manifest↔페이지 정합성 (§4-7 Antigravity "누락 파일" 후속, (b) 채택) | manifest pages_created가 가리키는 summary가 디스크에서 사라진 경우 탐지 — 재ingest가 해시 일치로 스킵해 영영 미복구되는 silent 데이터 손실 방지(항목 5 "미처리 raw"의 역방향). 🟡 REVIEW(의도 판단 필요): 의도 삭제면 manifest prune, 복구면 /wiki-ingest --full. status 아닌 lint 소관 — §4-7 경계 원칙(보고 vs 수정)의 귀결. 점검 항목 16→17, log 필드 manifest_integrity=Q 추가. (a)선언만 대신 (b)신규 체크 채택 — 사용자 결정 |
+| 2026-06-09 | §4-6 wiki-lint 항목 17 신설 — Manifest↔페이지 정합성 (§4-7 Antigravity "누락 파일" 후속, (b) 채택) | manifest pages_created가 가리키는 summary가 디스크에서 사라진 경우 탐지 — 재ingest가 해시 일치로 스킵해 영영 미복구되는 silent 데이터 손실 방지(항목 5 "미처리 raw"의 역방향). 🟡 REVIEW(의도 판단 필요): 의도 삭제면 manifest prune, 복구면 wiki-ingest --full. status 아닌 lint 소관 — §4-7 경계 원칙(보고 vs 수정)의 귀결. 점검 항목 16→17, log 필드 manifest_integrity=Q 추가. (a)선언만 대신 (b)신규 체크 채택 — 사용자 결정 |
 | 2026-06-09 | wiki-query read-only 경계·QMD source of truth·인용 포맷 확정 — §4-5 Finding 3건 해소 | ① read-only = "지식 콘텐츠 비수정"(디스크 무쓰기 아님) — log append는 관찰 기록 예외, 정의를 §3-6에 공통화(wiki-status도 적용). log 실패는 스킬 실패 아님(답변 이미 전달) ② QMD source of truth 원칙: QMD는 후보 수집 전용, 최종 인용은 항상 파일 본문 확인 — 워크플로에 암묵적이던 걸 명문화 + Step 2b stale 인덱스 가드(경로 부재·본문 불일치 시 후보 폐기 + --update-qmd 권장) ③ 인용 포맷 [[wikilink]] 기본 유지(Obsidian 1차 환경·이동 자동추적) — Step 3·4 실수행 시만 file_path:line 보조 표기, 터미널 출력 모드 토글 기각(YAGNI) |
 | 2026-06-07 | wiki-capture 입력·필터·PII·폐기 정책 확정 — §4-4 Finding 5건 해소 | ① 히스토리 획득 파이프라인 기각(전제 오류) — 스킬 실행 주체가 대화를 컨텍스트에 든 LLM 자신, API·파일 경유 불요. 압축 한계만 명시("캡처는 빠를수록 충실") ② 필터 보강: 재참조 테스트("2주 뒤 다시 찾을 이유?") + 경계 사례는 질문. 유형 리스트 확장 기각(경계는 리스트로 안 사라짐) ③ 범위: 기본=세션 전체에서 선별, 자연어 override, 플래그 문법 기각 ④ PII: 시크릿만 자동 [REDACTED](재참조 가치 0인 유일 범주), 이름·이메일은 마스킹 안 함(entities 볼트에서 이름=지식) + Step 1.5 항목 미리보기가 눈 검수. visibility/pii 태그 신설 YAGNI ⑤ sessions 영구 유지 — raw cleanup 미적용(sessions는 자신이 summary, 삭제=유일 기록 소실). 미승격=정상, 가치 상실 시 일반 archive 워크플로 (단일 강등) |
 | 2026-06-07 | §4-3 summary 길이 ≤200자 → ≤400자 교정 + "첫 언급 링크" 규칙 기각 | ≤200자는 §3-3 표준(≤400자, validator·split 트리거 동일)과 어긋난 잔존 불일치 — 유일한 이탈 지점 교정. concept 용어 본문 등장 시 첫 언급 [[링크]] 의무화는 검토 후 기각: ① 발견 경로는 QMD/grep이지 링크 아님 ② 규칙화 시 모든 쓰기에 용어별 페이지 존재 확인 비용 ③ "첫 언급" 판정은 기계 검증 불가 — validator 원칙 위배 ④ 링크 밀도=archive 시 깨진 링크 부채. 기존 3겹(최소 2개 링크·lint 보고·Phase 2 cross-linker 예약)으로 충분, 체감 부족 시 cross-linker를 당긴다 |

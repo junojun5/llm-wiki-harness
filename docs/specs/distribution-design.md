@@ -310,8 +310,18 @@ best-skill-creator의 Iron Law(테스트 없는 스킬 금지) 준수. 순서:
 
 ## 10. 미해결·검증 필요 항목
 
-- **Antigravity 훅 = 플랫폼 미지원(우리 사정 아님)** — 글로벌 스킬 경로(`~/.gemini/config/skills/`)·프로젝트(`.agents/skills/`)·AGENTS.md 로드 경로는 실측 확인됨(§4-1). 훅은 **공식 스키마가 아직 없다**: `antigravity.google/schemas/v1/hooks.json` = **404**, 그리고 `agy`(v1.0.3)가 `hooks.json`을 파싱하고도 **`0 handlers`만 등록**해 발화하지 않는 것이 실측됨. 즉 필드명 미검증이 아니라 handler 스키마 자체가 미공개다. Google 공개 시 `probe-hook.sh`로 실측 후 플러그인에 훅 추가. 그전까지 Antigravity는 우아한 강등(부트스트랩 규칙 + AGENTS.md 소프트 룰)으로만 보장.
-- **Codex/Cursor 훅 페이로드 스키마** — `.tool_input.file_path` 등 필드명을 §9-6 probe hook으로 golden fixture화하여 확정 (구현 선행 태스크로 승격).
-- **compact 재주입 반영** — Codex/Cursor의 `compact`/`preCompact` 이후 `additional_context` 주입이 실제 모델 컨텍스트에 반영되는지 §9-11 스모크로 검증.
-- ~~**마켓플레이스 + `~/.llm-wiki/` 부트스트랩 타이밍**~~ — **해결:** Claude/Codex 플러그인의 첫 SessionStart 훅이 `~/.llm-wiki/scripts`를 플러그인 루트에서 자가-부트스트랩(§5-0 session-start ①). Antigravity는 훅이 없어 `install.sh`(§7-1 [1]·[2])가 담당. Cursor 로컬은 sessionStart로 부트스트랩(Cloud Agent는 install.sh 폴백).
-- **Windows `.ps1`/`.bat` 패리티 (향후)** — 1차는 Git Bash/WSL 요구로 처리. 네이티브 cmd/PowerShell 에이전트 수요가 확인되면 `resolve-vault`·`validate-frontmatter`의 PowerShell 대응본 + 런처 OS 분기 추가.
+> **2026-08-01 Phase 3 실측 반영** — 근거는 [`docs/reports/2026-08-01-phase3-e2e-smoke.md`](../reports/2026-08-01-phase3-e2e-smoke.md). 해결된 항목은 취소선으로 남긴다(삭제하지 않는다).
+
+- **Antigravity 훅 = 플랫폼 미지원(우리 사정 아님)** — 글로벌 스킬 경로(`~/.gemini/config/skills/`)·프로젝트(`.agents/skills/`)·AGENTS.md 로드 경로는 실측 확인됨(§4-1). 훅은 **공식 스키마가 아직 없다**: `antigravity.google/schemas/v1/hooks.json` = **404**, 그리고 `agy`(v1.0.3)가 `hooks.json`을 파싱하고도 **`0 handlers`만 등록**해 발화하지 않는 것이 실측됨. 즉 필드명 미검증이 아니라 handler 스키마 자체가 미공개다. Google 공개 시 `probe-hook.sh`로 실측 후 플러그인에 훅 추가. 그전까지 Antigravity는 우아한 강등(부트스트랩 규칙 + AGENTS.md 소프트 룰)으로만 보장. **2026-08-01 재확인:** agy **1.1.8**에서도 동일하다(`hooks.json` **부재 = 의도된 상태**). 단 §4-1의 스킬·AGENTS.md 로드 경로는 **파일 배치까지만** 실측됐고, agy가 그걸 실제로 읽어 준수하는지는 **행동으로 미확인**이다(리포트 §5-5) — "로드 경로 실측 확인"을 준수 확인으로 읽지 않는다.
+- ~~**Codex/Cursor 훅 페이로드 스키마**~~ — **해결:** §9-6 probe로 golden fixture 확보 — `tests/fixtures/codex-hooks/`(`pretooluse-apply-patch` · `posttooluse-apply-patch` · `sessionstart`) · `tests/fixtures/cursor-hooks/`(`pretooluse-read` · `pretooluse-shell` · `pretooluse-write` · `sessionstart`). **잔여 2건:** ① Codex 쪽 fixture가 `apply_patch`뿐이라 `Edit`/`Write` 변형과 SessionStart source 4종(`startup`/`resume`/`clear`/`compact`) 중 나머지가 비어 있다. ② **PostToolUse 발화**는 Claude에서만 실측됐고 Codex·Cursor는 **등록만** 확인됐다(리포트 §5-2).
+- **compact 재주입 반영** — Codex/Cursor의 `compact`/`preCompact` 이후 `additional_context` 주입이 실제 모델 컨텍스트에 반영되는지 §9-11 스모크로 검증. **2026-08-01 상태: 미착수.** Phase 3 4플랫폼 스모크에서 다루지 않았다(리포트에 `compact` 언급 0건). SessionStart는 `startup` 경로만 실측됐다.
+- ~~**마켓플레이스 + `~/.llm-wiki/` 부트스트랩 타이밍**~~ — **해결:** Claude/Codex 플러그인의 첫 SessionStart 훅이 `~/.llm-wiki/scripts`를 플러그인 루트에서 자가-부트스트랩(§5-0 session-start ①). Antigravity는 훅이 없어 `install.sh`(§7-1 [1]·[2])가 담당. Cursor 로컬은 sessionStart로 부트스트랩(Cloud Agent는 install.sh 폴백). **2026-08-01 실측 뒷받침:** 설치 전 `~/.llm-wiki/` 미존재 → 설치 후 `scripts/` 생성, symlink 3개가 플러그인 캐시를 가리키고 `cmp` 일치(리포트 §4-1).
+- **Windows `.ps1`/`.bat` 패리티 (향후)** — 1차는 Git Bash/WSL 요구로 처리. 네이티브 cmd/PowerShell 에이전트 수요가 확인되면 `resolve-vault`·`validate-frontmatter`의 PowerShell 대응본 + 런처 OS 분기 추가. **현행 `hooks/run-hook.cmd`의 cmd.exe 분기는 정적 검토만 됐다** — macOS/Linux에서 cmd.exe를 실행할 수 없다(Phase 2 T5 이래 계속 열림). Unix 분기는 회귀 테스트가 있다.
+- ~~**Phase 3에서 새로 열린 검증 항목**~~ — **대부분 해결(2026-08-01 Phase 3b, [리포트](../reports/2026-08-01-phase3b-e2e-5skills.md)):**
+  - ~~§1 시나리오 나머지 5스킬~~ → **완주.** `wiki-status`·`wiki-knowledge`·`wiki-project-{init,design,record}` 전부. change proposal 전 주기(proposed→승인→병합→`decisions.md` 짝→archive 박제)와 `decisions.md` append-only 불변성까지 확인. 9/12스킬 커버.
+  - ~~Claude의 SessionStart 규칙 주입~~ → **확인.** 볼트 안 CWD에서 7961자 주입(포맷·래핑·frontmatter 제거·규칙 포함), 볼트 밖에서 stdout 0바이트.
+  - ~~QMD refresh 실행 경로~~ → **확인.** `update`→`embed`→`get` 전 구간. 사용자 레지스트리가 착수 시 컬렉션 0개였으므로 등록·제거로 오염 0을 달성했다.
+  - ~~`wiki-query` index-only · `wiki-lint --fix`~~ → **확인.** dry-run→`--yes` 수리 2건, LINT 17필드 라인.
+  - **Cursor 전역 경로**(`install.sh --fallback` → `~/.cursor/hooks.json`) — **여전히 열림.** 전역 오염을 피해 프로젝트-로컬(`--vault`)만 검증.
+  - **`ingest-url`·`wiki-capture`** — 범위 밖으로 남았다(12스킬 중 3종 미검증).
+- **쓰기 종료 시퀀스 순서를 기계적으로 강제하는 것이 없다** (Phase 3b 신규 발견) — 산문 규칙만 있고 훅·테스트가 검사하지 않아 잘못된 순서가 조용히 통과한다. mtime은 판정 근거로 약하고 훅은 stateless라 설계가 필요하다 — `docs/superpowers/specs/2026-08-01-phase2-deferred-design.md` §4로 이관.

@@ -53,13 +53,13 @@ qmd --version                     # 확인 (본 하네스는 2.5.3에서 실측 
 - **GGUF 모델이 온디바이스로 다운로드된다** — 전체 3개 합계 ~2GB. 다만 **이 하네스가 쓰는 경로는 임베딩 모델 하나뿐이다**: 스킬은 `update`·`embed`·`get`·`ls`만 호출하고, 나머지 두 모델(query expansion·reranking)이 필요한 `qmd query`는 호출하지 않는다. 첫 사용 시 멈춘 것처럼 보이는 걸 피하려면 미리 받아 둔다 — `qmd doctor`가 캐시 부족을 보고하며 `qmd pull`을 안내한다.
 - 진단: `qmd doctor` (설치·SQLite·모델 캐시) · `qmd status` (인덱스·컬렉션 health)
 
-**컬렉션 등록은 직접 하지 않는다.** 볼트에서 `/wiki-setup`을 실행하면 Step 9가 등록까지 처리한다(`qmd collection add {vault}/{wiki_dir} --name wiki`, 기등록이면 경로 매칭으로 스킵). QMD를 나중에 설치했다면 `/wiki-setup --update-qmd` 한 번으로 등록 + 전체 인덱싱이 된다.
+**컬렉션 등록은 직접 하지 않는다.** 볼트에서 `wiki-setup` 스킬을 실행하면 Step 9가 등록까지 처리한다(`qmd collection add {vault}/{wiki_dir} --name wiki`, 기등록이면 경로 매칭으로 스킵). QMD를 나중에 설치했다면 `wiki-setup --update-qmd` 한 번으로 등록 + 전체 인덱싱이 된다.
 
 QMD 설정은 `.wiki-config.json`에 저장하지 않는다 — qmd 자체 레지스트리가 단일 출처이고, 스킬은 매번 런타임에 게이트를 판정한다.
 
 ## 설치
 
-지원 플랫폼은 4개. 어느 쪽이든 ① 스킬·훅 배치 → ② 볼트에서 `/wiki-setup` 1회 → ③ 스킬 사용 흐름은 같다. 다른 건 **설치 위치**와 **훅이 자동으로 등록되는 정도**뿐이다.
+지원 플랫폼은 4개. 어느 쪽이든 ① 스킬·훅 배치 → ② 볼트에서 `wiki-setup` 스킬 1회 → ③ 스킬 사용 흐름은 같다. 다른 건 **설치 위치**와 **훅이 자동으로 등록되는 정도**뿐이다.
 
 | 플랫폼 | 플러그인 설치만으로 스킬+훅 | `install.sh` | 비고 |
 |---|---|---|---|
@@ -118,7 +118,7 @@ Antigravity 공식 플러그인 스펙은 `hooks.json`을 구조적으로 지원
 
 ### 볼트 설정
 
-설치 후 볼트에서 `/wiki-setup` 실행 → `.wiki-config.json` · `~/.llm-wiki/default-vault` · wiki 디렉토리 · QMD 컬렉션 등록.
+설치 후 볼트에서 `wiki-setup` 스킬 실행 → `.wiki-config.json` · `~/.llm-wiki/default-vault` · wiki 디렉토리 · QMD 컬렉션 등록.
 
 ## 스킬 카탈로그
 

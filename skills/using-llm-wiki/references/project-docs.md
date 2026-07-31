@@ -27,7 +27,8 @@ raw → summaries → knowledge ──→ projects/{name}/   (증류 체인의 �
 6. **필요한 파일만.** 처음부터 전체 파일을 만들지 않는다 (생성 트리거는 아래 생애주기 표).
 7. **자가검증 체크리스트 루프.** 문서 작성 후 템플릿 요구사항에서 체크리스트를 생성해 스스로 검증하고 실패 항목을 수정한다 — **최대 2회 반복**, 잔여 항목은 보고한다.
 8. **공통 종료 시퀀스.** 문서(페이지) 쓰기 → index.md → log.md → hot.md → QMD refresh (`using-llm-wiki`). **원본 먼저, 파생물 나중** — 역순이면 "기록은 있는데 문서가 없는" 거짓 기록이 남는다.
-9. **재진입 — 파일 상태로 이어받는다.** design·record는 한 대화 턴에 안 끝날 수 있다. 별도 모드 플래그를 두지 않고 파일 상태로 재개한다 — change proposal `status: proposed` 존재 = 초안 완료(승인 대기), 승인 시 apply. 재실행 시 완료분은 스킵하고 미완분만 진행하므로 proposed 적체·승인 전 병합이 구조적으로 방지된다.
+9. **상호 링크 — 새 문서는 인바운드를 갖고 태어난다.** 새 프로젝트 문서를 만들면 **이미 존재하는 형제 문서 하나에서 그 문서로 `[[링크]]`를 건다**(예: `architecture.md`의 `## Related pages`에 `[[domain]]`). `index.md` 등록은 마크다운 링크라 링크 그래프가 인바운드로 세지 않고 `hot.md`는 파생물이라 계수에서 제외되므로(§4-6), 이걸 빠뜨리면 스킬을 정확히 따랐는데도 직후 `wiki-lint`가 `orphans`를 보고한다. `decisions.md`·`backlog.md`·`troubleshooting/`도 대상이다 — `overview.md`나 `architecture.md`에서 가리킨다.
+10. **재진입 — 파일 상태로 이어받는다.** design·record는 한 대화 턴에 안 끝날 수 있다. 별도 모드 플래그를 두지 않고 파일 상태로 재개한다 — change proposal `status: proposed` 존재 = 초안 완료(승인 대기), 승인 시 apply. 재실행 시 완료분은 스킵하고 미완분만 진행하므로 proposed 적체·승인 전 병합이 구조적으로 방지된다.
 
 ## 디렉토리 구조
 
@@ -75,7 +76,7 @@ context.md                        domain.md         decisions.md (첫 결정부�
 **W**=직접 생성·수정(소유) · **W\***=조건부 직접 쓰기 · **△**=직접 쓰기 금지(proposal 경유 또는 타 스킬 안내) · **R**=읽기 · **—**=해당 없음
 
 | 스킬 | overview·context·goals | architecture·domain·conventions | changes/ | decisions.md | backlog.md | troubleshooting·meetings |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|
+|---|---|---|---|---|---|---|
 | `wiki-project-init` | **W** | R · △¹ | — | △→record² | — | — |
 | `wiki-project-design` | R | **W**³ | **W** | **W\***⁴ | R | R |
 | `wiki-project-record` | R | R · △¹ | R | **W** | **W** | **W** |

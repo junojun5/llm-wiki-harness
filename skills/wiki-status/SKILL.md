@@ -19,7 +19,7 @@ Step 0.5: wiki/hot.md 읽기 (있으면) — Step 5 "최근 작업" 맥락 보�
 
 Step 1: .manifest.json 읽기 (스키마·소비 패턴: using-llm-wiki/references/manifest.md)
   마지막 ingest 타임스탬프 / 총 소스 수 / 총 wiki 페이지 수
-  manifest 없으면 → "아직 ingest된 파일 없음. /wiki-ingest를 먼저 실행하세요" 출력 후 Step 4로
+  manifest 없으면 → "아직 ingest된 파일 없음. wiki-ingest를 먼저 실행하세요" 출력 후 Step 4로
 
 Step 2: raw/ 스캔 vs .manifest.json 비교 (content_hash 기반)
   manifest에 없음                          → 📥 미처리 (ingest 대기)
@@ -83,9 +83,9 @@ index-only 패스: ~K tokens
 해당하는 항목만 이 순서로, **최대 4개**까지 출력한다 (§3-8 `NEXT_ACTIONS_MAX` — 정의된 항목이 4개다).
 
 ```
-1. 📥 미처리 raw N개        → /wiki-ingest
-2. 🔄 갱신 필요 raw N개      → /wiki-ingest
-3. 🗑️ 삭제 대기 raw N개      → /wiki-lint --fix
+1. 📥 미처리 raw N개        → wiki-ingest
+2. 🔄 갱신 필요 raw N개      → wiki-ingest
+3. 🗑️ 삭제 대기 raw N개      → wiki-lint --fix
 4. 🩺 wiki-lint 마지막 실행: {날짜}  (30일 이상이면 "점검 권장" 표시)
    ※ log.md에서 마지막 LINT 라인을 grep한다 — Step 4의 최근 5개에 없을 수 있다
 

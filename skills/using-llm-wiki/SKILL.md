@@ -21,11 +21,11 @@ resolver는 상태를 남기지 않는다. 출력은 호출 시점의 stdout이 
 
 | exit | 코드 | 사용자에게 전달할 복구 경로 |
 |---|---|---|
-| 2 | `E_NO_CONFIG` | `/wiki-setup` |
-| 3 | `E_BAD_POINTER` | `/wiki-setup --update-path` |
-| 4 | `E_INVALID_CONFIG` | `/wiki-setup --repair` |
+| 2 | `E_NO_CONFIG` | `wiki-setup` |
+| 3 | `E_BAD_POINTER` | `wiki-setup --update-path` |
+| 4 | `E_INVALID_CONFIG` | `wiki-setup --repair` |
 | 5 | `E_VERSION` | harness `git pull` |
-| 6 | `E_NOT_A_VAULT` | `/wiki-setup --repair` |
+| 6 | `E_NOT_A_VAULT` | `wiki-setup --repair` |
 
 ## 불변 규칙
 
@@ -98,7 +98,7 @@ QMD는 볼트 위에 얹은 **선택적** 검색 인덱스다. markdown 볼트�
 **게이트** (refresh·검색 전에 판정. 설정 파일은 두지 않는다 — qmd 자체 레지스트리가 단일 출처):
 
 1. `command -v ${QMD_CLI:-qmd}` 실패 → Grep fallback, `QMD skipped: qmd CLI unavailable`
-2. `${QMD_CLI:-qmd} collection list` 출력에 `$VAULT_PATH/$WIKI_DIR` 와 매칭되는 컬렉션 없음 → Grep fallback + "`/wiki-setup --update-qmd`로 등록하세요", `QMD skipped: collection not registered`
+2. `${QMD_CLI:-qmd} collection list` 출력에 `$VAULT_PATH/$WIKI_DIR` 와 매칭되는 컬렉션 없음 → Grep fallback + "`wiki-setup --update-qmd`로 등록하세요", `QMD skipped: collection not registered`
 3. 둘 다 통과 → 매칭된 컬렉션명을 `QMD_WIKI_COLLECTION`으로 사용 (이름이 `wiki`가 아니어도 경로 매칭으로 찾는다)
 
 **시퀀스** — 모든 볼트 쓰기(페이지 + index + log + hot) 완료 후 마지막에, **스킬 실행당 1회.** 배치로 여러 페이지를 썼어도 중간 refresh 없이 마지막 1회다 (`update`가 컬렉션 전체 해시 스캔이라 1회로 전부 흡수한다). 실제 쓰기가 없었으면(해시 일치로 ingest 스킵, report-only lint) 생략한다.
@@ -134,7 +134,7 @@ Run 'qmd embed' to update embeddings (N unique hashes need vectors)
 
 > `update only + verified`는 **"embed가 필요 없었다"**는 뜻이지 "embed가 실패했다"는 뜻이 아니다. embed를 시도했으나 실패했다면 반드시 `QMD partial: … embed 실패`를 쓴다 — 실패를 성공으로 위장하지 않기 위한 구분이다.
 
-**self-healing.** `qmd update`가 매번 전체 해시 스캔이므로 실패한 refresh의 누락분은 다음 refresh가 흡수한다. 단발 실패·embed만 실패는 액션 불필요(그동안 검색은 Grep fallback, BM25는 정상). 2회 연속 실패, 검색 결과가 stale하게 느껴짐, 스킬 밖 수동 편집 직후 정확한 검색이 필요한 경우에만 `/wiki-setup --update-qmd`로 전체 reconcile한다.
+**self-healing.** `qmd update`가 매번 전체 해시 스캔이므로 실패한 refresh의 누락분은 다음 refresh가 흡수한다. 단발 실패·embed만 실패는 액션 불필요(그동안 검색은 Grep fallback, BM25는 정상). 2회 연속 실패, 검색 결과가 stale하게 느껴짐, 스킬 밖 수동 편집 직후 정확한 검색이 필요한 경우에만 `wiki-setup --update-qmd`로 전체 reconcile한다.
 
 ## 공통 참조
 

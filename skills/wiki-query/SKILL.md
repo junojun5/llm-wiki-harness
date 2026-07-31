@@ -52,7 +52,7 @@ Step 2b: QMD Semantic Pass (게이트 통과 시만)
 
   ⚠️ stale 인덱스 가드: QMD가 가리킨 경로가 실재하지 않거나(삭제·이동) 본문에 해당
      내용이 없으면 → 그 후보를 폐기하고 "QMD 인덱스가 stale할 수 있음,
-     /wiki-setup --update-qmd 권장" 1줄을 답변에 붙인다
+     wiki-setup --update-qmd 권장" 1줄을 답변에 붙인다
 
 Step 3: Section Pass (medium — Step 2/2b 불충분 시)
   각 후보 파일에 Grep -A 10 -B 2 "<query-term>" <candidate-file>
