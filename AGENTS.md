@@ -54,4 +54,4 @@ QMD는 볼트 위의 **선택적** 검색 인덱스(markdown이 source of truth)
 - `manifest.md` — `.manifest.json` ingest 원장 동형 스키마·필드 규칙·소비 패턴 (`wiki-ingest`·`ingest-url`·`wiki-status`·`wiki-lint`)
 - `project-docs.md` — `projects/` 컨셉·공통 원칙·생애주기·접근 권한 매트릭스·원장 형식 (wiki-project 스킬군 전용)
 
-> Codex 참고: `AGENTS.md`는 instruction chain으로 병합되며 기본 `project_doc_max_bytes`=32 KiB다. 이 파일은 축약판만 둔다 — 한도 초과 시 `project_doc_max_bytes`를 높이거나 상세를 SKILL.md로 위임한다 (README 트러블슈팅 참조).
+> Codex 참고: `AGENTS.md`는 instruction chain으로 병합되며 기본 `project_doc_max_bytes`=32 KiB다. 이 파일은 축약판만 둔다 — 한도 초과 시 `project_doc_max_bytes`를 높이거나 상세를 SKILL.md로 위임한다 ([README 트러블슈팅](README.md#트러블슈팅) 참조).
