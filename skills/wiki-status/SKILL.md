@@ -9,7 +9,7 @@ description: ingest 대기 중인 raw 파일, 최근 처리 내역, 볼트 전�
 
 시작 전 `using-llm-wiki` 스킬을 로드한다 — Config Gate, read-only 경계.
 
-> **보고 전용(read-only).** 탐지 기준이 `wiki-lint`와 겹치는 항목(삭제 대기 raw, manifest↔파일 정합성)도 **개수·목록만 보고**한다. 판정 기준의 단일 출처와 수정 권한은 항상 `wiki-lint`에 있다. `log.md` append 외의 쓰기와 QMD refresh는 하지 않는다.
+> **보고 전용(read-only).** 탐지 기준이 `wiki-lint`와 겹치는 항목(삭제 대기 raw, manifest↔파일 정합성)도 **개수·목록만 보고**한다. 판정 기준의 단일 출처와 수정 권한은 항상 `wiki-lint`에 있다. 유일한 쓰기는 Step 7의 `log.md` append(관찰 기록, §3-6 read-only 경계)이고 그 실패는 스킬 실패가 아니다 — 페이지·`index.md`·`hot.md`는 수정하지 않고 QMD refresh도 하지 않는다.
 
 ## 워크플로
 
@@ -40,6 +40,12 @@ Step 3: 토큰 풋프린트 추정
 Step 4: log.md 최근 5개 항목 읽기
 Step 5: 리포트 출력 (아래)
 Step 6: What to Do Next 출력 (아래)
+
+Step 7: wiki/log.md 상태 조회 기록 (read-only 예외 — 관찰 기록)
+  [YYYY-MM-DD] STATUS unprocessed=N recent_ingest="{경로}" token_estimate=K
+  ※ read-only 스킬이지만 log append는 허용된다 (§3-6). 리포트는 이미 전달됐으므로
+    append 실패는 스킬 실패가 아니다 — 경고 없이 넘어간다(self-healing).
+    페이지·index.md·hot.md·QMD는 여전히 건드리지 않는다.
 ```
 
 ## 리포트 형식
@@ -74,7 +80,7 @@ index-only 패스: ~K tokens
 
 ## What to Do Next
 
-해당하는 항목만 이 순서로, 최대 5개까지 출력한다.
+해당하는 항목만 이 순서로, **최대 4개**까지 출력한다 (§3-8 `NEXT_ACTIONS_MAX` — 정의된 항목이 4개다).
 
 ```
 1. 📥 미처리 raw N개        → /wiki-ingest
@@ -94,7 +100,8 @@ index-only 패스: ~K tokens
 □ 토큰 수치에 "추정치" 표기 + threshold는 전체 로드 기준으로만 판정
 □ raw 판정에 mtime 대신 manifest content_hash·ingested_at 사용
 □ 페이지·index·hot·QMD 무수정 (QMD refresh 없음)
-□ What to Do Next 를 우선순위 순으로, 없으면 최신 상태 메시지
+□ What to Do Next 를 우선순위 순으로 최대 4개, 없으면 최신 상태 메시지
+□ Step 7 STATUS 로그 라인 append (실패는 무시 — 스킬 실패 아님)
 ```
 
 ## 안티패턴
