@@ -23,6 +23,9 @@ HOME="$HOME_DIR" bash "$REPO/install.sh" --fallback --vault "$VAULT" >/dev/null 
 [ -f "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/plugin.json" ] && ok "Antigravity plugin.json" || no "Antigravity plugin.json"
 [ -L "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/skills/wiki-setup" ] && ok "Antigravity plugin skills" || no "Antigravity plugin skills"
 [ ! -e "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/hooks.json" ] && ok "Antigravity hooks.json 미포함(의도)" || no "Antigravity hooks.json이 있으면 안 됨(스키마 미검증)"
+# 매니페스트는 레포 소스(.antigravity-plugin/plugin.json)가 단일 출처 — heredoc 리터럴 생성 금지
+cmp -s "$REPO/.antigravity-plugin/plugin.json" "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/plugin.json" \
+  && ok "Antigravity plugin.json == 레포 소스" || no "Antigravity plugin.json이 레포 소스와 다름"
 
 echo "[2] wiki-setup 시뮬레이션 (config + pointer + 서명)"
 mkdir -p "$VAULT/wiki/knowledge" "$VAULT/raw/articles"
@@ -69,10 +72,10 @@ G="$(HOME="$HOME_DIR" bash "$HOME_DIR/.llm-wiki/scripts/build-link-graph.sh" "$V
 printf '%s' "$G" | grep -q "BROKEN	knowledge/ml.md	deep-learning" && ok "깨진 링크 감지" || no "깨진 링크 감지"
 
 echo "[7] session-start — 볼트 CWD에서만 주입(자가-게이팅)"
-(cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude) \
+(cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null) \
   | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'Config Gate' in d['hookSpecificOutput']['additionalContext'] else 1)" \
   && ok "볼트 CWD → 주입" || no "볼트 CWD → 주입"
-OUT_OUTSIDE="$(cd "$SB" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude)"
+OUT_OUTSIDE="$(cd "$SB" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null)"
 [ -z "$OUT_OUTSIDE" ] && ok "볼트 밖 CWD → 주입 없음(스팸 방지)" || no "볼트 밖인데 주입됨"
 
 echo "[8] install.sh 덮어쓰기 정책 — 기존 파일 보존 + .llm-wiki 사본 (비파괴)"

@@ -119,7 +119,9 @@ if [ -d "$HOME/.gemini" ] || command -v agy >/dev/null 2>&1; then
   echo "[2] Antigravity 감지 → ~/.gemini/config/plugins (전역 플러그인, skills+rules)"
   AGP="$HOME/.gemini/config/plugins/llm-wiki-harness"
   mkdir -p "$AGP/rules"
-  printf '{ "name": "llm-wiki-harness", "description": "LLM Wiki 하네스 — wiki 스킬 + AGENTS.md 규칙" }\n' > "$AGP/plugin.json"
+  # 매니페스트는 레포 소스가 단일 출처다 — heredoc 리터럴 생성은 변경 이력이 추적되지 않고
+  # 다른 3개 플랫폼(.claude-plugin/.codex-plugin/.cursor-plugin)과 비대칭이었다.
+  cp "$REPO/.antigravity-plugin/plugin.json" "$AGP/plugin.json"
   for d in "$REPO"/skills/*/; do link "$d" "$AGP/skills/$(basename "$d")"; done
   link "$REPO/AGENTS.md" "$AGP/rules/llm-wiki.md"
   # 전역 AGENTS.md는 사용자가 직접 쓴 파일일 수 있다 — 기존 파일을 symlink로 교체하지 않는다
