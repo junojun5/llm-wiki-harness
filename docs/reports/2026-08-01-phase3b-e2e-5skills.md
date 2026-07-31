@@ -147,3 +147,31 @@ master : broken=0               ← 수정 반영
 ### 검증
 
 `tests/run.sh` 9스위트 **PASS 172 FAIL 0** (`test-version-consistency` 7건 신규).
+
+### 발견 7 — 런타임 symlink가 버전에 고정된다 🔴
+
+발견 6을 고쳐 0.2.0을 배포한 직후, **더 심각한 결함이 드러났다.**
+
+```
+플러그인 캐시   → 0.2.0  ✅  broken=0
+런타임 홈       → 0.1.0  ❌  broken=1   ← 스킬·훅이 실제로 호출하는 경로
+```
+
+`~/.llm-wiki/scripts/*`는 `.../cache/<mp>/<plugin>/<version>/scripts/*`를 가리킨다. `hooks/session-start`의 부트스트랩 ①이 `[ -e "$LLMWIKI/$f" ] && continue`라서 **존재하면 절대 갱신하지 않는다.** 구버전 캐시가 남아 있으면 `-e`가 참이므로 버전을 올려도 재지정되지 않고, **버전을 올바르게 올렸는데도 수정이 적용되지 않는다.**
+
+발견 6보다 나쁘다 — 6은 "업데이트가 안 됨"이라 `plugin update` 출력으로 눈치챌 여지가 있지만, 7은 업데이트가 **성공했다고 보고된 뒤** 런타임만 옛것인 상태다.
+
+**수정: 형제 버전만 재지정한다.**
+
+단순히 `ln -sfn`으로 바꾸면 안 된다 — `install.sh`도 같은 symlink를 만들고 **사용자 클론**을 가리키게 한다(`install.sh:110`, 하네스 소유 파일이라 비파괴 정책의 예외). 무조건 재지정하면 마켓플레이스 세션이 그 설정을 덮어쓴다. 그래서 `ROOT`가 `*/plugins/cache/*` 안일 때만 형제 판정을 켜고, symlink 대상이 **같은 플러그인의 다른 버전 디렉토리**일 때만 갱신한다.
+
+**비교는 물리 경로(`pwd -P`)로 한다.** `readlink`는 저장된 원문을 돌려주므로 심볼릭 부모를 포함할 수 있다(macOS `/var` → `/private/var`). 원문끼리 비교하면 형제 판정이 조용히 빗나간다 — 테스트 작성 중에 실제로 이 함정에 걸렸다.
+
+분기 5가지를 회귀로 고정했다(`test-session-start` PASS 23 → 29): 형제 버전 재지정 · 사용자 클론 보존 · 깨진 링크 복구 · 실제 파일 보존 · 멱등.
+
+**⚠️ 전환에는 수동 복구가 1회 필요하다.** 이 수정은 **다음 버전의 훅부터** 동작한다. 설치된 0.2.0 훅은 수정 전 코드이므로 0.2.1로 업데이트해도 스스로 재지정하지 못한다. 0.2.1 설치 후 **한 번만** symlink 3개를 지우고 새 훅을 실행하면, 그 이후의 모든 버전 업데이트는 자동으로 따라온다.
+
+```bash
+rm -f ~/.llm-wiki/scripts/{resolve-vault,validate-frontmatter,build-link-graph}.sh
+bash ~/.claude/plugins/cache/llm-wiki-harness/llm-wiki-harness/<새버전>/hooks/session-start claude </dev/null
+```

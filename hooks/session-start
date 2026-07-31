@@ -11,12 +11,41 @@ PLATFORM="${1:-claude}"
 SELF="$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
 ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
 
-# ① 런타임 부트스트랩 (멱등·조용·비치명) — 없을 때만, 존재하는 소스만.
+# ① 런타임 부트스트랩 (멱등·조용·비치명) — 없을 때, 깨졌을 때, 형제 버전을 가리킬 때.
 LLMWIKI="$HOME/.llm-wiki/scripts"
 mkdir -p "$LLMWIKI" 2>/dev/null || true
+
+# 마켓플레이스 캐시는 버전별 디렉토리다(.../cache/<mp>/<plugin>/<version>/). 플러그인을
+# 업데이트하면 새 버전 디렉토리가 생기는데, 기존 symlink는 **구버전을 계속 가리킨다** —
+# 존재 여부만 보면 영구히 stale해지고 스킬·훅이 옛 스크립트를 호출한다(2026-08-01 실측:
+# 캐시는 0.2.0인데 런타임 홈은 0.1.0이라 고친 결함이 그대로 재현됐다).
+# 그래서 **같은 플러그인의 형제 버전을 가리킬 때만** 재지정한다.
+# install.sh는 사용자 클론을 가리키게 만드므로(비파괴 정책) 그 경우는 판정 자체를 끈다 —
+# ROOT가 플러그인 캐시 안일 때만 형제 재지정을 활성화한다.
+# 비교는 **물리 경로**로 한다 — readlink는 저장된 원문을 돌려주므로 심볼릭 부모를 포함할 수
+# 있고(macOS의 /var → /private/var 등), 원문끼리 비교하면 형제 판정이 조용히 빗나간다.
+case "$ROOT" in
+  */plugins/cache/*) SIBLING_ROOT="$(cd "$(dirname "$ROOT")" 2>/dev/null && pwd -P)" ;;
+  *)                 SIBLING_ROOT="" ;;
+esac
+
 for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
-  [ -e "$LLMWIKI/$f" ] && continue
-  [ -e "$ROOT/scripts/$f" ] && ln -sfn "$ROOT/scripts/$f" "$LLMWIKI/$f" 2>/dev/null || true
+  SRC="$ROOT/scripts/$f"; DST="$LLMWIKI/$f"
+  [ -e "$SRC" ] || continue
+  if [ -L "$DST" ]; then
+    CUR="$(readlink "$DST" 2>/dev/null || true)"
+    [ "$CUR" = "$SRC" ] && continue                       # 이미 이 배포본
+    if [ ! -e "$DST" ]; then                              # 깨진 링크 → 복구
+      ln -sfn "$SRC" "$DST" 2>/dev/null || true; continue
+    fi
+    if [ -n "$SIBLING_ROOT" ]; then                       # 형제 버전만 재지정
+      CURDIR="$(cd "$(dirname "$CUR")" 2>/dev/null && pwd -P)"
+      case "$CURDIR" in "$SIBLING_ROOT"/*) ln -sfn "$SRC" "$DST" 2>/dev/null || true ;; esac
+    fi
+    continue                                              # 그 밖(사용자 클론 등)은 보존
+  fi
+  [ -e "$DST" ] && continue                               # symlink 아닌 실제 파일 = 사용자 소유
+  ln -sfn "$SRC" "$DST" 2>/dev/null || true
 done
 
 # ② 볼트 게이트 — 볼트가 설정돼 있고(resolve 성공) CWD가 그 볼트 안일 때만 주입.
