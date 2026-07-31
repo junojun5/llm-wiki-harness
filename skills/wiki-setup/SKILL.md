@@ -43,8 +43,12 @@ Step 4: ~/.llm-wiki/default-vault 생성 — 볼트 절대경로 한 줄
 
 Step 5: 고정 wiki 서브디렉터리 생성 (없으면 생성, 있으면 유지)
   wiki/concepts/ wiki/knowledge/ wiki/entities/
-  wiki/projects/ wiki/meetings/ wiki/archived/
+  wiki/projects/ wiki/archived/
   ※ wiki/summaries/ 하위는 만들지 않는다 — raw/ 와 1:1 미러링이므로 ingest 시점에 생성
+  ※ wiki/meetings/ 는 만들지 않는다 — 폐지됨(2026-07-31). 미팅의 자리는 두 곳뿐이다:
+    전사본이 있으면 summaries/meetings/ (wiki-ingest), 프로젝트 라이브 미팅은
+    projects/{name}/meetings/ (wiki-project-record). category enum에 대응 값이 없어
+    이 폴더에 쓰면 PostToolUse 훅이 무조건 차단한다
 
 Step 6~8: wiki/index.md · log.md · hot.md 없으면 생성 (있으면 유지)
   세 파일의 형식·템플릿은 using-llm-wiki 의 references/derived-files.md 가 단일 출처다
@@ -127,7 +131,7 @@ per-skill refresh가 인덱스를 누적적으로 유지하지만, QMD를 껐다
 ```
 □ .wiki-config.json 필수 키(vault.path 절대경로·wiki_dir·raw_dir) 완비
 □ ~/.llm-wiki/default-vault 가 이 볼트를 가리킴 (또는 타 볼트 보호로 의도적 미변경)
-□ 고정 서브디렉터리 6개 + index.md · log.md · hot.md 존재
+□ 고정 서브디렉터리 5개 + index.md · log.md · hot.md 존재
 □ 기존 파일을 덮어쓰지 않음
 □ .manifest.json · .wiki-config.example.json 존재
 □ bash ~/.llm-wiki/scripts/resolve-vault.sh 가 exit 0 + 세 값을 출력
@@ -142,7 +146,7 @@ per-skill refresh가 인덱스를 누적적으로 유지하지만, QMD를 껐다
 | 덮어쓰기 전에 `.bak` 백업 파일을 만든다 | 볼트에 관리 주체 없는 파일이 쌓인다 | 확인 대화에 이전 값을 보여주는 것으로 갈음. 백업은 git의 일이다 |
 | `--yes`니까 전역 포인터도 새 볼트로 덮어쓴다 | 다른 볼트를 쓰던 세션이 조용히 이 볼트로 끌려온다 | 타 볼트를 가리키면 **경고만 하고 유지**. 새 볼트는 CWD 탐색으로 동작하므로 손실이 없다 |
 | `--repair`에서 전역 포인터까지 손본다 | repair가 "현재 볼트 복구"를 넘어 기본 볼트를 바꾼다 | 포인터 변경은 `--update-path` 전용 |
-| `wiki/summaries/articles/` 같은 하위 폴더를 미리 만든다 | `raw/` 1:1 미러링 불변식과 어긋난 빈 폴더가 남는다 | 고정 6개만 만들고, summaries 하위는 ingest 시점에 `raw/` 구조에 맞춰 생성 |
+| `wiki/summaries/articles/` 같은 하위 폴더를 미리 만든다 | `raw/` 1:1 미러링 불변식과 어긋난 빈 폴더가 남는다 | 고정 5개만 만들고, summaries 하위는 ingest 시점에 `raw/` 구조에 맞춰 생성 |
 | QMD 컬렉션명·CLI 경로·enabled를 `.wiki-config.json`에 적는다 | 같은 사실이 두 곳에 생겨 config와 qmd 레지스트리가 갈라진다 | config는 "볼트가 어디 있는가"만 답한다. QMD 상태는 매번 런타임 게이트로 판정 |
 | `collection add` 없이 `qmd update`부터 실행한다 | 인덱싱 대상이 없어 조용히 아무 일도 일어나지 않는다 | Step 9-a 등록을 먼저(기등록이면 경로 매칭으로 스킵) |
 | 새 볼트에 `qmd embed`까지 돌린다 | 임베딩할 내용이 0인데 고비용 모델 추론을 태운다 | 빈 볼트는 `update`만. embed는 `--update-qmd`나 실제 쓰기 이후에 |
