@@ -145,6 +145,48 @@ echo "test: troubleshooting status 위반(proposed) → 실패"
 new_sandbox; run_validate "wiki/projects/p/troubleshooting/bug.md" "${VALID_TS/status: open/status: proposed}"
 assert_eq "exit !=0" "1" "$CODE"; assert_contains "status 언급" "status" "$ERR"; cleanup
 
+# ── 표기 가드: 인라인 flow 표기는 검사를 무력화하므로 fail-loud여야 한다 (§3-3) ──
+echo "test: provenance 인라인 표기(합=0.3) → 실패 (조용히 통과 금지)"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+provenance: { extracted: 0.1, inferred: 0.1, ambiguous: 0.1 \}}"
+assert_eq "exit !=0" "1" "$CODE"
+assert_contains "블록 표기 안내" "provenance가 블록 표기가 아닙니다" "$ERR"; cleanup
+
+echo "test: provenance 블록 표기(합=0.4) → 합계 위반으로 실패"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+provenance:
+  extracted: 0.2
+  inferred: 0.1
+  ambiguous: 0.1}"
+assert_eq "exit !=0" "1" "$CODE"
+assert_contains "합계 위반 언급" "provenance 합이 1.0에서 벗어남" "$ERR"; cleanup
+
+echo "test: provenance 블록 표기(합=1.0) → 통과"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+provenance:
+  extracted: 0.7
+  inferred: 0.2
+  ambiguous: 0.1}"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: relationships 인라인 표기 → 실패"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+relationships: uses}"
+assert_eq "exit !=0" "1" "$CODE"
+assert_contains "블록 리스트 안내" "relationships가 블록 리스트 표기가 아닙니다" "$ERR"; cleanup
+
+echo "test: relationships 블록 리스트 표기 → 통과"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+relationships:
+  - target: \"[[deep-learning]]\"
+    type: extends}"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

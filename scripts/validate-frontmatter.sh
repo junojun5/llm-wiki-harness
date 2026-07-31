@@ -159,12 +159,22 @@ if "base_confidence" in d and isinstance(d["base_confidence"], str) and d["base_
 if "tier" in d and isinstance(d["tier"], str) and d["tier"] and d["tier"] not in TIER_ENUM:
     errors.append("tier enum 위반: %r" % d["tier"])
 
-# provenance 합 ≈ 1.0 (있을 때)
+# ── 표기 가드 (fail-loud) ───────────────────────────────────
+# 위 YAML 서브셋 파서는 인라인 flow mapping/sequence를 스칼라 문자열로 읽는다.
+# 그 상태로 아래 isinstance 게이트에 들어가면 검사 블록이 통째로 건너뛰어져
+# "합계가 틀려도 통과"한다. 키가 있는데 기대 타입으로 파싱되지 않으면 여기서 끊는다. (§3-3)
+if "provenance" in d and not isinstance(d["provenance"], dict):
+    errors.append("provenance가 블록 표기가 아닙니다 (인라인 { } 표기는 검사를 무력화합니다)")
+if "relationships" in d and not isinstance(d["relationships"], list):
+    errors.append("relationships가 블록 리스트 표기가 아닙니다")
+
+# provenance 합 ≈ 1.0 (있을 때). 허용오차는 §3-8 PROVENANCE_TOLERANCE = ±0.05
+PROVENANCE_TOLERANCE = 0.05
 prov = d.get("provenance")
 if isinstance(prov, dict):
     try:
         s = sum(float(prov.get(k, 0) or 0) for k in ("extracted","inferred","ambiguous"))
-        if abs(s - 1.0) > 0.05:
+        if abs(s - 1.0) > PROVENANCE_TOLERANCE:
             errors.append("provenance 합이 1.0에서 벗어남: %.3f" % s)
     except ValueError:
         errors.append("provenance 값이 숫자가 아닙니다")
