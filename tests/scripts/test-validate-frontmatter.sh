@@ -172,12 +172,37 @@ provenance:
   ambiguous: 0.1}"
 assert_eq "exit 0" "0" "$CODE"; cleanup
 
-echo "test: relationships 인라인 표기 → 실패"
+echo "test: relationships 베어 스칼라 표기 → 실패"
 new_sandbox
 run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
 relationships: uses}"
 assert_eq "exit !=0" "1" "$CODE"
 assert_contains "블록 리스트 안내" "relationships가 블록 리스트 표기가 아닙니다" "$ERR"; cleanup
+
+# 인라인 flow **시퀀스**는 파서의 `[ ... ]` 분기를 타 문자열 리스트로 읽히므로
+# isinstance(list) 만으로는 통과한다 — 그 상태에서 type enum 루프가 무발화하는 것이
+# 실제 결함이었다. 표기 자체를 끊어야 한다.
+echo "test: relationships 인라인 flow 시퀀스 → 실패 (조용히 통과 금지)"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+relationships: [{ target: \"[[deep-learning]]\", type: extends \}]}"
+assert_eq "exit !=0" "1" "$CODE"
+assert_contains "블록 리스트 안내" "relationships가 블록 리스트 표기가 아닙니다" "$ERR"; cleanup
+
+echo "test: relationships 인라인 flow 시퀀스 + 잘못된 type → 실패 (enum 우회 금지)"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+relationships: [{ target: \"[[deep-learning]]\", type: NOT_A_TYPE \}]}"
+assert_eq "exit !=0" "1" "$CODE"; cleanup
+
+echo "test: relationships 블록 리스트 + 잘못된 type → 실패 (enum 경로 생존)"
+new_sandbox
+run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
+relationships:
+  - target: \"[[deep-learning]]\"
+    type: NOT_A_TYPE}"
+assert_eq "exit !=0" "1" "$CODE"
+assert_contains "type enum 언급" "relationship type enum 위반" "$ERR"; cleanup
 
 echo "test: relationships 블록 리스트 표기 → 통과"
 new_sandbox
@@ -186,6 +211,26 @@ relationships:
   - target: \"[[deep-learning]]\"
     type: extends}"
 assert_eq "exit 0" "0" "$CODE"; cleanup
+
+# ── 클래스 판정 범위: 클래스②는 projects/{name}/{changes|troubleshooting}/ 로 한정 (§3-3) ──
+# knowledge/ 는 대형 주제에 서브폴더를 허용하므로, 같은 이름의 서브폴더가 있어도
+# 클래스① 페이지로 판정돼야 한다.
+echo "test: knowledge/changes/ 서브폴더 → 클래스①로 판정 (통과)"
+new_sandbox; run_validate "wiki/knowledge/api/changes/versioning.md" "$VALID_PAGE"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: knowledge/troubleshooting/ 서브폴더 → 클래스①로 판정 (통과)"
+new_sandbox; run_validate "wiki/knowledge/api/troubleshooting/timeouts.md" "$VALID_PAGE"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: projects/{name}/changes/archive/ → 여전히 클래스② (통과)"
+new_sandbox; run_validate "wiki/projects/p/changes/archive/2026-06-25-x.md" "$VALID_CHANGE"
+assert_eq "exit 0" "0" "$CODE"; cleanup
+
+echo "test: projects/{name}/changes/ 에 클래스① frontmatter → 클래스②로 판정돼 실패"
+new_sandbox; run_validate "wiki/projects/p/changes/2026-06-25-y.md" "$VALID_PAGE"
+assert_eq "exit !=0" "1" "$CODE"
+assert_contains "클래스② 안내" "category는 projects여야 합니다" "$ERR"; cleanup
 
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
