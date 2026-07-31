@@ -52,15 +52,24 @@ Step 6~8: wiki/index.md · log.md · hot.md 없으면 생성 (있으면 유지)
   log.md   → [YYYY-MM-DD] INIT vault="{경로}"
   hot.md   → 빈 템플릿 (파생물이라 새 볼트의 활동은 0이 올바른 초기 상태)
 
-Step 9: QMD 설정
-  "QMD가 설치돼 있나요? (https://github.com/tobi/qmd)"
-  설치 확인 시:
+Step 9: QMD 설정 (선택 — 없어도 볼트는 완전히 동작한다)
+  command -v ${QMD_CLI:-qmd} 로 설치를 직접 확인한다 (사용자에게 묻지 않는다)
+
+  설치돼 있으면:
     a. 컬렉션 등록 (1회성):
        ${QMD_CLI:-qmd} collection add {vault}/{wiki_dir} --name wiki
        collection list에서 경로 매칭으로 이미 등록됐으면 스킵
+       ⚠️ 경로 인자를 반드시 명시한다 — 생략하면 qmd가 cwd를 컬렉션으로 등록한다
     b. ${QMD_CLI:-qmd} update
        빈 볼트는 임베딩할 내용이 없으므로 embed는 불필요하다
-  미설치 시: "Grep fallback으로 동작합니다. 설치 후 /wiki-setup --update-qmd 실행 가능"
+
+  미설치면 아래를 그대로 안내하고 계속 진행한다 (중단하지 않는다):
+    "QMD 미설치 — Grep fallback으로 동작합니다. 검색을 강화하려면:
+       npm install -g @tobilu/qmd      (또는 bun install -g @tobilu/qmd)
+       전제: Node.js ≥ 22 또는 Bun ≥ 1.0 · macOS는 brew install sqlite
+       첫 실행 시 GGUF 모델 ~2GB 자동 다운로드
+     설치 후 /wiki-setup --update-qmd 로 등록 + 전체 인덱싱"
+
   ※ QMD 설정은 어디에도 저장하지 않는다 — qmd 자체 레지스트리가 단일 출처다
 
 Step 10: .manifest.json 없으면 { "version": 1 } 로 생성 (있으면 유지)
@@ -100,7 +109,8 @@ per-skill refresh가 인덱스를 누적적으로 유지하지만, QMD를 껐다
 
 ```
 1. QMD 게이트 판정 (using-llm-wiki)
-   CLI 미설치 → 설치 안내 후 종료
+   CLI 미설치 → Step 9의 설치 안내 문구를 그대로 출력하고 종료
+                (npm install -g @tobilu/qmd · Node ≥ 22 · macOS는 brew install sqlite)
    컬렉션 미등록 → Step 9-a 등록부터 수행
 2. ${QMD_CLI:-qmd} update                      # 볼트 전체 해시 스캔 — 신규·변경·삭제 반영
    ${QMD_CLI:-qmd} embed                       # update가 벡터 필요를 보고할 때 (전체 reconcile은 대개 필요)

@@ -26,6 +26,37 @@ Andrej Karpathy의 **LLM Wiki 패턴**을 하네스로 구현한 것이다. RAG�
 
 **에이전트는 작업 전 항상 관련 스킬을 먼저 확인한다.** 제안이 아니라 강제되는 흐름이다. 케이스별 상세 흐름(그린필드·대량 적재·질문 우선·캡처·유지보수·프로젝트·멀티플랫폼)은 [docs/best-practices.md](docs/best-practices.md) 참조.
 
+## 요구사항
+
+### 필수 — 이게 없으면 하네스가 동작하지 않는다
+
+| | 확인 | 용도 |
+|---|---|---|
+| **bash** | `bash --version` | 공유 스크립트·훅 전부 bash다. Windows는 [Git Bash 또는 WSL](#windows--git-bash-또는-wsl-bash가-path에-필요) |
+| **python3** | `python3 --version` | `resolve-vault.sh`(Config Gate)·`validate-frontmatter.sh`가 JSON·YAML 파싱에 쓴다 |
+
+> ⚠️ **python3가 없으면 오진과 함께 가드가 조용히 풀린다.** Config Gate가 `E_INVALID_CONFIG: config 파싱에 실패했습니다`를 내보내지만 **실제 원인은 config가 아니라 python3 부재**다 — `--repair`를 반복해도 해결되지 않는다. 동시에 resolver 실패를 "볼트가 아님"으로 해석하는 훅들이 통과 처리되어 **raw/ 보호와 frontmatter 검증이 둘 다 발화하지 않는다.** 진단이 이상하면 먼저 `python3 --version`을 확인한다.
+
+`jq`는 필요하지 않다 (파싱은 전부 python3로 통일돼 있다).
+
+### 선택 — QMD (검색 인덱스)
+
+QMD는 **없어도 된다.** markdown 볼트가 source of truth이고 QMD는 그 위에 얹는 검색 캐시다. 미설치면 스킬이 Grep으로 대체하고 `QMD skipped: qmd CLI unavailable`을 보고한다. 있으면 BM25 + 벡터 시맨틱 검색으로 `wiki-query`의 후보 수집이 좋아진다.
+
+```bash
+npm install -g @tobilu/qmd        # 또는: bun install -g @tobilu/qmd
+qmd --version                     # 확인 (본 하네스는 2.5.3에서 실측 검증)
+```
+
+- **전제:** Node.js ≥ 22 또는 Bun ≥ 1.0
+- **macOS:** Homebrew SQLite가 필요할 수 있다 — `brew install sqlite` (qmd는 `better-sqlite3`를 번들하므로 대개 불필요하다. `qmd doctor`가 판정해 준다)
+- **GGUF 모델이 온디바이스로 다운로드된다** — 전체 3개 합계 ~2GB. 다만 **이 하네스가 쓰는 경로는 임베딩 모델 하나뿐이다**: 스킬은 `update`·`embed`·`get`·`ls`만 호출하고, 나머지 두 모델(query expansion·reranking)이 필요한 `qmd query`는 호출하지 않는다. 첫 사용 시 멈춘 것처럼 보이는 걸 피하려면 미리 받아 둔다 — `qmd doctor`가 캐시 부족을 보고하며 `qmd pull`을 안내한다.
+- 진단: `qmd doctor` (설치·SQLite·모델 캐시) · `qmd status` (인덱스·컬렉션 health)
+
+**컬렉션 등록은 직접 하지 않는다.** 볼트에서 `/wiki-setup`을 실행하면 Step 9가 등록까지 처리한다(`qmd collection add {vault}/{wiki_dir} --name wiki`, 기등록이면 경로 매칭으로 스킵). QMD를 나중에 설치했다면 `/wiki-setup --update-qmd` 한 번으로 등록 + 전체 인덱싱이 된다.
+
+QMD 설정은 `.wiki-config.json`에 저장하지 않는다 — qmd 자체 레지스트리가 단일 출처이고, 스킬은 매번 런타임에 게이트를 판정한다.
+
 ## 설치
 
 지원 플랫폼은 4개. 어느 쪽이든 ① 스킬·훅 배치 → ② 볼트에서 `/wiki-setup` 1회 → ③ 스킬 사용 흐름은 같다. 다른 건 **설치 위치**와 **훅이 자동으로 등록되는 정도**뿐이다.
@@ -168,13 +199,37 @@ llm-wiki-harness/
 
 스크립트 **파일 자체가 없으면** `./install.sh`를 재실행한다 — `~/.llm-wiki/scripts` 부트스트랩이 안 된 상태다.
 
+### `E_INVALID_CONFIG`인데 `--repair`가 듣지 않는다 → python3 확인
+
+`.wiki-config.json`이 정상인데도 `E_INVALID_CONFIG: config 파싱에 실패했습니다`가 반복되면 **원인은 config가 아니라 python3 부재**다. resolver가 파싱에 python3를 쓰기 때문에 없으면 파싱 실패로 보고된다.
+
+```bash
+python3 --version     # 없으면 설치 후 재시도
+```
+
+이 상태에서는 **raw/ 가드와 frontmatter 검증도 함께 발화하지 않는다** — 두 훅이 resolver 실패를 "볼트 밖 세션"으로 해석해 통과시키기 때문이다(비볼트 오탐 방지 설계). 즉 python3 하나가 없으면 보호 장치 전체가 조용히 풀리므로, 진단이 이상하면 가장 먼저 확인한다.
+
 ### QMD 미설치·미등록 → Grep fallback
 
 QMD는 **선택적** 검색 인덱스다(markdown이 source of truth). 없어도 하네스는 동작하며, 스킬이 Grep으로 대체하고 상태 문자열을 남긴다.
 
-- `QMD skipped: qmd CLI unavailable` — `qmd`가 PATH에 없다. 설치하거나 그대로 Grep으로 쓴다.
+- `QMD skipped: qmd CLI unavailable` — `qmd`가 PATH에 없다. [요구사항](#선택--qmd-검색-인덱스)의 `npm install -g @tobilu/qmd`로 설치하거나, 그대로 Grep으로 쓴다.
 - `QMD skipped: collection not registered` — 볼트가 컬렉션으로 등록되지 않았다 → `/wiki-setup --update-qmd`
 - `QMD partial: …` / `QMD failed: …` — **단발이면 액션 불필요**하다. `qmd update`가 매번 전체 해시 스캔이라 다음 쓰기가 누락분을 흡수한다(self-healing). **2회 연속 실패**나 검색 결과가 stale하게 느껴질 때만 `/wiki-setup --update-qmd`.
+
+진단 순서:
+
+```bash
+qmd doctor                  # 설치·SQLite·모델 캐시 (help에는 안 나오지만 동작한다)
+qmd status                  # 인덱스 + 컬렉션 health
+qmd collection list         # 볼트 wiki/ 경로가 목록에 있는지
+```
+
+`qmd doctor`가 `model cache: missing N/3`을 보고하면 안내대로 `qmd pull`로 미리 받는다. 단 우리가 쓰는 `embed`에는 임베딩 모델만 필요하므로, 나머지 2개가 없어도 하네스의 QMD refresh는 정상 동작한다.
+
+> ⚠️ **`qmd collection add`는 경로를 생략하면 현재 디렉토리를 등록한다.** 수동으로 정리할 때 `qmd collection add`만 치면 엉뚱한 cwd가 컬렉션이 된다 — 경로를 항상 명시하고, 잘못 만들었으면 `qmd collection remove <name>`으로 지운다. `/wiki-setup`은 항상 볼트 경로를 명시하므로 이 함정에 걸리지 않는다.
+
+> 첫 QMD 사용 시 **GGUF 모델 ~2GB 다운로드**로 오래 멈춘 것처럼 보일 수 있다. 실패가 아니라 초기 1회 비용이다.
 
 ### 훅이 발화하지 않는다
 
