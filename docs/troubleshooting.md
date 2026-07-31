@@ -18,6 +18,7 @@
 | Cloud 환경에서 부트스트랩이 안 된다 | [Cursor 로컬 vs Cloud](#cursor--로컬-agent-vs-cloud-agent) |
 | 워크스페이스 밖 접근이 막힌다 | [sandbox 권한 승인](#cursorantigravity--sandbox-권한-승인) |
 | Windows에서 훅이 전부 죽는다 | [Git Bash / WSL](#windows--git-bash-또는-wsl-bash가-path에-필요) |
+| 고친 걸 머지했는데 설치본이 그대로다 | [버전 bump 없이는 배포되지 않는다](#버전-bump-없이는-배포되지-않는다) |
 
 ## Config Gate 실패 (`E_*` 코드)
 
@@ -131,3 +132,39 @@ run-hook.cmd: bash를 찾을 수 없습니다. Git Bash 또는 WSL bash를 PATH�
 ```
 
 이 메시지가 보이면 Git for Windows 또는 WSL을 설치한다. Codex의 플러그인 훅은 비Windows 전제다. `.ps1`/`.bat` 패리티 버전은 향후 보완 항목이다.
+
+## 버전 bump 없이는 배포되지 않는다
+
+**증상.** master에 수정을 머지했는데 `claude plugin update`가 `already at the latest version (X.Y.Z)`라고 하고, 설치된 스킬·스크립트가 **옛 내용 그대로**다.
+
+**원인.** `claude plugin update`는 **`plugin.json`의 `version` 문자열로만** 갱신 여부를 판정한다. 커밋 sha는 보지 않는다. 2026-08-01 실측:
+
+```
+마켓플레이스 클론  → 1e31d51 (머지 커밋까지 갱신됨)
+설치 기록 sha      → b1d1593 (구버전)
+version            → 0.1.0 → 0.1.0 (변화 없음)
+결과               → "already at the latest version" · 캐시 refresh 안 됨
+```
+
+`claude plugin marketplace update`로 마켓플레이스 메타를 갱신해도 마찬가지다 — 그건 카탈로그만 새로 받는다.
+
+**확인.** 설치본과 레포를 직접 대조한다.
+
+```bash
+CACHE=~/.claude/plugins/cache/llm-wiki-harness/llm-wiki-harness/<버전>
+cmp -s "$CACHE/scripts/build-link-graph.sh" ./scripts/build-link-graph.sh \
+  && echo same || echo STALE
+```
+
+**해결.** 릴리스마다 **5곳을 함께** 올린다 — `VERSION` · `.claude-plugin/plugin.json` · `.codex-plugin/plugin.json` · `.cursor-plugin/plugin.json` · `.antigravity-plugin/plugin.json`. 일부만 올리면 플랫폼마다 다른 버전이 배포되므로, `tests/install/test-version-consistency.sh`가 5곳 일치를 강제한다(`tests/run.sh`에 포함).
+
+올린 뒤:
+
+```bash
+claude plugin marketplace update llm-wiki-harness
+claude plugin update llm-wiki-harness@llm-wiki-harness   # 정규화된 이름 필요
+```
+
+`claude plugin update llm-wiki-harness`(마켓플레이스 접미어 없이)는 `Plugin "llm-wiki-harness" not found`로 실패한다 — `claude plugin list`가 출력하는 `<플러그인>@<마켓플레이스>` 형태를 그대로 쓴다.
+
+**적용은 재시작 후다.** `update`는 캐시를 교체하지만 실행 중인 세션은 옛 스킬을 들고 있다. 런타임 홈(`~/.llm-wiki/scripts/`)은 캐시를 symlink하므로 **스크립트는 즉시 새 버전이 되고 스킬 문서만 재시작을 기다린다** — 이 비대칭이 "스크립트는 고쳐졌는데 스킬이 옛 절차를 따르는" 상태를 만들 수 있으니 릴리스 검증은 재시작 후에 한다.

@@ -3,7 +3,7 @@
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 fail=0
-for t in "$HERE"/scripts/test-*.sh "$HERE"/hooks/test-*.sh "$HERE"/install/smoke.sh; do
+for t in "$HERE"/scripts/test-*.sh "$HERE"/hooks/test-*.sh "$HERE"/install/test-*.sh "$HERE"/install/smoke.sh; do
   name="$(basename "$t")"
   if bash "$t" >/tmp/lwh-test.$$ 2>&1; then
     echo "PASS  $name  ($(grep -o 'PASS=[0-9]*' /tmp/lwh-test.$$ | tail -1))"
