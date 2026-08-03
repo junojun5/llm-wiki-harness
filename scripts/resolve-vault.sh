@@ -35,7 +35,16 @@ if [ -z "$CONFIG" ]; then
   [ -f "$CONFIG" ] || fail 3 E_BAD_POINTER "전역 포인터 경로에 .wiki-config.json이 없습니다. wiki-setup 스킬을 --update-path로 실행해 볼트 위치를 재지정하세요"
 fi
 
-# --- 2) config 파싱 + 필수 키/형식 검증 (python3) --------------------------
+# --- 2) 런타임 게이트 — 파싱 전 (§3-2) ------------------------------------
+# 위치 판정(1)은 전부 순수 셸이므로 볼트 없는 머신은 여기까지 오지 않고 E_NO_CONFIG로
+# 끝난다. 즉 **E_NO_RUNTIME은 "이 머신에 볼트가 있다"를 함의**하며, 글로벌 훅이 이 코드에만
+# 반응하면 무관한 프로젝트엔 경고가 새지 않는다(별도 스팸 방지 로직 불필요).
+# 게이트가 없으면 python3 부재가 아래 파싱 실패로 흘러 E_INVALID_CONFIG로 **오진**되고,
+# 사용자는 듣지 않는 --repair를 반복한다(2026-08-01 실측).
+command -v python3 >/dev/null 2>&1 \
+  || fail 7 E_NO_RUNTIME "python3가 필요하지만 PATH에 없습니다. wiki 스킬과 가드 훅이 비활성입니다 — --repair로는 해결되지 않습니다"
+
+# --- 3) config 파싱 + 필수 키/형식 검증 (python3) --------------------------
 # python3은 구조화된 결과를 라인으로 내보낸다: 첫 토큰이 분기 키.
 PARSED="$(python3 - "$CONFIG" <<'PY' 2>/dev/null
 import json, os, sys
@@ -83,19 +92,19 @@ VAULT_PATH="$(printf '%s\n' "$PARSED" | sed -n 's/^PATH=//p')"
 WIKI_DIR="$(printf '%s\n' "$PARSED" | sed -n 's/^WIKI=//p')"
 RAW_DIR="$(printf '%s\n' "$PARSED" | sed -n 's/^RAW=//p')"
 
-# --- 3) version 게이트 ----------------------------------------------------
+# --- 4) version 게이트 ----------------------------------------------------
 if [ "$VERSION" -gt "$KNOWN_VERSION" ]; then
   fail 5 E_VERSION "config version($VERSION)이 스킬이 아는 버전($KNOWN_VERSION)보다 높습니다. harness repo를 업데이트하세요 (git pull)"
 elif [ "$VERSION" -lt "$KNOWN_VERSION" ]; then
   printf 'E_WARN: config version(%s)이 구버전입니다. 진행은 하지만 wiki-setup 스킬 --repair 권장\n' "$VERSION" >&2
 fi
 
-# --- 4) vault 서명 검증 ---------------------------------------------------
+# --- 5) vault 서명 검증 ---------------------------------------------------
 if [ ! -f "$VAULT_PATH/$WIKI_DIR/index.md" ] || [ ! -f "$VAULT_PATH/$WIKI_DIR/log.md" ]; then
   fail 6 E_NOT_A_VAULT "wiki 서명($WIKI_DIR/index.md, log.md)이 없습니다. wiki-setup 스킬을 --repair로 실행하세요"
 fi
 
-# --- 5) 성공 -------------------------------------------------------------
+# --- 6) 성공 -------------------------------------------------------------
 printf 'VAULT_PATH=%s\n' "$VAULT_PATH"
 printf 'WIKI_DIR=%s\n' "$WIKI_DIR"
 printf 'RAW_DIR=%s\n' "$RAW_DIR"

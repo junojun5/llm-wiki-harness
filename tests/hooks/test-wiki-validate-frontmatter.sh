@@ -113,6 +113,22 @@ new_sandbox
 run_hook "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Delete File: wiki/knowledge/gone.md\n*** End Patch\n\"}}"
 eq "exit 0" "0" "$CODE"; cleanup
 
+# ⚠️ 의도된 fail-open (§5-3, 근거는 §5-2와 동일): python3가 없으면 resolver가
+#    E_NO_RUNTIME(exit 7)로 실패하고 이 훅은 검증 없이 통과시킨다 — 경로 추출과 validator
+#    본체가 모두 python3라 검증 자체가 성립하지 않는다. 고지는 session-start가 1회 담당.
+#    이 테스트는 그 결정을 고정해 둔다.
+echo "test: [의도된 fail-open] python3 없음 → 위반 페이로드도 통과 (exit 0)"
+new_sandbox
+NOPY="$SANDBOX/nopy"; mkdir -p "$NOPY"
+for c in bash dirname head sed cat env; do ln -sf "$(command -v "$c")" "$NOPY/$c"; done
+printf 'title 없음\n' > "$VAULT/wiki/knowledge/broken.md"
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/wiki/knowledge/broken.md\"}}" \
+  | HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$HOOK" 2>"$SANDBOX/err")"; CODE=$?
+eq "exit 0 (§5-3 fail-open)" "0" "$CODE"
+(cd "$VAULT" && HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh" >/dev/null 2>&1)
+eq "resolver는 exit 7(E_NO_RUNTIME)" "7" "$?"
+cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

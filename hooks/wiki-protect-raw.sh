@@ -10,6 +10,15 @@ PLATFORM="${1:-claude}"
 MSG="raw/는 읽기 전용입니다 (수정 금지). 삭제는 wiki-lint --fix를 경유하세요."
 
 # --- vault resolution: §3-2 resolver 재사용 ---
+# resolver 실패 → 조용히 통과. **exit 7(E_NO_RUNTIME, python3 부재)도 포함하며 의도된 것이다**
+# (§5-2). ① 관할: 이 훅은 글로벌이라 볼트를 안 쓰는 프로젝트에서 resolver가 항상 실패하므로,
+# 실패를 차단으로 해석하면 무관한 모든 작업의 쓰기가 막힌다 — 게다가 지킬 대상인
+# RAW_ABS 자체가 resolve 없이는 정의되지 않는다. ② 판정 불능: 아래 경로 판정 블록이 python3라
+# python3가 없으면 "이 쓰기가 raw/를 향하는가"를 가릴 수 없고, 차단으로 돌리면 raw/만 골라
+# 막는 게 아니라 볼트 안 전체를 막는 것이 된다. 셸로 JSON 판정을 재구현하는 길도 기각
+# (두 훅의 추출 규칙 동일성 유지 부담 — 아래 주석 참조).
+# 대신 python3 부재 고지는 hooks/session-start가 세션당 1회 담당한다 —
+# **강등 지점과 고지 지점을 분리**하는 것이 이 설계의 요지다. 여기서 다시 발견하지 말 것.
 RESOLVED="$(bash "$HOME/.llm-wiki/scripts/resolve-vault.sh" 2>/dev/null)" || exit 0
 VAULT_ROOT="$(printf '%s\n' "$RESOLVED" | sed -n 's/^VAULT_PATH=//p')"
 RAW_DIR="$(printf '%s\n' "$RESOLVED" | sed -n 's/^RAW_DIR=//p')"

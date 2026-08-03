@@ -8,8 +8,52 @@
 # Antigravity는 훅 미사용(AGENTS.md 상시 로드로 대체).
 set -u
 PLATFORM="${1:-claude}"
-SELF="$(python3 -c "import os,sys; print(os.path.realpath(sys.argv[1]))" "${BASH_SOURCE[0]}")"
-ROOT="$(cd "$(dirname "$SELF")/.." && pwd)"
+
+# 자기 경로 해석은 **python3에 의존하지 않는다** (§5-1). python3로 realpath를 구하면
+# python3 없는 머신에서 SELF가 빈 값이 되고 ROOT가 `dirname ""`=`.` 기준으로 잡혀
+# **CWD의 부모**를 가리킨다 — 부트스트랩 ①이 조용히 no-op 하고, 런타임 부재를 알리는
+# 경고 경로 자체가 죽는다(2026-08-01 실측). 런타임 고지가 그 런타임을 요구할 수 없다.
+# 마지막 컴포넌트의 symlink는 루프로 따라가고(캐시·install.sh 배치 모두 1단이지만
+# 상한을 둔다), 부모 경로의 symlink는 `pwd -P`가 해석한다 — 결과는 realpath와 같은
+# **물리 경로**이고, 아래 형제 버전 판정이 물리 경로끼리 비교하는 전제가 유지된다.
+SELF="${BASH_SOURCE[0]}"
+_hops=0
+while [ -L "$SELF" ] && [ "$_hops" -lt 20 ]; do
+  _t="$(readlink "$SELF" 2>/dev/null || true)"
+  [ -n "$_t" ] || break
+  case "$_t" in /*) SELF="$_t" ;; *) SELF="$(dirname "$SELF")/$_t" ;; esac
+  _hops=$((_hops+1))
+done
+ROOT="$(cd "$(dirname "$SELF")/.." && pwd -P)"
+
+# 페이로드 읽기 — 정상 경로와 경고 경로가 공유한다. 호출 지점이 중요하다(아래 ② 참조).
+# ⚠️ stdin 읽기에 반드시 상한을 둔다. TTY 제외만으로는 부족하다 — 페이로드가 오지 않는
+# 경로(수동 실행, 닫히지 않은 파이프를 상속한 경우)에서 무한 대기하면 **세션 시작 자체가
+# 멈춘다**. 줄당 대기 상한 2초, 실제 훅 호출은 쓰고 바로 닫으므로 지연이 없다.
+INPUT=""
+read_payload() {
+  INPUT=""
+  [ -t 0 ] && return 0
+  local _line=""
+  while IFS= read -r -t 2 _line || [ -n "$_line" ]; do
+    INPUT="$INPUT$_line"
+    _line=""
+  done
+}
+
+# python3 부재 경고 — 고정 문자열이라 JSON 빌더가 필요 없다(printf로 직접 쓴다).
+# 포맷은 정상 경로와 동일(§5-1): Claude·Codex는 hookSpecificOutput.additionalContext,
+# Cursor는 래퍼 없는 additional_context. 메시지에 따옴표·개행 리터럴을 넣지 않으므로
+# 이스케이프 문제가 없다(`\n`은 JSON 이스케이프 시퀀스로 그대로 나간다).
+# 주입과 stderr 양쪽에 낸다 — 주입은 에이전트가 읽어 설명하게, stderr는 사용자가 직접 본다.
+emit_runtime_warning() {
+  local _m="<EXTREMELY_IMPORTANT>\npython3를 PATH에서 찾을 수 없습니다. LLM Wiki의 스킬 12종과 가드 훅 2종이 모두 비활성입니다 — raw/ 쓰기 보호와 frontmatter 검증이 동작하지 않습니다. python3를 설치한 뒤 세션을 다시 시작하세요. wiki-setup --repair로는 해결되지 않습니다.\n</EXTREMELY_IMPORTANT>"
+  case "$PLATFORM" in
+    cursor) printf '{"additional_context":"%s"}\n' "$_m" ;;
+    *)      printf '{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"%s"}}\n' "$_m" ;;
+  esac
+  printf 'E_NO_RUNTIME: python3 부재 — LLM Wiki 스킬·가드 훅이 비활성입니다. python3를 설치한 뒤 세션을 다시 시작하세요 (wiki-setup --repair로는 해결되지 않습니다)\n' >&2
+}
 
 # ① 런타임 부트스트랩 (멱등·조용·비치명) — 없을 때, 깨졌을 때, 형제 버전을 가리킬 때.
 LLMWIKI="$HOME/.llm-wiki/scripts"
@@ -49,7 +93,25 @@ for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
 done
 
 # ② 볼트 게이트 — 볼트가 설정돼 있고(resolve 성공) CWD가 그 볼트 안일 때만 주입.
-RESOLVED="$(bash "$LLMWIKI/resolve-vault.sh" 2>/dev/null)" || exit 0   # 설정된 볼트 없음 → 부트스트랩만
+RESOLVED="$(bash "$LLMWIKI/resolve-vault.sh" 2>/dev/null)"; RC=$?
+
+# exit 7 = E_NO_RUNTIME: python3가 없다. 게이트가 위치 판정 뒤에 있으므로 이 코드는
+# **"이 머신에 볼트가 있다"를 함의**한다(§3-2) — 따라서 무관한 프로젝트엔 새지 않는다.
+# 스킬 12종과 가드 훅 2종이 전부 비활성이라 조용히 넘기면 보호가 사라진 걸 아무도 모른다.
+# 고지 지점은 세션 시작 1회다 — python3 부재는 매 쓰기의 문제가 아니라 머신 설정 문제이고,
+# 가드 훅은 §5-2의 근거대로 fail-open을 유지한다(강등 지점과 고지 지점의 분리).
+if [ "$RC" -eq 7 ]; then
+  # 페이로드는 **이 분기 안에서만** 읽는다. 스크립트 앞으로 끌어올리면 볼트 밖 세션도
+  # 읽기 대기 비용을 낸다(페이로드가 오지 않는 경로에서 줄당 최대 2초).
+  read_payload
+  # 플랫폼 판별 폴백 — 정상 경로의 엄격한 JSON 검사가 python3라 여기선 쓸 수 없다.
+  # 고정 메시지 전달에는 순수 셸 부분 일치로 충분하다.
+  case "$INPUT" in *cursor_version*) PLATFORM="cursor" ;; esac
+  emit_runtime_warning
+  exit 0
+fi
+[ "$RC" -eq 0 ] || exit 0   # 그 외 실패(볼트 없음·무효) → 현행대로 조용히, 부트스트랩만
+
 VAULT_PATH="$(printf '%s\n' "$RESOLVED" | sed -n 's/^VAULT_PATH=//p')"
 [ -n "$VAULT_PATH" ] || exit 0
 case "$PWD/" in "$VAULT_PATH"/*) ;; *) exit 0 ;; esac   # CWD가 볼트 밖 → 주입 안 함(전역 스팸 방지)
@@ -60,18 +122,8 @@ SKILL="$ROOT/skills/using-llm-wiki/SKILL.md"
 # ③ 플랫폼 판별은 argv보다 페이로드가 우선한다 (§5-1). Cursor는 Claude 포맷 등록
 #    (~/.claude/settings.json 등)도 실행하므로 argv가 `claude`인 채 Cursor에서 발화할 수 있다.
 #    페이로드에 cursor_version 키가 있으면 Cursor로 판정한다.
-#    ⚠️ stdin 읽기에 반드시 상한을 둔다. TTY 제외만으로는 부족하다 — 페이로드가 오지 않는
-#    경로(수동 실행, 닫히지 않은 파이프를 상속한 경우)에서 `cat`이 무한 대기하면
-#    **세션 시작 자체가 멈춘다**. 줄당 대기 상한 2초, 실제 훅 호출은 쓰고 바로 닫으므로
-#    지연이 없다.
-INPUT=""
-if [ ! -t 0 ]; then
-  _line=""
-  while IFS= read -r -t 2 _line || [ -n "$_line" ]; do
-    INPUT="$INPUT$_line"
-    _line=""
-  done
-fi
+#    읽기 상한의 근거는 read_payload() 주석 참조.
+read_payload
 if [ -n "$INPUT" ] && printf '%s' "$INPUT" | python3 -c '
 import json, sys
 try:

@@ -1,7 +1,7 @@
 {
   "_comment": "Antigravity 플러그인 매니페스트. install.sh가 ~/.gemini/config/plugins/llm-wiki-harness/plugin.json으로 복사하고 skills/·rules/llm-wiki.md(=AGENTS.md)를 그 옆에 symlink한다. ⚠️ hooks 키는 없다 — 공식 훅 스키마(antigravity.google/schemas/v1/hooks.json)가 404 미공개이고 agy v1.0.3은 hooks.json을 파싱하고도 0 handlers만 등록해 발화하지 않는다(실측). 따라서 Antigravity에서 raw/ 보호는 기계적 차단이 아니라 AGENTS.md 소프트 룰이며, ~/.llm-wiki 부트스트랩도 훅 자가치유가 불가해 install.sh 1회 실행이 유일한 경로다. Google이 handler 스키마를 공개하면 probe-hook.sh로 실측한 뒤 hooks를 추가한다.",
   "name": "llm-wiki-harness",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "LLM Wiki 하네스 — wiki 스킬 + AGENTS.md 규칙",
   "author": { "name": "junojun5" }
 }

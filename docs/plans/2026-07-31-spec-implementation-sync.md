@@ -91,9 +91,11 @@ bash tests/run.sh
 **검증** — `tests/hooks/test-wiki-protect-raw.sh`에 추가:
 ```bash
 # apply_patch 상대경로가 raw/ 를 가리키면 차단(exit 2)
-# shell 상대경로가 raw/ 를 가리키면 차단
+# shell 상대경로가 raw/ 를 가리키면 차단   ← 폐기(스펙 §5-2 비목표), 아래 참조
 # wiki/ 를 가리키는 상대경로는 통과(exit 0)
 ```
+
+> **폐기 (2026-08-04):** "shell 상대경로가 raw/ 를 가리키면 차단"은 이행하지 않는다. `spec.md` §5-2가 `COMMAND` 문자열 안의 상대경로를 **명시적 비목표**로 선언한다("셸 문법 전면 해석은 비목표", accident-prevention 수준 유지) — 이 계획서와 스펙이 충돌하고 `docs/plans/`는 정본 계층 밖이므로 스펙을 따랐다. 현행 통과 동작은 `tests/hooks/test-wiki-protect-raw.sh`의 `[알려진 한계]` 케이스로 고정돼 있어, 누가 차단으로 바꾸면 테스트가 잡는다. 재개 조건은 다중 사용자 환경 또는 신뢰 경계 변화이고 그때는 §5-2 개정이 선행한다. 근거: [보류 3건 설계](../superpowers/specs/2026-08-01-phase2-deferred-design.md) §2.
 
 ---
 

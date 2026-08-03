@@ -41,6 +41,22 @@ run_resolver() {
   ERR="$(cat "$SANDBOX/err")"
 }
 
+# python3가 없는 머신을 재현해 실행한다 (§3-2 E_NO_RUNTIME).
+# PATH를 화이트리스트 디렉토리 **단독**으로 좁힌다 — 뒤에 /usr/bin을 붙이면 거기 있는
+# python3가 그대로 보여 은닉이 실패하고, python3 shim 파일을 두는 것도 안 된다
+# (파일이 존재하면 `command -v python3`가 성공하므로 부재를 재현하지 못한다).
+# 목록에서 빠진 명령이 있으면 테스트가 시끄럽게 실패한다 — 이 방향의 실패는 안전하다.
+run_resolver_nopy() {
+  local cwd="$1" c
+  mkdir -p "$SANDBOX/nopy"
+  for c in bash dirname head sed cat env; do
+    ln -sf "$(command -v "$c")" "$SANDBOX/nopy/$c"
+  done
+  OUT="$(cd "$cwd" && HOME="$SANDBOX/home" PATH="$SANDBOX/nopy" "$BASH" "$RESOLVER" 2>"$SANDBOX/err")"
+  CODE=$?
+  ERR="$(cat "$SANDBOX/err")"
+}
+
 assert_eq() {
   local desc="$1" expected="$2" actual="$3"
   if [ "$expected" = "$actual" ]; then
@@ -143,6 +159,29 @@ new_sandbox
 run_resolver "$SANDBOX/work"
 FIRST_LINE="$(printf '%s\n' "$ERR" | head -1)"
 assert_contains "첫 줄 E_NO_CONFIG: 접두" "E_NO_CONFIG:" "$FIRST_LINE"
+cleanup
+
+# === 테스트 9: E_NO_RUNTIME (exit 7) — 볼트는 있고 python3가 없음 ========
+# 오진 방지: 이 상황이 E_INVALID_CONFIG(4)로 나오면 사용자는 듣지 않는 --repair를 반복한다.
+echo "test: 볼트 있음 + python3 없음이면 E_NO_RUNTIME exit 7"
+new_sandbox
+make_valid_vault "$SANDBOX/work/myvault"
+run_resolver_nopy "$SANDBOX/work/myvault"
+assert_eq "exit 7" "7" "$CODE"
+FIRST_LINE="$(printf '%s\n' "$ERR" | head -1)"
+assert_contains "첫 줄 E_NO_RUNTIME: 접두" "E_NO_RUNTIME:" "$FIRST_LINE"
+assert_contains "python3 부재를 지목" "python3" "$ERR"
+assert_contains "--repair로는 안 된다는 안내" "--repair로는 해결되지 않습니다" "$ERR"
+cleanup
+
+# === 테스트 10: 게이트가 위치 판정을 앞지르지 않는다 =====================
+# 볼트가 없는 머신에서는 python3를 볼 일도 없어야 한다 — E_NO_RUNTIME이
+# "볼트 존재"를 함의해야 글로벌 훅이 스팸 없이 분기할 수 있다 (§3-2).
+echo "test: 볼트 없음 + python3 없음이면 E_NO_CONFIG exit 2 (E_NO_RUNTIME 아님)"
+new_sandbox
+run_resolver_nopy "$SANDBOX/work"
+assert_eq "exit 2" "2" "$CODE"
+assert_contains "stderr E_NO_CONFIG" "E_NO_CONFIG" "$ERR"
 cleanup
 
 # --- 결과 -----------------------------------------------------------------
