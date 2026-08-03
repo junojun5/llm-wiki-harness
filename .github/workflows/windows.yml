@@ -46,6 +46,14 @@ jobs:
       - name: bash 존재 확인
         shell: bash
         run: bash --version && python3 --version
+      # 진단(임시): tests/run.sh 는 각 스위트 출력을 파일로 리다이렉트하므로 **매달린 스위트의
+      # 내부 출력이 보이지 않는다**. 용의 스위트를 직접 돌려 케이스 단위로 지점을 특정한다.
+      # 마지막에 출력된 `test: …` 라인이 멈춘 케이스다. 원인 확정 후 이 스텝은 삭제한다.
+      - name: 진단 — resolve-vault 스위트 단독 (출력 스트리밍)
+        shell: bash
+        timeout-minutes: 4
+        continue-on-error: true
+        run: bash tests/scripts/test-resolve-vault.sh
       - name: 전체 스위트
         shell: bash
         timeout-minutes: 8
