@@ -58,8 +58,13 @@ jobs:
           rc_all=0
           for t in tests/scripts/test-*.sh tests/hooks/test-*.sh tests/install/test-*.sh tests/install/smoke.sh; do
             printf '=== START %s\n' "$t"
-            timeout 120 bash "$t" </dev/null 2>&1 | tail -40
-            rc=${PIPESTATUS[0]}
+            # ⚠️ 파이프로 받지 않는다. timeout이 스위트를 죽여도 손자 프로세스가 파이프를
+            #    붙잡으면 `tail`이 EOF를 못 받아 **그 자리에서 다시 매달린다**(2026-08-04 실측:
+            #    `| tail -40`을 썼더니 timeout 120이 무의미해지고 END 라인이 나오지 않았다).
+            #    파일로 받아 스위트가 끝난 뒤에 읽는다. -k 로 SIGTERM 후 강제 종료까지 보장.
+            timeout -k 10 120 bash "$t" </dev/null >"$RUNNER_TEMP/out.txt" 2>&1
+            rc=$?
+            tail -40 "$RUNNER_TEMP/out.txt" || true
             printf '=== END %s rc=%s%s\n' "$t" "$rc" "$([ "$rc" = 124 ] && printf ' (TIMEOUT — 매달림)')"
             [ "$rc" = 0 ] || rc_all=1
           done

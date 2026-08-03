@@ -145,6 +145,20 @@ eq "exit 2 (한글 경로도 판정)" "2" "$CODE"
 has "stderr 안내" "raw/" "$ERR"
 cleanup
 
+# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다** — MSYS의 `ln -s`는 기본
+# 설정에서 복사본을 만들고, 복사된 bash·sed 등은 msys-2.0.dll 의존이 끊겨 실행이 실패하거나
+# **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 스위트가 매달렸고 개별 timeout으로도
+# 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로 스킵하되
+# **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
+  *)                    SKIP_NOPY=0 ;;
+esac
+
+if [ "$SKIP_NOPY" = 1 ]; then
+  echo "test: (SKIP) python3 fail-open 케이스 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
+  echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
+else
 # ⚠️ 의도된 fail-open (§5-2): python3가 없으면 resolver가 E_NO_RUNTIME(exit 7)로 실패하고
 #    이 훅은 **통과시킨다**. 차단으로 돌리면 raw/만 골라 막을 수 없고(경로 판정 블록 자체가
 #    python3다) 볼트 안 전체가 막힌다 — 훅이 글로벌이라 무관 프로젝트까지 함께 막힌다.
@@ -162,6 +176,8 @@ eq "exit 0 (§5-2 fail-open)" "0" "$CODE"
 (cd "$VAULT" && HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh" >/dev/null 2>&1)
 eq "resolver는 exit 7(E_NO_RUNTIME)" "7" "$?"
 cleanup
+
+fi
 
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"

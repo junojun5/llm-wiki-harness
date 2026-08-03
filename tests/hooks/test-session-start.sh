@@ -197,6 +197,20 @@ printf '# Index\n' > "$KV/wiki/index.md"; printf 'log\n' > "$KV/wiki/log.md"
 OUT="$(cd "$KV" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
 jpath "한글 경로 볼트도 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 
+# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다** — MSYS의 `ln -s`는 기본
+# 설정에서 복사본을 만들고, 복사된 bash·sed 등은 msys-2.0.dll 의존이 끊겨 실행이 실패하거나
+# **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 스위트가 매달렸고 개별 timeout으로도
+# 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로 스킵하되
+# **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
+  *)                    SKIP_NOPY=0 ;;
+esac
+
+if [ "$SKIP_NOPY" = 1 ]; then
+  echo "test: (SKIP) python3 은닉 케이스 4건 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
+  echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
+else
 # ── python3 부재 (§3-2 E_NO_RUNTIME · §5-1) ───────────────────────────────
 # 부트스트랩과 경고 경로는 **python3에 의존할 수 없다** — 런타임 부재를 알리는 경로가
 # 그 런타임을 요구하면 조용히 죽는다(2026-08-01 실측: realpath가 python3라 ROOT가
@@ -249,6 +263,8 @@ done
 [ "$BOOTED" = 3 ] && ok "symlink 경유 + python3 없음에도 부트스트랩 3개" || no "부트스트랩 $BOOTED/3 (ROOT 오판)"
 [ "$(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
   && ok "링크 대상이 배포본 scripts/" || no "엉뚱한 대상: $(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")"
+
+fi
 
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
