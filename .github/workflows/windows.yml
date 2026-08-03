@@ -46,15 +46,26 @@ jobs:
       - name: bash 존재 확인
         shell: bash
         run: bash --version && python3 --version
-      # 진단(임시): tests/run.sh 는 각 스위트 출력을 파일로 리다이렉트하므로 **매달린 스위트의
-      # 내부 출력이 보이지 않는다**. 용의 스위트를 직접 돌려 케이스 단위로 지점을 특정한다.
-      # 마지막에 출력된 `test: …` 라인이 멈춘 케이스다. 원인 확정 후 이 스텝은 삭제한다.
-      - name: 진단 — resolve-vault 스위트 단독 (출력 스트리밍)
+      # 스위트별 상한 + stdin 닫기. `tests/run.sh` 경유로 돌리면 이 러너에서 매달리는데
+      # (2026-08-04) **같은 스위트를 단독으로 돌리면 통과한다** — 즉 스위트 내용이 아니라
+      # 러너 방식(stdin 상속·출력 버퍼링)의 문제다. 여기서는 각 스위트를 개별 상한과 함께
+      # `</dev/null`로 돌려 **매달리는 스위트를 rc=124로 지목**하고 나머지는 계속 진행시킨다.
+      # `tests/run.sh` 자체를 고치는 것은 별도 항목이다(로컬에서는 문제가 없다).
+      - name: 스위트별 (개별 상한 · stdin 닫음)
         shell: bash
-        timeout-minutes: 4
+        timeout-minutes: 10
+        run: |
+          rc_all=0
+          for t in tests/scripts/test-*.sh tests/hooks/test-*.sh tests/install/test-*.sh tests/install/smoke.sh; do
+            printf '=== START %s\n' "$t"
+            timeout 120 bash "$t" </dev/null 2>&1 | tail -40
+            rc=${PIPESTATUS[0]}
+            printf '=== END %s rc=%s%s\n' "$t" "$rc" "$([ "$rc" = 124 ] && printf ' (TIMEOUT — 매달림)')"
+            [ "$rc" = 0 ] || rc_all=1
+          done
+          exit "$rc_all"
+      - name: 전체 스위트 (run.sh 경유 — 매달림 관측용)
         continue-on-error: true
-        run: bash tests/scripts/test-resolve-vault.sh
-      - name: 전체 스위트
         shell: bash
         timeout-minutes: 8
         run: bash tests/run.sh
