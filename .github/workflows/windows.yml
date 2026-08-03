@@ -31,40 +31,6 @@ jobs:
         shell: cmd
         run: tests\hooks\test-run-hook-cmd.cmd
 
-  diagnose-launcher:
-    # 임시 진단 잡 — cmd 테스트의 모든 인자 케이스가 빈 출력이라 어디서 끊기는지 좁힌다.
-    # 원인이 확정되면 이 잡은 삭제한다. stderr를 숨기지 않는 것이 요점.
-    name: 진단 — 런처 stderr (임시)
-    runs-on: windows-latest
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - name: probe 파일 생성 상태
-        shell: cmd
-        run: |
-          > hooks\_dbg.sh echo printf '[%%s]' "$@"
-          echo --- type _dbg.sh ---
-          type hooks\_dbg.sh
-          echo --- 줄바꿈 확인 (run-hook.cmd) ---
-          bash -c "file hooks/run-hook.cmd hooks/_dbg.sh"
-      - name: bash 직접 호출 (런처 우회)
-        shell: cmd
-        run: |
-          bash "hooks\_dbg.sh" a b
-          echo direct-exit=%errorlevel%
-          bash hooks/_dbg.sh a b
-          echo slash-exit=%errorlevel%
-      - name: 런처 경유 (stderr 노출)
-        shell: cmd
-        run: |
-          call hooks\run-hook.cmd _dbg.sh a b
-          echo launcher-exit=%errorlevel%
-      - name: 런처 내부 추적 (echo on)
-        shell: cmd
-        run: |
-          cmd /c "echo on & call hooks\run-hook.cmd _dbg.sh a b"
-          echo trace-exit=%errorlevel%
-
   bash-suite:
     # 정보용 — 결과를 보며 별도로 닫는다. 위 "승격 조건" 참조.
     name: 셸 스위트 (Git Bash, 정보용)

@@ -90,6 +90,31 @@ jpath "런처 경유 codex 포맷" "d['hookSpecificOutput']['additionalContext']
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$LAUNCHER" session-start cursor </dev/null 2>/dev/null)"
 jpath "런처 경유 cursor 포맷" "d['additional_context']" "Config Gate" "$OUT"
 
+# ── 런처의 줄바꿈 계약 (2026-08-04 Windows CI 실측) ────────────────────────
+# cmd.exe는 **LF-only 배치의 줄 경계를 잡지 못해** 파일을 중간부터 오해석한다 — 주석
+# 조각과 코드 조각이 각각 별개 명령으로 실행되며 런처가 죽었다. 그래서 CRLF로 배포하는데,
+# 이 파일은 bash에서도 실행되는 폴리글랏이라 CR이 그냥 들어가면 Unix 분기가 `shift\r`
+# 같은 토큰을 실행하려다 죽는다. 해법은 실행 줄 끝의 ' #'으로 CR을 주석에 흡수시키는 것 —
+# **CRLF와 ' #'은 한 쌍이고, 둘 중 하나만 있으면 한쪽 플랫폼이 조용히 깨진다.**
+# 위 두 케이스가 "CR이 있어도 Unix 분기가 산다"를 이미 실증하므로, 여기서는 계약 자체를
+# 고정한다(누가 LF로 되돌리거나 ' #' 없는 실행 줄을 추가하면 잡힌다).
+echo "test: run-hook.cmd 줄바꿈 계약 — CRLF + 실행 줄의 CR 흡수 주석"
+CRS="$(tr -cd '\r' < "$LAUNCHER" | wc -c | tr -d ' ')"
+[ "$CRS" -gt 0 ] \
+  && ok "CRLF로 배포된다 (CR ${CRS}개)" \
+  || no "LF-only — cmd.exe가 줄 경계를 잃어 Windows에서 런처가 죽는다"
+BAD=0
+while IFS= read -r line || [ -n "$line" ]; do
+  line="${line%$'\r'}"
+  case "$line" in
+    ':; #'*|':;') continue ;;                      # 주석 줄은 CR이 이미 주석 안이다
+    ':; '*) case "$line" in *' #') ;; *) BAD=$((BAD+1)); echo "    CR 흡수 없음: $line" ;; esac ;;
+  esac
+done < "$LAUNCHER"
+[ "$BAD" -eq 0 ] \
+  && ok "Unix 분기 실행 줄이 전부 ' #'으로 CR을 흡수한다" \
+  || no "' #' 없는 실행 줄 ${BAD}개 — CRLF에서 bash 분기가 죽는다"
+
 # ── 부트스트랩 ①: 버전 업데이트 시 stale symlink 재지정 ────────────────────
 # 마켓플레이스 캐시는 버전별 디렉토리라, 존재 여부만 보면 symlink가 구버전에 영구히
 # 고정된다. 2026-08-01 실측: 캐시는 0.2.0인데 런타임 홈은 0.1.0이라 고친 결함이 그대로

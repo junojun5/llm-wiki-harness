@@ -1,12 +1,12 @@
-# 줄바꿈 고정 — 폴리글랏 런처가 CRLF로 체크아웃되면 Unix 분기가 죽는다.
-#
-# hooks/run-hook.cmd 는 cmd.exe와 bash **양쪽**에서 실행된다. Windows runner의 git은
-# 기본적으로 CRLF로 변환하는데, 그러면 bash가 `exec bash ".../session-start\r"` 처럼
-# 캐리지 리턴을 경로·인자에 실어 훅이 조용히 깨진다. LF로 고정한다
-# (LF-only .cmd 도 cmd.exe가 실행한다 — 이 전제 자체를 windows.yml이 검증한다).
-*.sh          text eol=lf
-hooks/run-hook.cmd text eol=lf
+# 줄바꿈 고정. 플랫폼별 기본값에 맡기면 실행 파일이 조용히 깨진다.
+*.sh                text eol=lf
 hooks/session-start text eol=lf
 
-# 순수 cmd.exe 배치는 CRLF로 둔다 — 라벨·goto 해석이 CRLF에서 가장 안전하다.
-tests/hooks/*.cmd text eol=crlf
+# ⚠️ .cmd 는 **CRLF**여야 한다. cmd.exe는 LF-only 배치의 줄 경계를 잡지 못해 파일을
+#    중간부터 오해석한다 — 2026-08-04 CI 실측: `run-hook.cmd`(당시 LF)를 cmd.exe로 돌리자
+#    한글 주석 조각과 코드 조각이 각각 별개 명령으로 실행되며 런처가 죽었다.
+#    `run-hook.cmd`는 bash에서도 실행되는 폴리글랏이라 CR을 그냥 넣으면 Unix 분기가
+#    `shift\r` 같은 토큰을 실행하려다 죽는데, 그쪽은 실행 줄 끝의 ' #'이 CR을 주석으로
+#    흡수해 해결한다(파일 안 주석 참조). 즉 **CRLF + ' #' 트릭이 한 쌍**이다.
+hooks/run-hook.cmd  text eol=crlf
+tests/hooks/*.cmd   text eol=crlf
