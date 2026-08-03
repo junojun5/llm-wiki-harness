@@ -209,6 +209,8 @@ stderr 첫 줄은 `E_CODE: 메시지` 형식으로 고정한다 — 에이전트
 
 **런타임 게이트는 위치 판정 뒤 · 파싱 앞에 둔다.** 위치 판정은 순수 셸이고 파싱만 python3이므로, 게이트를 그 사이에 두면 **`E_NO_RUNTIME`이 "이 머신에 볼트가 있다"를 함의**한다. 볼트를 쓰지 않는 프로젝트는 `E_NO_CONFIG`로 끝나 python3를 볼 일이 없다 — 글로벌 훅(§5-1)이 이 코드에만 반응하면 무관한 세션에 경고가 새지 않으므로 **스팸 방지가 별도 로직 없이 따라온다**. 게이트를 파싱 실패 진단에 섞지 않는 이유는 복구 안내가 갈리기 때문이다: `E_INVALID_CONFIG`는 `--repair`로 낫지만 `E_NO_RUNTIME`은 낫지 않는다(2026-08-01 실측 — python3 부재가 `E_INVALID_CONFIG`로 오진돼 사용자가 `--repair`를 반복하는 경로가 확인됐다).
 
+> **같은 오진의 다른 원인:** python3가 **있는데도** locale이 비UTF-8이면 한글이 든 config 읽기가 `UnicodeDecodeError`로 죽어 역시 `E_INVALID_CONFIG`가 된다. 그래서 이 스크립트의 python3 호출은 §3-9 계약대로 `PYTHONUTF8=1`로 실행하고 `open()`에 인코딩을 명시한다.
+
 ---
 
 ### 3-3. 페이지 포맷
@@ -719,6 +721,27 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 | `LOG_TAIL` | **5개** | wiki-status가 읽는 최근 log 항목 수 | §4-7 Step 4 |
 | `QMD_VERIFY_LINES` | **5줄** | `qmd get … -l 5` 검증 출력 줄 수 | §3-5 |
 | `NEXT_ACTIONS_MAX` | **4개** | wiki-status "What to Do Next" 항목 상한 | §4-7 Step 6 |
+
+---
+
+### 3-9. python3 실행 계약 — UTF-8 I/O 강제
+
+**모든 python3 호출은 `PYTHONUTF8=1`을 부여해 실행한다.** 볼트의 모든 텍스트(페이지·config·훅 페이로드·에러 메시지)는 UTF-8이고 대부분 한국어인데, python3의 기본 I/O 인코딩은 **locale이 결정**한다 — 비UTF-8 locale에서는 이 하네스가 조용히 혹은 시끄럽게 깨진다.
+
+| 표면 | locale이 비UTF-8일 때 |
+|---|---|
+| `open()` 기본 인코딩 | `.wiki-config.json`·페이지 읽기가 `UnicodeDecodeError` → resolver는 **`E_INVALID_CONFIG` 오진**(원인은 config가 아니다) |
+| `sys.stdout` | 한국어를 담은 주입 페이로드·차단 메시지 출력이 `UnicodeEncodeError`로 죽어 **주입·deny가 조용히 무효** |
+| `sys.stderr` | 한국어 위반 메시지가 `\uXXXX` 이스케이프로 손상돼 사용자가 읽을 수 없다 |
+| `os.environ`·파일시스템 경로 | locale 디코딩(`surrogateescape`)과 UTF-8 디코딩이 **섞이면** 경로 비교가 어긋난다 — 가드가 `raw/`를 못 알아본다 |
+
+**실측 근거 (2026-08-04):** Windows runner의 python3는 기본이 **cp1252**여서 `'charmap' codec can't decode byte 0x9d` 가 여러 경로에서 발생했다 — `session-start`의 주입이 빈 출력으로 죽고, `wiki-protect-raw`의 Cursor deny JSON이 나오지 않았다. Windows 사용자 이름·볼트 경로에 한글이 들어가는 흔한 경우 `resolve-vault.sh`가 `E_INVALID_CONFIG`로 오진한다(§3-2의 `E_NO_RUNTIME`이 닫은 것과 **같은 병의 다른 표면**).
+
+**왜 `PYTHONUTF8=1`인가 (env 한 개로 네 표면을 동시에 덮는다).** UTF-8 모드(PEP 540)는 stdin·stdout·stderr·`open()` 기본값·파일시스템 인코딩을 **모두** UTF-8로 고정하므로, 표면마다 개별 처방을 흩뿌리는 것보다 누락 위험이 낮다. 호출 시점의 `VAR=값 python3 …` 형태이므로 사용자 환경의 `PYTHONUTF8=0`도 덮어쓴다. 요구 버전은 **python3 3.7+**(README 요구사항에 명시).
+
+**병행 규칙:** 파일을 읽는 코드는 `open(..., encoding="utf-8")`을 **계속 명시**한다. env가 유실되는 경로(다른 런처가 환경을 정제하는 경우)에서도 파일 읽기는 살아야 하고, 이미 `validate-frontmatter.sh`·`build-link-graph.sh`가 쓰는 규칙이다 — 두 겹으로 둔다.
+
+**적용 대상:** `resolve-vault.sh` · `validate-frontmatter.sh` · `build-link-graph.sh` · `wiki-protect-raw.sh`(판정·deny 출력) · `wiki-validate-frontmatter.sh`(경로 추출) · `session-start`(Cursor 판별·주입 페이로드). 즉 **python3를 호출하는 모든 지점**이다. 회귀는 `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`으로 ASCII locale을 만들어 고정한다(macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화되므로 그 자동화까지 껐을 때만 Windows와 동일 조건이 된다).
 
 ---
 
@@ -2695,4 +2718,5 @@ raw/ 파일이 삭제되면 manifest가 "이 소스가 언제 어떤 wiki 페이
 | 2026-07-31 | `wiki/meetings/` 폐지 · `.manifest.json` 동형 스키마 §3-7 신설 · `base_confidence`에 `project=0.8` 추가·`unknown` 0.4→0.35 · provenance 블록 표기 강제 + 허용오차 ±0.05 · `changes/`의 `project`·`targets` 정의 신설 · archived 이동 시 `category` 보존 명문화 | 스펙 정합성 감사(레포↔스펙 3자 대조) 결과 반영. `wiki/meetings/`는 소유 스킬도 유효 category도 없어 훅이 무조건 차단하던 상태. manifest는 §2 트리에 경로조차 없이 4개 스킬이 서로 다른 스키마를 가정하고 있었음. provenance 인라인 표기는 validator를 **조용히 무력화**함이 실측으로 확인됨(합계 오류도 통과) |
 | 2026-07-31 | Phase 1 범위의 단일 출처를 `distribution-design.md` §9로 확정 · 스킬 수 표기 12개로 통일 · Phase 1 완료 기준의 "사람 개입 없이"를 "설계된 승인 지점 외의 예외·복구 개입 없이"로 정정 | §6 로드맵이 2026-06-25·07-02 배포 결정 이후 미갱신이라 매니페스트·install.sh·README·tests·스모크가 전부 누락돼 있었음. 완료 기준은 인터뷰(init)·승인(design)·확인(record)이 설계상 필수인 스킬 3개를 "사람 개입 없이" 통과시키라는 자기모순 상태였음 |
 | 2026-08-01 | **Phase 3 E2E 실측 — validator 결함 2건 정정.** ① `relationships`의 **인라인 flow 시퀀스**(`[{ … }]`)가 표기 가드와 `type` enum 검사를 **동시에 우회**했다 → 리스트 원소가 전부 매핑인지까지 검사한다 ② 클래스② 판정이 경로의 아무 세그먼트나 매칭해 `knowledge/` 대형 주제 서브폴더(`knowledge/api/changes/`)를 오판했다 → `projects/{name}/{changes\|troubleshooting}/` 손자 위치 인접성으로 한정한다 | 격리 샘플 볼트에서 setup→ingest→query→lint 완주 + 문서 클래스 ①②③ × (validator·PostToolUse 훅) 스모크로 확인. ①은 2026-07-31에 provenance만 닫히고 relationships는 열린 채 남아 있었음 — 인라인 `{ }`는 스칼라로 읽혀 가드가 걸리지만 인라인 `[ ]`는 **문자열 리스트**로 파싱돼 `isinstance(list)`를 통과하고, 그 상태로는 `isinstance(r, dict)` 게이트가 무발화해 잘못된 `type`이 조용히 통과했음. ②는 §3-3이 클래스②를 `projects/*/changes/*`로 한정했는데 구현이 더 넓었음. 회귀 테스트 10건 추가(31→41). 같은 스모크에서 `wiki/meetings/` 폐지(2026-07-31)가 `wiki-setup`(생성 Step·품질 체크·안티패턴)·`wiki-ingest`에 미반영으로 남아 있음을 발견해 함께 정정 |
+| 2026-08-04 | **§3-9 신설 — 모든 python3 호출에 `PYTHONUTF8=1` 강제.** `open()`의 `encoding="utf-8"` 명시는 병행 유지(두 겹) | python3의 I/O·`open()`·파일시스템 인코딩은 **locale이 결정**하는데 Windows 기본은 cp1252다. 첫 Windows CI에서 `'charmap' codec can't decode` 가 여러 경로에서 터졌다 — 주입 페이로드가 빈 출력으로 죽고(규칙 미로드), Cursor deny JSON이 사라지고, 한국어 위반 메시지가 `\uXXXX`로 손상됐다. 한글 볼트 경로에서는 config 읽기가 죽어 `E_INVALID_CONFIG` **오진** — 같은 날 닫은 `E_NO_RUNTIME`과 **같은 병의 다른 표면**이다. 표면마다 개별 처방(`reconfigure`·`buffer.write`·`decode`)을 흩뿌리는 대신 env 하나로 네 표면을 동시에 덮는 쪽을 골랐다(누락 위험이 낮고, 호출 시점 assignment라 사용자의 `PYTHONUTF8=0`도 이긴다). 대가는 python3 **3.7+** 요구이며 README에 명시했다 |
 | 2026-08-04 | **`E_NO_RUNTIME`(exit 7) 신설 — 게이트는 위치 판정 뒤·파싱 앞 (§3-2).** 가드 훅 2종은 fail-open 유지(§5-2·§5-3에 근거 명문화), 고지는 `session-start` 1회(§5-1)로 분리. 부트스트랩 ①은 python3 비의존 요구를 명시 | python3 부재가 `E_INVALID_CONFIG`로 **오진**돼 사용자가 듣지 않는 `--repair`를 반복하는 경로가 실측 확인됨. 게이트 위치를 파싱 앞에 두면 `E_NO_RUNTIME`이 "볼트 존재"를 함의하므로 글로벌 훅의 **스팸 방지가 별도 로직 없이** 따라온다. 가드 훅을 차단으로 돌리는 안은 기각 — 훅이 글로벌이라 무관 프로젝트의 쓰기까지 막고, 경로 판정 블록 자체가 python3라 `raw/`만 골라낼 수 없어 볼트 안 전체를 막는 결과가 된다(강등 지점과 고지 지점의 분리). `session-start`의 realpath가 python3였던 탓에 부트스트랩이 **조용히 no-op** 해 경고 경로 자체가 죽던 문제도 함께 닫는다 |

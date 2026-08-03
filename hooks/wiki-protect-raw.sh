@@ -30,7 +30,9 @@ RAW_ABS="$VAULT_ROOT/$RAW_DIR"
 # 한쪽 탐색 범위만 좁으면 그쪽 검증이 조용히 죽는다(Codex apply_patch에서 실제 발생).
 # 다중 라인 command(apply_patch 패치 본문)를 bash 변수로 실어 나르지 않기 위해
 # allow/block 결정만 한 줄로 돌려받는다.
-DECISION="$(printf '%s' "$(cat)" | RAW_ABS="$RAW_ABS" BASE_FALLBACK="$PWD" python3 -c '
+# PYTHONUTF8=1은 §3-9 계약 — env(RAW_ABS)와 stdin(페이로드 경로) 양쪽에 한글이 올 수 있고,
+# 비UTF-8 locale에서는 두 디코딩 방식이 섞여 **경로 비교가 어긋난다**(raw/를 못 알아본다).
+DECISION="$(printf '%s' "$(cat)" | RAW_ABS="$RAW_ABS" BASE_FALLBACK="$PWD" PYTHONUTF8=1 python3 -c '
 import json, os, re, sys
 
 raw_abs = os.environ["RAW_ABS"]
@@ -92,7 +94,9 @@ print("block")
 # 차단 신호 (2026-07-31 실측 확정 — §5-2)
 case "$PLATFORM" in
   cursor)
-    python3 -c 'import json,sys; print(json.dumps({"permission":"deny","user_message":sys.argv[1]}, ensure_ascii=False))' "$MSG"
+    # PYTHONUTF8=1 없으면 한국어 MSG 직렬화가 비UTF-8 locale의 stdout에서 UnicodeEncodeError로
+    # 죽어 **deny가 조용히 사라진다**(§3-9. 2026-08-04 Windows CI 실측: cp1252에서 빈 출력).
+    PYTHONUTF8=1 python3 -c 'import json,sys; print(json.dumps({"permission":"deny","user_message":sys.argv[1]}, ensure_ascii=False))' "$MSG"
     exit 0 ;;
   *)  # claude | codex
     printf '%s\n' "$MSG" >&2

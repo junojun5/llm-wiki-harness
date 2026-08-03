@@ -41,6 +41,16 @@ run_resolver() {
   ERR="$(cat "$SANDBOX/err")"
 }
 
+# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다.** MSYS의 `ln -s`는 기본
+# 설정에서 복사본을 만들고, 복사된 `bash.exe`·`sed.exe` 등은 `msys-2.0.dll` 의존이 끊겨
+# 실행이 실패하거나 **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 이 스위트가 매달렸고,
+# 개별 timeout으로도 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로
+# 케이스를 스킵하되 **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
+  *)                    SKIP_NOPY=0 ;;
+esac
+
 # python3가 없는 머신을 재현해 실행한다 (§3-2 E_NO_RUNTIME).
 # PATH를 화이트리스트 디렉토리 **단독**으로 좁힌다 — 뒤에 /usr/bin을 붙이면 거기 있는
 # python3가 그대로 보여 은닉이 실패하고, python3 shim 파일을 두는 것도 안 된다
@@ -161,6 +171,10 @@ FIRST_LINE="$(printf '%s\n' "$ERR" | head -1)"
 assert_contains "첫 줄 E_NO_CONFIG: 접두" "E_NO_CONFIG:" "$FIRST_LINE"
 cleanup
 
+if [ "$SKIP_NOPY" = 1 ]; then
+  echo "test: (SKIP) python3 은닉 케이스 2건 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
+  echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
+else
 # === 테스트 9: E_NO_RUNTIME (exit 7) — 볼트는 있고 python3가 없음 ========
 # 오진 방지: 이 상황이 E_INVALID_CONFIG(4)로 나오면 사용자는 듣지 않는 --repair를 반복한다.
 echo "test: 볼트 있음 + python3 없음이면 E_NO_RUNTIME exit 7"
@@ -182,6 +196,30 @@ new_sandbox
 run_resolver_nopy "$SANDBOX/work"
 assert_eq "exit 2" "2" "$CODE"
 assert_contains "stderr E_NO_CONFIG" "E_NO_CONFIG" "$ERR"
+cleanup
+fi
+
+# === 테스트 11: 한글 경로 볼트 + 비UTF-8 locale (§3-9) ====================
+# Windows python3의 기본 인코딩은 cp1252이고, 일반적으로 python3의 I/O 인코딩은
+# **locale이 결정**한다. 한글이 든 config를 locale 인코딩으로 읽으면 UnicodeDecodeError가
+# 나고, 그게 파싱 실패로 흘러 **E_INVALID_CONFIG 오진**이 된다(원인은 config가 아니다).
+# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화(PEP 538/540)되므로 LC_ALL=C만으로는
+# 재현되지 않는다 — 그 자동화까지 꺼야 Windows와 같은 조건이 된다.
+run_resolver_ascii_locale() {
+  local cwd="$1"
+  OUT="$(cd "$cwd" && HOME="$SANDBOX/home" \
+    LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$RESOLVER" 2>"$SANDBOX/err")"
+  CODE=$?
+  ERR="$(cat "$SANDBOX/err")"
+}
+
+echo "test: 한글 볼트 경로 + ASCII locale에서도 resolve 성공"
+new_sandbox
+make_valid_vault "$SANDBOX/work/한글볼트"
+run_resolver_ascii_locale "$SANDBOX/work/한글볼트"
+assert_eq "exit 0 (오진 없음)" "0" "$CODE"
+assert_contains "VAULT_PATH가 한글 경로 그대로" "VAULT_PATH=$SANDBOX/work/한글볼트" "$OUT"
+assert_contains "WIKI_DIR 출력" "WIKI_DIR=wiki" "$OUT"
 cleanup
 
 # --- 결과 -----------------------------------------------------------------

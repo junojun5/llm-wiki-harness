@@ -15,7 +15,9 @@ set -u
 WIKI="$1"
 [ -d "$WIKI" ] || { echo "wiki 디렉토리 없음: $WIKI" >&2; exit 2; }
 
-python3 - "$WIKI" <<'PY'
+# PYTHONUTF8=1은 §3-9 계약 — 페이지 파일명·[[링크]]에 한글이 쓰이고(slug 규칙이 허용)
+# 출력에 그 이름이 실린다. 비UTF-8 locale에서는 읽기·출력이 함께 깨진다.
+PYTHONUTF8=1 python3 - "$WIKI" <<'PY'
 import sys, os, re
 
 wiki = os.path.abspath(sys.argv[1])

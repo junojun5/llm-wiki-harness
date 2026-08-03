@@ -19,7 +19,9 @@ WIKI_DIR="$(printf '%s\n' "$RESOLVED" | sed -n 's/^WIKI_DIR=//p')"
 # raw 가드는 살고 이 검증만 죽는 사고가 났다(§5-3). 한쪽을 고치면 반대쪽도 함께 고친다.
 # 유일한 의도적 차이: Delete File은 추출하지 않는다 — 삭제된 파일은 검증 대상이 아니다
 # (없는 파일에 validator를 걸면 정상 삭제가 exit 2로 오보고된다).
-TARGET="$(printf '%s' "$(cat)" | BASE_FALLBACK="$PWD" python3 -c '
+# PYTHONUTF8=1은 §3-9 계약 — 페이로드 경로에 한글이 올 수 있고, 비UTF-8 locale에서는
+# 디코딩이 어긋나 검증 대상 판정이 조용히 빗나간다.
+TARGET="$(printf '%s' "$(cat)" | BASE_FALLBACK="$PWD" PYTHONUTF8=1 python3 -c '
 import json, os, re, sys
 
 try:

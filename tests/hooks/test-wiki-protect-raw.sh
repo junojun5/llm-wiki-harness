@@ -122,6 +122,43 @@ run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT\",\"tool_input\":{\"co
 eq "exit 0 (§5-2 비목표)" "0" "$CODE"
 cleanup
 
+# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
+# 차단 메시지 MSG는 한국어다. Cursor 분기는 그 메시지를 python3로 JSON 직렬화해 **stdout에**
+# 내보내므로, locale이 비UTF-8이면 출력이 UnicodeEncodeError로 죽고 **deny가 조용히 사라진다**
+# (2026-08-04 Windows CI 실측: cp1252에서 permission:deny JSON이 빈 출력).
+echo "test: ASCII locale에서도 Cursor deny JSON이 나온다 (한국어 메시지)"
+new_sandbox
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/x.md\"}}" \
+  | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" cursor 2>"$SANDBOX/err")"
+CODE=$?
+eq "exit 0 (cursor)" "0" "$CODE"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'; assert '읽기 전용' in d['user_message']" "$OUT" 2>/dev/null \
+  && ok "deny JSON + 한국어 메시지 온전" || no "deny JSON 손실 (got [$OUT])"
+cleanup
+
+echo "test: ASCII locale + 한글 경로 raw/ 쓰기도 차단 (claude)"
+new_sandbox
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/한글문서.md\"}}" \
+  | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" claude 2>"$SANDBOX/err")"
+CODE=$?; ERR="$(cat "$SANDBOX/err")"
+eq "exit 2 (한글 경로도 판정)" "2" "$CODE"
+has "stderr 안내" "raw/" "$ERR"
+cleanup
+
+# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다** — MSYS의 `ln -s`는 기본
+# 설정에서 복사본을 만들고, 복사된 bash·sed 등은 msys-2.0.dll 의존이 끊겨 실행이 실패하거나
+# **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 스위트가 매달렸고 개별 timeout으로도
+# 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로 스킵하되
+# **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
+  *)                    SKIP_NOPY=0 ;;
+esac
+
+if [ "$SKIP_NOPY" = 1 ]; then
+  echo "test: (SKIP) python3 fail-open 케이스 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
+  echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
+else
 # ⚠️ 의도된 fail-open (§5-2): python3가 없으면 resolver가 E_NO_RUNTIME(exit 7)로 실패하고
 #    이 훅은 **통과시킨다**. 차단으로 돌리면 raw/만 골라 막을 수 없고(경로 판정 블록 자체가
 #    python3다) 볼트 안 전체가 막힌다 — 훅이 글로벌이라 무관 프로젝트까지 함께 막힌다.
@@ -139,6 +176,8 @@ eq "exit 0 (§5-2 fail-open)" "0" "$CODE"
 (cd "$VAULT" && HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh" >/dev/null 2>&1)
 eq "resolver는 exit 7(E_NO_RUNTIME)" "7" "$?"
 cleanup
+
+fi
 
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"

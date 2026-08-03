@@ -25,6 +25,7 @@ jobs:
     # required — 보류 3번(run-hook.cmd 실기 미검증)을 닫는 갈래.
     name: run-hook.cmd 인자 전달 (cmd.exe)
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: cmd.exe 분기 회귀 테스트
@@ -36,11 +37,40 @@ jobs:
     name: 셸 스위트 (Git Bash, 정보용)
     runs-on: windows-latest
     continue-on-error: true
+    # ⚠️ 타임아웃은 필수다. 2026-08-04에 이 잡이 **매달렸다**(0.3.1 인코딩 수정으로 이전보다
+    # 더 진행되면서 어느 스위트가 입력을 기다리는 상태에 도달했다). 실행 중에는 로그 blob이
+    # 아직 없어 어디서 멈췄는지 볼 수 없으므로, 타임아웃으로 강제 종료시켜 **그 시점까지의
+    # 로그로 멈춘 지점을 특정**한다. 스텝 단위로 걸어 잡 오버헤드와 구분한다.
     steps:
       - uses: actions/checkout@v4
       - name: bash 존재 확인
         shell: bash
         run: bash --version && python3 --version
-      - name: 전체 스위트
+      # 스위트별 상한 + stdin 닫기. `tests/run.sh` 경유로 돌리면 이 러너에서 매달리는데
+      # (2026-08-04) **같은 스위트를 단독으로 돌리면 통과한다** — 즉 스위트 내용이 아니라
+      # 러너 방식(stdin 상속·출력 버퍼링)의 문제다. 여기서는 각 스위트를 개별 상한과 함께
+      # `</dev/null`로 돌려 **매달리는 스위트를 rc=124로 지목**하고 나머지는 계속 진행시킨다.
+      # `tests/run.sh` 자체를 고치는 것은 별도 항목이다(로컬에서는 문제가 없다).
+      - name: 스위트별 (개별 상한 · stdin 닫음)
         shell: bash
+        timeout-minutes: 10
+        run: |
+          rc_all=0
+          for t in tests/scripts/test-*.sh tests/hooks/test-*.sh tests/install/test-*.sh tests/install/smoke.sh; do
+            printf '=== START %s\n' "$t"
+            # ⚠️ 파이프로 받지 않는다. timeout이 스위트를 죽여도 손자 프로세스가 파이프를
+            #    붙잡으면 `tail`이 EOF를 못 받아 **그 자리에서 다시 매달린다**(2026-08-04 실측:
+            #    `| tail -40`을 썼더니 timeout 120이 무의미해지고 END 라인이 나오지 않았다).
+            #    파일로 받아 스위트가 끝난 뒤에 읽는다. -k 로 SIGTERM 후 강제 종료까지 보장.
+            timeout -k 10 120 bash "$t" </dev/null >"$RUNNER_TEMP/out.txt" 2>&1
+            rc=$?
+            tail -40 "$RUNNER_TEMP/out.txt" || true
+            printf '=== END %s rc=%s%s\n' "$t" "$rc" "$([ "$rc" = 124 ] && printf ' (TIMEOUT — 매달림)')"
+            [ "$rc" = 0 ] || rc_all=1
+          done
+          exit "$rc_all"
+      - name: 전체 스위트 (run.sh 경유 — 매달림 관측용)
+        continue-on-error: true
+        shell: bash
+        timeout-minutes: 8
         run: bash tests/run.sh

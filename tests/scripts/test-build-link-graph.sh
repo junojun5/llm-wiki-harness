@@ -105,6 +105,21 @@ assert_absent   "코드 밖 실제 링크는 계수됨"       "ORPHAN${TAB}conce
 assert_contains "broken 총계 0"                  "broken=0" "$OUT2"
 cleanup
 
+# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
+# slug 규칙은 한글 파일명을 허용하고(AGENTS.md), 출력 라인에 그 이름이 실린다.
+# 비UTF-8 locale에서는 파일 읽기와 출력이 함께 깨져 링크 그래프가 조용히 비어버린다.
+echo "test: ASCII locale + 한글 파일명도 링크 그래프에 잡힌다"
+new_sandbox
+page "knowledge/한글허브.md" '---
+title: "한글 허브"
+---
+[[concepts/없는페이지]] 참조.
+'
+OUT="$(LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$GRAPH" "$WIKI" 2>/dev/null)"
+assert_contains "한글 파일명이 출력에 온전" "한글허브" "$OUT"
+assert_contains "한글 대상의 깨진 링크 감지" "없는페이지" "$OUT"
+cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

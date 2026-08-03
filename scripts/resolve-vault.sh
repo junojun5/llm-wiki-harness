@@ -46,10 +46,14 @@ command -v python3 >/dev/null 2>&1 \
 
 # --- 3) config 파싱 + 필수 키/형식 검증 (python3) --------------------------
 # python3은 구조화된 결과를 라인으로 내보낸다: 첫 토큰이 분기 키.
-PARSED="$(python3 - "$CONFIG" <<'PY' 2>/dev/null
+# PYTHONUTF8=1은 §3-9 계약이다 — python3의 I/O·open() 기본 인코딩은 locale이 결정하므로,
+# 비UTF-8 locale(Windows 기본 cp1252)에서는 **한글이 든 config 읽기가 UnicodeDecodeError로
+# 죽고 그게 아래 파싱 실패로 흘러 E_INVALID_CONFIG 오진**이 된다(원인은 config가 아니다).
+# open()의 encoding도 함께 명시한다 — env가 유실되는 경로에서도 파일 읽기는 살아야 한다.
+PARSED="$(PYTHONUTF8=1 python3 - "$CONFIG" <<'PY' 2>/dev/null
 import json, os, sys
 try:
-    d = json.load(open(sys.argv[1]))
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
 except Exception:
     print("ERR PARSE"); sys.exit(0)
 v = d.get("vault")

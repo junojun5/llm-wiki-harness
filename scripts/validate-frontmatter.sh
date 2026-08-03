@@ -9,7 +9,9 @@ set -u
 FILE="$1"
 [ -f "$FILE" ] || { echo "파일 없음: $FILE" >&2; exit 2; }
 
-python3 - "$FILE" <<'PY'
+# PYTHONUTF8=1은 §3-9 계약 — 위반 메시지가 한국어이고 페이지 본문도 한국어다. 비UTF-8
+# locale에서는 stdout/stderr 인코딩이 locale을 따라 메시지가 \uXXXX로 손상되거나 죽는다.
+PYTHONUTF8=1 python3 - "$FILE" <<'PY'
 import sys, os, re
 
 path = sys.argv[1]

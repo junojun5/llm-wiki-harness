@@ -124,7 +124,7 @@ SKILL="$ROOT/skills/using-llm-wiki/SKILL.md"
 #    페이로드에 cursor_version 키가 있으면 Cursor로 판정한다.
 #    읽기 상한의 근거는 read_payload() 주석 참조.
 read_payload
-if [ -n "$INPUT" ] && printf '%s' "$INPUT" | python3 -c '
+if [ -n "$INPUT" ] && printf '%s' "$INPUT" | PYTHONUTF8=1 python3 -c '
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -135,7 +135,10 @@ sys.exit(0 if isinstance(d, dict) and "cursor_version" in d else 1)
   PLATFORM="cursor"
 fi
 
-python3 - "$SKILL" "$PLATFORM" "$LLMWIKI/resolve-vault.sh" <<'PY'
+# PYTHONUTF8=1은 §3-9 계약 — 주입 페이로드는 SKILL.md 본문(전부 한국어)이다. 비UTF-8
+# locale에서는 stdout 인코딩이 locale을 따라 출력이 UnicodeEncodeError로 죽고 **주입이
+# 조용히 무효**가 된다(2026-08-04 Windows CI 실측: cp1252에서 빈 출력 → 규칙 미로드).
+PYTHONUTF8=1 python3 - "$SKILL" "$PLATFORM" "$LLMWIKI/resolve-vault.sh" <<'PY'
 import json, sys, re
 skill_path, platform, resolver = sys.argv[1], sys.argv[2], sys.argv[3]
 text = open(skill_path, encoding="utf-8").read()
