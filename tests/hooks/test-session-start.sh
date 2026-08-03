@@ -176,6 +176,27 @@ BEFORE="$(readlink "$H6/resolve-vault.sh")"
 (cd "$SB" && HOME="$SB/home6" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
 [ "$(readlink "$H6/resolve-vault.sh")" = "$BEFORE" ] && ok "멱등" || no "멱등 위반"
 
+# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
+# 주입 페이로드는 SKILL.md 본문(전부 한국어)이다. python3의 stdout 인코딩은 locale이
+# 결정하므로 비UTF-8 locale에서는 출력이 UnicodeEncodeError로 죽어 **주입이 조용히 무효**가
+# 된다(2026-08-04 Windows CI 실측: cp1252에서 빈 출력 → JSONDecodeError).
+# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화(PEP 538/540)되므로 그 자동화까지
+# 꺼야 Windows와 같은 조건이 된다.
+ASCII_LOCALE_ENV=(LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0)
+
+echo "test: ASCII locale에서도 주입이 온전하다 (한국어 페이로드)"
+OUT="$(cd "$VAULT" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
+printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
+  && ok "유효 JSON" || no "invalid JSON (인코딩으로 죽었다)"
+jpath "additionalContext에 한국어 규칙 보존" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
+
+echo "test: ASCII locale + 한글 볼트 경로에서도 주입"
+KV="$SB/한글볼트"; mkdir -p "$KV/wiki"
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' "$KV" > "$KV/.wiki-config.json"
+printf '# Index\n' > "$KV/wiki/index.md"; printf 'log\n' > "$KV/wiki/log.md"
+OUT="$(cd "$KV" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
+jpath "한글 경로 볼트도 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
+
 # ── python3 부재 (§3-2 E_NO_RUNTIME · §5-1) ───────────────────────────────
 # 부트스트랩과 경고 경로는 **python3에 의존할 수 없다** — 런타임 부재를 알리는 경로가
 # 그 런타임을 요구하면 조용히 죽는다(2026-08-01 실측: realpath가 python3라 ROOT가

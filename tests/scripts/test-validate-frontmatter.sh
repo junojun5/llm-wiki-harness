@@ -232,6 +232,39 @@ new_sandbox; run_validate "wiki/projects/p/changes/2026-06-25-y.md" "$VALID_PAGE
 assert_eq "exit !=0" "1" "$CODE"
 assert_contains "클래스② 안내" "category는 projects여야 합니다" "$ERR"; cleanup
 
+# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
+# 위반 메시지는 전부 한국어다. python3의 stdout/stderr 인코딩은 locale이 결정하므로
+# 비UTF-8 locale에서는 메시지가 \uXXXX 이스케이프로 손상되거나 죽는다 — 사용자가 무엇을
+# 고쳐야 하는지 읽을 수 없다(2026-08-04 Windows CI 실측: cp1252에서 이스케이프로 나왔다).
+# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화되므로 그 자동화까지 꺼야 동일 조건이다.
+echo "test: ASCII locale에서도 한국어 위반 메시지가 온전하다"
+new_sandbox
+f="$SANDBOX/wiki/knowledge/broken.md"; mkdir -p "$(dirname "$f")"
+printf '%s' '---
+title: "요약 없음"
+category: knowledge
+tags: [a]
+sources: ["raw/x.md"]
+created: 2026-08-04
+updated: 2026-08-04
+status: verified
+base_confidence: 0.8
+---
+본문.' > "$f"
+ERR="$(LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$VALIDATOR" "$f" 2>&1 >/dev/null)"; CODE=$?
+assert_contains "한국어 메시지 손상 없음" "필수 키 누락" "$ERR"
+assert_contains "이스케이프되지 않음" "summary" "$ERR"
+cleanup
+
+echo "test: ASCII locale + 한글 파일명 페이지도 검증한다"
+new_sandbox
+run_validate "wiki/knowledge/한글제목.md" "$VALID_PAGE"
+assert_eq "정상 페이지 통과" "0" "$CODE"
+f="$SANDBOX/wiki/knowledge/한글제목.md"
+LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$VALIDATOR" "$f" >/dev/null 2>&1
+assert_eq "ASCII locale에서도 통과" "0" "$?"
+cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -33,7 +33,7 @@ Andrej Karpathy의 **LLM Wiki 패턴**을 하네스로 구현한 것이다. RAG�
 | | 확인 | 용도 |
 |---|---|---|
 | **bash** | `bash --version` | 공유 스크립트·훅 전부 bash다. Windows는 [Git Bash 또는 WSL](docs/troubleshooting.md#windows--git-bash-또는-wsl-bash가-path에-필요) |
-| **python3** | `python3 --version` | **하드 요구.** `resolve-vault.sh`(Config Gate)·`validate-frontmatter.sh`가 JSON·YAML 파싱에 쓴다 — 버전 무관(표준 라이브러리만 사용) |
+| **python3 3.7+** | `python3 --version` | **하드 요구.** `resolve-vault.sh`(Config Gate)·`validate-frontmatter.sh`가 JSON·YAML 파싱에 쓴다. 표준 라이브러리만 사용하지만 **3.7+**가 필요하다 — 모든 호출을 `PYTHONUTF8=1`(UTF-8 모드)로 실행해 locale과 무관하게 한국어 I/O를 보장한다 |
 
 > ⚠️ **python3가 없으면 스킬 12종과 가드 훅 2종이 전부 비활성이다.** Config Gate가 `E_NO_RUNTIME`(exit 7)로 중단하고, 볼트가 설정된 머신이면 **세션 시작에 경고가 1회 주입**된다. 가드 훅은 설계상 통과(fail-open)하므로 **raw/ 쓰기 보호와 frontmatter 검증이 동작하지 않는다** — 경로 판정 자체가 python3라 raw/만 골라 막을 수 없기 때문이다([근거](docs/troubleshooting.md#e_no_runtime--python3가-없다)). `wiki-setup --repair`로는 해결되지 않는다. python3를 설치하고 세션을 다시 시작한다.
 

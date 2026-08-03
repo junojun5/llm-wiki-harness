@@ -122,6 +122,29 @@ run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT\",\"tool_input\":{\"co
 eq "exit 0 (§5-2 비목표)" "0" "$CODE"
 cleanup
 
+# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
+# 차단 메시지 MSG는 한국어다. Cursor 분기는 그 메시지를 python3로 JSON 직렬화해 **stdout에**
+# 내보내므로, locale이 비UTF-8이면 출력이 UnicodeEncodeError로 죽고 **deny가 조용히 사라진다**
+# (2026-08-04 Windows CI 실측: cp1252에서 permission:deny JSON이 빈 출력).
+echo "test: ASCII locale에서도 Cursor deny JSON이 나온다 (한국어 메시지)"
+new_sandbox
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/x.md\"}}" \
+  | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" cursor 2>"$SANDBOX/err")"
+CODE=$?
+eq "exit 0 (cursor)" "0" "$CODE"
+python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'; assert '읽기 전용' in d['user_message']" "$OUT" 2>/dev/null \
+  && ok "deny JSON + 한국어 메시지 온전" || no "deny JSON 손실 (got [$OUT])"
+cleanup
+
+echo "test: ASCII locale + 한글 경로 raw/ 쓰기도 차단 (claude)"
+new_sandbox
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/한글문서.md\"}}" \
+  | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" claude 2>"$SANDBOX/err")"
+CODE=$?; ERR="$(cat "$SANDBOX/err")"
+eq "exit 2 (한글 경로도 판정)" "2" "$CODE"
+has "stderr 안내" "raw/" "$ERR"
+cleanup
+
 # ⚠️ 의도된 fail-open (§5-2): python3가 없으면 resolver가 E_NO_RUNTIME(exit 7)로 실패하고
 #    이 훅은 **통과시킨다**. 차단으로 돌리면 raw/만 골라 막을 수 없고(경로 판정 블록 자체가
 #    python3다) 볼트 안 전체가 막힌다 — 훅이 글로벌이라 무관 프로젝트까지 함께 막힌다.

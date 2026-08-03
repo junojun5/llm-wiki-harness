@@ -184,6 +184,29 @@ assert_eq "exit 2" "2" "$CODE"
 assert_contains "stderr E_NO_CONFIG" "E_NO_CONFIG" "$ERR"
 cleanup
 
+# === 테스트 11: 한글 경로 볼트 + 비UTF-8 locale (§3-9) ====================
+# Windows python3의 기본 인코딩은 cp1252이고, 일반적으로 python3의 I/O 인코딩은
+# **locale이 결정**한다. 한글이 든 config를 locale 인코딩으로 읽으면 UnicodeDecodeError가
+# 나고, 그게 파싱 실패로 흘러 **E_INVALID_CONFIG 오진**이 된다(원인은 config가 아니다).
+# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화(PEP 538/540)되므로 LC_ALL=C만으로는
+# 재현되지 않는다 — 그 자동화까지 꺼야 Windows와 같은 조건이 된다.
+run_resolver_ascii_locale() {
+  local cwd="$1"
+  OUT="$(cd "$cwd" && HOME="$SANDBOX/home" \
+    LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$RESOLVER" 2>"$SANDBOX/err")"
+  CODE=$?
+  ERR="$(cat "$SANDBOX/err")"
+}
+
+echo "test: 한글 볼트 경로 + ASCII locale에서도 resolve 성공"
+new_sandbox
+make_valid_vault "$SANDBOX/work/한글볼트"
+run_resolver_ascii_locale "$SANDBOX/work/한글볼트"
+assert_eq "exit 0 (오진 없음)" "0" "$CODE"
+assert_contains "VAULT_PATH가 한글 경로 그대로" "VAULT_PATH=$SANDBOX/work/한글볼트" "$OUT"
+assert_contains "WIKI_DIR 출력" "WIKI_DIR=wiki" "$OUT"
+cleanup
+
 # --- 결과 -----------------------------------------------------------------
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"

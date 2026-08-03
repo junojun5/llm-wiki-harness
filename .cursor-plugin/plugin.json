@@ -2,7 +2,7 @@
   "_comment": "Cursor 플러그인 매니페스트 — **스킬 전용 배포 표면**이다. hooks 키는 두지 않는다: cursor-agent가 매니페스트의 hooks를 파싱은 하나 내부 getPluginHooks가 호출되지 않아 훅 실행 엔진에 도달하지 않는다(2026-07-31 실측 — --plugin-dir·~/.cursor/plugins/local 양쪽 미발화). 선언해 두면 '플러그인만 깔면 훅이 돈다'는 오해를 만든다. Cursor 훅은 install.sh가 ~/.cursor/hooks.json 또는 {workspace}/.cursor/hooks.json을 배치하는 경로만 유효하다 — Cursor에 한해 install.sh는 폴백이 아니라 필수다. 스킬 로딩은 정상 동작한다(getAllAgentSkills 활성).",
   "name": "llm-wiki-harness",
   "description": "LLM Wiki 하네스 — wiki 스킬 번들. 훅은 install.sh가 .cursor/hooks.json으로 배치한다.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "author": { "name": "junojun5" },
   "skills": "./skills"
 }

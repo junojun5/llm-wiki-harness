@@ -1,6 +1,6 @@
 {
   "name": "llm-wiki-harness",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Codex CLI용 LLM Wiki 하네스 — 스킬·훅 명시 선언",
   "author": { "name": "junojun5" },
   "skills": "./skills",
