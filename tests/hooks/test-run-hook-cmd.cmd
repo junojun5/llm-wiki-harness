@@ -37,8 +37,11 @@ echo test: run-hook.cmd 인자 전달 (cmd.exe 분기)
 call "%LAUNCHER%" _argprobe.sh > "%OUTFILE%" 2>nul
 call :check "인자 0개 — 스크립트명이 인자로 새지 않는다" ""
 
+rem ⚠️ desc 문자열에 < > ( ) 를 쓰지 않는다. cmd.exe는 **큰따옴표 안이어도** 리다이렉션
+rem    문자를 파싱해 `< was unexpected at this time.`으로 죽는다 (2026-08-04 CI 실측 —
+rem    첫 케이스 통과 직후 두 번째 케이스의 desc에 있던 부등호가 스크립트를 중단시켰다).
 call "%LAUNCHER%" _argprobe.sh claude > "%OUTFILE%" 2>nul
-call :check "인자 1개 (실사용 계약: <hook> <platform>)" "[claude]"
+call :check "인자 1개 — 실사용 계약인 hook + platform 형태" "[claude]"
 
 call "%LAUNCHER%" _argprobe.sh codex extra > "%OUTFILE%" 2>nul
 call :check "인자 2개 — 순서 보존" "[codex][extra]"
