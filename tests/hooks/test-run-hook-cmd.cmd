@@ -34,8 +34,11 @@ rem (배치 파일 안에서 %%s 는 리터럴 %s 로 쓰인다.)
 
 echo test: run-hook.cmd 인자 전달 (cmd.exe 분기)
 
+rem 인자 0개의 기대값은 빈 문자열이 아니라 `[]` 다 — probe의 `printf '[%s]' "$@"` 는
+rem 인자가 없어도 포맷을 한 번 처리한다(bash printf의 성질). 여기서 검증하는 것은
+rem "스크립트명이 인자로 다시 실리지 않는다"이고, 그 경우엔 `[_argprobe.sh]` 가 나온다.
 call "%LAUNCHER%" _argprobe.sh > "%OUTFILE%" 2>nul
-call :check "인자 0개 — 스크립트명이 인자로 새지 않는다" ""
+call :check "인자 0개 — 스크립트명이 인자로 새지 않는다" "[]"
 
 rem ⚠️ desc 문자열에 < > ( ) 를 쓰지 않는다. cmd.exe는 **큰따옴표 안이어도** 리다이렉션
 rem    문자를 파싱해 `< was unexpected at this time.`으로 죽는다 (2026-08-04 CI 실측 —
@@ -75,24 +78,29 @@ set "GOT="
 for /f "usebackq delims=" %%L in ("%OUTFILE%") do set "GOT=%%L"
 goto :eof
 
+rem ⚠️ 판정에 `if (...) else (...)` 괄호 블록을 쓰지 않는다. desc에 닫는 괄호가 있으면
+rem    cmd.exe가 블록을 **조기 종료**해 ok 와 FAIL/WARN 이 동시에 출력된다
+rem    (2026-08-04 CI 실측: "비ASCII 인자 (코드페이지 의존" 이 잘려 나오고 뒤이어 WARN).
+rem    goto 분기는 그 함정이 없다. (부등호 < > 는 여전히 금지 — 큰따옴표 안에서도
+rem    리다이렉션으로 파싱된다.)
 :check
 call :read_got
-if "!GOT!"=="%~2" (
-  set /a PASS+=1
-  echo   ok: %~1
-) else (
-  set /a FAIL+=1
-  echo   FAIL: %~1  -- expected [%~2] got [!GOT!]
-)
+if not "!GOT!"=="%~2" goto :check_fail
+set /a PASS+=1
+echo   ok: %~1
+goto :eof
+:check_fail
+set /a FAIL+=1
+echo   FAIL: %~1  -- expected [%~2] got [!GOT!]
 goto :eof
 
 :observe
 call :read_got
-if "!GOT!"=="%~2" (
-  set /a PASS+=1
-  echo   ok: %~1
-) else (
-  set /a WARN+=1
-  echo   WARN: %~1  -- expected [%~2] got [!GOT!]
-)
+if not "!GOT!"=="%~2" goto :observe_warn
+set /a PASS+=1
+echo   ok: %~1
+goto :eof
+:observe_warn
+set /a WARN+=1
+echo   WARN: %~1  -- expected [%~2] got [!GOT!]
 goto :eof
