@@ -1,0 +1,46 @@
+name: windows
+
+# 왜 이 워크플로가 있는가 — `hooks/run-hook.cmd`의 cmd.exe 분기는 Phase 2 T5 이래
+# **정적 검토로만** 확인돼 있었다. macOS/Linux에서는 cmd.exe를 실행할 수 없기 때문이다.
+# 환경 확보를 기다리는 대신 CI로 닫는다 (보류 3건 설계 §3).
+#
+# 필수/선택 경계 — cmd.exe 갈래만 required로 둔다. bash 갈래는 처음부터 통과하지 않을
+# 가능성이 실재한다(경로 구분자·realpath·symlink 동작이 다르고, session-start의 readlink
+# 루프도 Windows symlink에서 다르게 돈다). **통과하지 않으면 그건 발견이지 실패가 아니다.**
+# 다만 이 레포의 첫 CI가 빨간불로 시작하면 신호가 죽으므로 bash 갈래는
+# continue-on-error로 시작한다.
+#
+# 승격 조건 (이걸 남기지 않으면 continue-on-error가 영구화되고 "Windows 지원"이
+# 검증 없는 주장으로 남는다): bash-suite가 **9스위트 전부 PASS**로 3회 연속 통과하면
+# continue-on-error를 제거하고 required로 승격한다. 그때까지 실패 항목은 개별 이슈로
+# 분리해 따로 닫는다. 진행 상태는 docs/specs/distribution-design.md §10에 기록한다.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  cmd-launcher:
+    # required — 보류 3번(run-hook.cmd 실기 미검증)을 닫는 갈래.
+    name: run-hook.cmd 인자 전달 (cmd.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: cmd.exe 분기 회귀 테스트
+        shell: cmd
+        run: tests\hooks\test-run-hook-cmd.cmd
+
+  bash-suite:
+    # 정보용 — 결과를 보며 별도로 닫는다. 위 "승격 조건" 참조.
+    name: 셸 스위트 (Git Bash, 정보용)
+    runs-on: windows-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: bash 존재 확인
+        shell: bash
+        run: bash --version && python3 --version
+      - name: 전체 스위트
+        shell: bash
+        run: bash tests/run.sh
