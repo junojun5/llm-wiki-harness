@@ -25,6 +25,7 @@ jobs:
     # required — 보류 3번(run-hook.cmd 실기 미검증)을 닫는 갈래.
     name: run-hook.cmd 인자 전달 (cmd.exe)
     runs-on: windows-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - name: cmd.exe 분기 회귀 테스트
@@ -36,6 +37,10 @@ jobs:
     name: 셸 스위트 (Git Bash, 정보용)
     runs-on: windows-latest
     continue-on-error: true
+    # ⚠️ 타임아웃은 필수다. 2026-08-04에 이 잡이 **매달렸다**(0.3.1 인코딩 수정으로 이전보다
+    # 더 진행되면서 어느 스위트가 입력을 기다리는 상태에 도달했다). 실행 중에는 로그 blob이
+    # 아직 없어 어디서 멈췄는지 볼 수 없으므로, 타임아웃으로 강제 종료시켜 **그 시점까지의
+    # 로그로 멈춘 지점을 특정**한다. 스텝 단위로 걸어 잡 오버헤드와 구분한다.
     steps:
       - uses: actions/checkout@v4
       - name: bash 존재 확인
@@ -43,4 +48,5 @@ jobs:
         run: bash --version && python3 --version
       - name: 전체 스위트
         shell: bash
+        timeout-minutes: 8
         run: bash tests/run.sh
