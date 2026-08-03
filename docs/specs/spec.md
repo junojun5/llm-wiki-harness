@@ -60,7 +60,7 @@ wiki-setup → wiki-ingest(문서 1개) → wiki-query(질문 1개)
 
 - **`.wiki-config.json`** — "이 머신에서 볼트가 어디 있는가"만 답하는 머신별 설정 파일 (스키마 최소주의, §3-1). git 미추적 — 절대경로가 머신마다 다르다.
 - **version (config 스키마 버전)** — `.wiki-config.json` 파일 구조의 버전. **스킬 버전이 아니다.** breaking change 시만 bump하며 스킬은 직접 읽지 않는다 — resolver 내부 디테일 (§3-1).
-- **resolver (`resolve-vault.sh`)** — vault 탐색·파싱·검증·에러 처리를 단일화한 공용 스크립트. 모든 스킬의 Step 0와 글로벌 훅이 호출한다. 표준 exit code 6종(OK + `E_*` 5종) + stderr 복구 안내 (§3-2).
+- **resolver (`resolve-vault.sh`)** — vault 탐색·파싱·검증·에러 처리를 단일화한 공용 스크립트. 모든 스킬의 Step 0와 글로벌 훅이 호출한다. 표준 exit code 7종(OK + `E_*` 6종) + stderr 복구 안내 (§3-2).
 - **Config Gate** — 모든 스킬의 공통 Step 0: resolver 호출 → exit 0이면 stdout 값(VAULT_PATH 등) 사용, 아니면 stderr 안내 전달 후 중단 (§3-2).
 - **vault 서명 검증** — resolver가 `{wiki_dir}/index.md`·`log.md` 존재로 "진짜 볼트인지" 확인하는 절차. 전역 포인터가 엉뚱한 경로를 가리켜도 외부 디렉토리를 wiki로 오인하지 않는다 (§3-2).
 - **canonical source / 설치 타깃** — harness repo(스펙+스킬+훅+스크립트)가 단일 출처이고 `~/.claude/`는 symlink 설치 타깃. 업데이트 = `git pull`, 스킬 버전 = repo HEAD (§3-4).
@@ -178,6 +178,8 @@ vault resolution은 마크다운 프롬프트가 아니라 **단일 resolver 스
 ```
 1. CWD → git 루트 방향으로 .wiki-config.json 탐색
 2. 못 찾으면 → ~/.llm-wiki/default-vault 읽어 vault 경로 resolve → 해당 경로의 .wiki-config.json 로드
+2-a. 런타임 게이트: python3이 PATH에 없으면 E_NO_RUNTIME
+   → 위치 판정(1~2)은 순수 셸이므로 볼트 없는 머신은 여기까지 오지 않고 E_NO_CONFIG로 끝난다
 3. config 파싱 + 검증:
    - 필수 키(vault.path, wiki_dir, raw_dir) 존재, vault.path가 절대경로이고 실제 존재
    - version 게이트: config version이 스크립트가 아는 최신 version보다 높으면 E_VERSION
@@ -201,8 +203,11 @@ vault resolution은 마크다운 프롬프트가 아니라 **단일 resolver 스
 | 4 | `E_INVALID_CONFIG` | config 파싱 실패·필수 키 누락·vault.path 무효 | "wiki-setup 스킬을 --repair로 실행하세요" |
 | 5 | `E_VERSION` | config version이 스크립트가 아는 버전보다 높음 | "harness repo를 업데이트하세요 (git pull)" |
 | 6 | `E_NOT_A_VAULT` | vault 서명 검증 실패 (index.md/log.md 없음) | "wiki-setup 스킬을 --repair로 실행하세요" |
+| 7 | `E_NO_RUNTIME` | python3이 PATH에 없음 (위치 판정은 통과했으므로 볼트는 존재) | "python3를 설치하세요. --repair로는 해결되지 않습니다" |
 
 stderr 첫 줄은 `E_CODE: 메시지` 형식으로 고정한다 — 에이전트와 훅이 기계적으로 분기할 수 있고, 실패 유형별 복구 전략("setup 필요" vs "경로 재지정" vs "스킬 업데이트")이 섞이지 않는다.
+
+**런타임 게이트는 위치 판정 뒤 · 파싱 앞에 둔다.** 위치 판정은 순수 셸이고 파싱만 python3이므로, 게이트를 그 사이에 두면 **`E_NO_RUNTIME`이 "이 머신에 볼트가 있다"를 함의**한다. 볼트를 쓰지 않는 프로젝트는 `E_NO_CONFIG`로 끝나 python3를 볼 일이 없다 — 글로벌 훅(§5-1)이 이 코드에만 반응하면 무관한 세션에 경고가 새지 않으므로 **스팸 방지가 별도 로직 없이 따라온다**. 게이트를 파싱 실패 진단에 섞지 않는 이유는 복구 안내가 갈리기 때문이다: `E_INVALID_CONFIG`는 `--repair`로 낫지만 `E_NO_RUNTIME`은 낫지 않는다(2026-08-01 실측 — python3 부재가 `E_INVALID_CONFIG`로 오진돼 사용자가 `--repair`를 반복하는 경로가 확인됐다).
 
 ---
 
@@ -2313,6 +2318,12 @@ Claude Code hooks로 반복 작업 자동화. 스킬이 "무엇을 할지"를 �
 
 SessionStart matcher는 `startup|resume|clear|compact`를 포함한다 — compact 이후에도 부트스트랩을 재주입한다.
 
+**부트스트랩 ①은 python3에 의존하지 않는다.** 자기 경로 해석(symlink 경유 실행 포함)까지 순수 셸로 한다 — `readlink` 루프 + `cd … && pwd`. python3로 realpath를 구하면 python3가 없는 머신에서 배포본 루트가 CWD의 부모로 잘못 잡혀 **부트스트랩이 조용히 no-op** 하고(2026-08-01 실측), 그러면 아래 경고조차 나오지 않는다. 부트스트랩은 런타임 부재를 알리는 경로 자체이므로 런타임에 의존할 수 없다.
+
+**`E_NO_RUNTIME`(exit 7)은 조용히 삼키지 않고 1회 크게 알린다.** resolver가 7로 실패하면 — 즉 **볼트는 있는데 python3가 없으면** — `<EXTREMELY_IMPORTANT>` 경고를 주입 컨텍스트와 stderr 양쪽에 낸다: 스킬 12종과 가드 훅 2종이 모두 비활성이고, `wiki-setup --repair`로는 해결되지 않는다는 사실. python3 부재는 매 쓰기의 문제가 아니라 **머신 설정 문제**이므로 고지 지점은 세션 시작 1회다(가드 훅은 §5-2대로 fail-open을 유지한다). 그 외 resolver 실패(2~6)는 현행대로 조용히 부트스트랩만 하고 종료한다.
+
+경고 페이로드는 python3 없이 만들어야 하므로 **고정 문자열 + `printf`**로 쓴다(포맷은 위 플랫폼별 필드와 동일). 메시지가 정적이고 이스케이프를 우리가 통제하므로 JSON 빌더가 필요 없다. 플랫폼 판별도 이 경로에서는 순수 셸 부분 일치(`*cursor_version*`)로 대체한다 — 고정 메시지 전달에는 충분하고, 정상 경로는 엄격한 JSON 검사를 유지한다. **stdin 읽기는 exit 7 분기 안에서만** 한다 — 스크립트 앞으로 끌어올리면 페이로드가 오지 않는 경로에서 볼트 밖 세션까지 읽기 대기 비용을 낸다.
+
 **플랫폼 판별은 argv가 아니라 페이로드로 한다.** Cursor는 `~/.claude/settings.json`·`{ws}/.claude/settings.json`의 Claude 포맷 등록도 실행하므로(§5-0), 그 경로로 발화하면 argv는 `claude`인데 실제 런타임은 Cursor다. 페이로드에 `cursor_version` 키가 있으면 Cursor로 판정한다. 본 하네스는 경로를 분리해 이 상황을 만들지 않지만, 사용자가 수동 등록했을 때를 대비한 방어다.
 
 플랫폼별 등록 JSON·이벤트 표기·골든 fixture는 멀티플랫폼 배포 설계(`docs/distribution-design.md` §4·§5·§9)가 단일 출처다.
@@ -2326,6 +2337,8 @@ SessionStart matcher는 `startup|resume|clear|compact`를 포함한다 — compa
 **파일:** `~/.claude/hooks/wiki-protect-raw.sh`
 
 **글로벌 배치.** 외부 프로젝트에서 wiki 스킬을 호출해도 *실제 볼트의* raw/를 보호한다. vault resolution은 §3-2 resolver 스크립트를 그대로 호출한다(별도 구현 금지). resolver가 실패하면(볼트 없음·무효) 조용히 통과 — 무관한 프로젝트 오탐 방지.
+
+**fail-open은 의도된 설계다 — `E_NO_RUNTIME`(exit 7) 포함.** 근거 둘. **① 관할.** 이 훅은 글로벌이라 플러그인 설치 순간부터 이 머신의 모든 세션·모든 도구 호출에 발화한다. 볼트를 쓰지 않는 프로젝트에서 resolver는 **항상** `E_NO_CONFIG`로 실패하므로, 실패를 차단으로 해석하면 무관한 모든 작업의 쓰기가 막힌다. 또 이 훅이 지키는 대상은 `RAW_ABS = VAULT_PATH/RAW_DIR`이라는 구체적 절대경로이므로, resolve하지 못하면 **지킬 대상 자체가 정의되지 않는다**. **② 판정 불능.** 훅의 경로 추출·판정 블록 자체가 python3다. python3가 없으면 "이 쓰기가 `raw/`를 향하는가"를 판정할 수 없으므로, 차단으로 돌리는 것은 `raw/`만 골라 막는 게 아니라 **볼트 안의 모든 쓰기를 막는 것**이 된다. 1인 로컬 볼트에서 조용한 가드 공백보다 작업 전면 중단이 더 아프다. 대신 python3 부재는 §5-1이 세션 시작에 1회 크게 고지한다 — **강등 지점과 고지 지점을 분리**하는 것이 이 설계의 요지다. (셸만으로 JSON 경로 판정을 재구현하는 길도 기각: 두 가드 훅의 추출 규칙 동일성 유지 부담이 늘고, 한쪽 탐색 범위만 좁아 검증이 조용히 죽는 사고가 Codex `apply_patch`에서 실제로 있었다.)
 
 **수정·덮어쓰기는 차단, 삭제는 허용.** raw/ 2주 후 삭제 정책(`wiki-lint --fix`)이 동작하려면 `rm`은 통과시켜야 한다 — 삭제 안전 판단은 wiki-lint가 수행(ingest 완료 + summaries 존재 + 14일 경과 확인).
 
@@ -2387,7 +2400,7 @@ esac
 
 **파일:** `~/.claude/hooks/wiki-validate-frontmatter.sh`
 
-**글로벌 배치, 가드 성격.** 볼트 `wiki/` 하위 `.md` 쓰기(Write|Edit)마다 발화해 §3-3 frontmatter 기계 규칙을 **문서 클래스별로** 검증한다 (changes/·troubleshooting/은 클래스 ② enum, decisions/backlog/index/log/hot은 클래스 ③로 자동 통과 — §3-3 "문서 클래스"). 클래스 판정·검증 로직은 `scripts/validate-frontmatter.sh` 단일 출처 — 훅은 얇은 wrapper다. 위반 시에만 출력하므로 글로벌이어도 노이즈 0.
+**글로벌 배치, 가드 성격.** resolver 실패 시 fail-open하는 근거는 §5-2와 동일하다(관할 + 판정 불능) — `E_NO_RUNTIME` 포함. 볼트 `wiki/` 하위 `.md` 쓰기(Write|Edit)마다 발화해 §3-3 frontmatter 기계 규칙을 **문서 클래스별로** 검증한다 (changes/·troubleshooting/은 클래스 ② enum, decisions/backlog/index/log/hot은 클래스 ③로 자동 통과 — §3-3 "문서 클래스"). 클래스 판정·검증 로직은 `scripts/validate-frontmatter.sh` 단일 출처 — 훅은 얇은 wrapper다. 위반 시에만 출력하므로 글로벌이어도 노이즈 0.
 
 ```bash
 #!/bin/bash
@@ -2682,3 +2695,4 @@ raw/ 파일이 삭제되면 manifest가 "이 소스가 언제 어떤 wiki 페이
 | 2026-07-31 | `wiki/meetings/` 폐지 · `.manifest.json` 동형 스키마 §3-7 신설 · `base_confidence`에 `project=0.8` 추가·`unknown` 0.4→0.35 · provenance 블록 표기 강제 + 허용오차 ±0.05 · `changes/`의 `project`·`targets` 정의 신설 · archived 이동 시 `category` 보존 명문화 | 스펙 정합성 감사(레포↔스펙 3자 대조) 결과 반영. `wiki/meetings/`는 소유 스킬도 유효 category도 없어 훅이 무조건 차단하던 상태. manifest는 §2 트리에 경로조차 없이 4개 스킬이 서로 다른 스키마를 가정하고 있었음. provenance 인라인 표기는 validator를 **조용히 무력화**함이 실측으로 확인됨(합계 오류도 통과) |
 | 2026-07-31 | Phase 1 범위의 단일 출처를 `distribution-design.md` §9로 확정 · 스킬 수 표기 12개로 통일 · Phase 1 완료 기준의 "사람 개입 없이"를 "설계된 승인 지점 외의 예외·복구 개입 없이"로 정정 | §6 로드맵이 2026-06-25·07-02 배포 결정 이후 미갱신이라 매니페스트·install.sh·README·tests·스모크가 전부 누락돼 있었음. 완료 기준은 인터뷰(init)·승인(design)·확인(record)이 설계상 필수인 스킬 3개를 "사람 개입 없이" 통과시키라는 자기모순 상태였음 |
 | 2026-08-01 | **Phase 3 E2E 실측 — validator 결함 2건 정정.** ① `relationships`의 **인라인 flow 시퀀스**(`[{ … }]`)가 표기 가드와 `type` enum 검사를 **동시에 우회**했다 → 리스트 원소가 전부 매핑인지까지 검사한다 ② 클래스② 판정이 경로의 아무 세그먼트나 매칭해 `knowledge/` 대형 주제 서브폴더(`knowledge/api/changes/`)를 오판했다 → `projects/{name}/{changes\|troubleshooting}/` 손자 위치 인접성으로 한정한다 | 격리 샘플 볼트에서 setup→ingest→query→lint 완주 + 문서 클래스 ①②③ × (validator·PostToolUse 훅) 스모크로 확인. ①은 2026-07-31에 provenance만 닫히고 relationships는 열린 채 남아 있었음 — 인라인 `{ }`는 스칼라로 읽혀 가드가 걸리지만 인라인 `[ ]`는 **문자열 리스트**로 파싱돼 `isinstance(list)`를 통과하고, 그 상태로는 `isinstance(r, dict)` 게이트가 무발화해 잘못된 `type`이 조용히 통과했음. ②는 §3-3이 클래스②를 `projects/*/changes/*`로 한정했는데 구현이 더 넓었음. 회귀 테스트 10건 추가(31→41). 같은 스모크에서 `wiki/meetings/` 폐지(2026-07-31)가 `wiki-setup`(생성 Step·품질 체크·안티패턴)·`wiki-ingest`에 미반영으로 남아 있음을 발견해 함께 정정 |
+| 2026-08-04 | **`E_NO_RUNTIME`(exit 7) 신설 — 게이트는 위치 판정 뒤·파싱 앞 (§3-2).** 가드 훅 2종은 fail-open 유지(§5-2·§5-3에 근거 명문화), 고지는 `session-start` 1회(§5-1)로 분리. 부트스트랩 ①은 python3 비의존 요구를 명시 | python3 부재가 `E_INVALID_CONFIG`로 **오진**돼 사용자가 듣지 않는 `--repair`를 반복하는 경로가 실측 확인됨. 게이트 위치를 파싱 앞에 두면 `E_NO_RUNTIME`이 "볼트 존재"를 함의하므로 글로벌 훅의 **스팸 방지가 별도 로직 없이** 따라온다. 가드 훅을 차단으로 돌리는 안은 기각 — 훅이 글로벌이라 무관 프로젝트의 쓰기까지 막고, 경로 판정 블록 자체가 python3라 `raw/`만 골라낼 수 없어 볼트 안 전체를 막는 결과가 된다(강등 지점과 고지 지점의 분리). `session-start`의 realpath가 python3였던 탓에 부트스트랩이 **조용히 no-op** 해 경고 경로 자체가 죽던 문제도 함께 닫는다 |

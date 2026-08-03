@@ -5,6 +5,10 @@
 set -u
 
 # --- vault resolution: §3-2 resolver 재사용 ---
+# resolver 실패 → 조용히 통과. **exit 7(E_NO_RUNTIME, python3 부재)도 포함하며 의도된 것이다**
+# — 근거는 §5-2·hooks/wiki-protect-raw.sh와 동일하다(관할: 글로벌 훅이라 무관 프로젝트를
+# 막게 된다 / 판정 불능: 아래 경로 추출과 validator 본체가 python3라 검증 자체가 불가능하다).
+# python3 부재 고지는 hooks/session-start가 세션당 1회 담당한다. 여기서 다시 발견하지 말 것.
 RESOLVED="$(bash "$HOME/.llm-wiki/scripts/resolve-vault.sh" 2>/dev/null)" || exit 0
 VAULT_PATH="$(printf '%s\n' "$RESOLVED" | sed -n 's/^VAULT_PATH=//p')"
 WIKI_DIR="$(printf '%s\n' "$RESOLVED" | sed -n 's/^WIKI_DIR=//p')"

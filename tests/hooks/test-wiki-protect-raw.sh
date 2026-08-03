@@ -122,6 +122,24 @@ run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT\",\"tool_input\":{\"co
 eq "exit 0 (§5-2 비목표)" "0" "$CODE"
 cleanup
 
+# ⚠️ 의도된 fail-open (§5-2): python3가 없으면 resolver가 E_NO_RUNTIME(exit 7)로 실패하고
+#    이 훅은 **통과시킨다**. 차단으로 돌리면 raw/만 골라 막을 수 없고(경로 판정 블록 자체가
+#    python3다) 볼트 안 전체가 막힌다 — 훅이 글로벌이라 무관 프로젝트까지 함께 막힌다.
+#    고지는 hooks/session-start가 세션당 1회 담당한다. 이 테스트는 그 결정을 고정해 둔다 —
+#    차단으로 바꾸려면 먼저 spec §5-2를 개정해야 한다.
+echo "test: [의도된 fail-open] python3 없음 + 볼트 안 raw/ Write → 통과 (exit 0)"
+new_sandbox
+NOPY="$SANDBOX/nopy"; mkdir -p "$NOPY"
+for c in bash dirname head sed cat env; do ln -sf "$(command -v "$c")" "$NOPY/$c"; done
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/x.md\"}}" \
+  | HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$HOOK" claude 2>"$SANDBOX/err")"; CODE=$?
+ERR="$(cat "$SANDBOX/err")"
+eq "exit 0 (§5-2 fail-open)" "0" "$CODE"
+# resolver가 실제로 E_NO_RUNTIME 경로를 탔는지 — 다른 이유로 통과한 게 아님을 확인
+(cd "$VAULT" && HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh" >/dev/null 2>&1)
+eq "resolver는 exit 7(E_NO_RUNTIME)" "7" "$?"
+cleanup
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

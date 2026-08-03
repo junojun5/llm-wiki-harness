@@ -11,7 +11,7 @@
 
 | 파일 | 역할 | 호출 주체 |
 |---|---|---|
-| **`resolve-vault.sh`** | **Config Gate.** CWD에서 위로 `.wiki-config.json` 탐색 → 없으면 `~/.llm-wiki/default-vault` 포인터 → 파싱·검증·볼트 서명(`wiki/index.md`·`log.md`) 확인 → `VAULT_PATH`/`WIKI_DIR`/`RAW_DIR`를 stdout에 출력. 실패는 exit code 6종(`E_NO_CONFIG`=2·`E_BAD_POINTER`=3·`E_INVALID_CONFIG`=4·`E_VERSION`=5·`E_NOT_A_VAULT`=6) + stderr 첫 줄 `E_CODE: 메시지`. **상태 미저장 — 매 호출 fresh resolve.** (스펙 §3-2) | 모든 스킬 Step 0 + 모든 훅 |
+| **`resolve-vault.sh`** | **Config Gate.** CWD에서 위로 `.wiki-config.json` 탐색 → 없으면 `~/.llm-wiki/default-vault` 포인터 → 파싱·검증·볼트 서명(`wiki/index.md`·`log.md`) 확인 → `VAULT_PATH`/`WIKI_DIR`/`RAW_DIR`를 stdout에 출력. 실패는 exit code 7종(OK + `E_*` 6종: `E_NO_CONFIG`=2·`E_BAD_POINTER`=3·`E_INVALID_CONFIG`=4·`E_VERSION`=5·`E_NOT_A_VAULT`=6·`E_NO_RUNTIME`=7 — python3 부재, 위치 판정 뒤·파싱 앞 게이트) + stderr 첫 줄 `E_CODE: 메시지`. **상태 미저장 — 매 호출 fresh resolve.** (스펙 §3-2) | 모든 스킬 Step 0 + 모든 훅 |
 | **`validate-frontmatter.sh`** | frontmatter **기계 규칙** 검증. 파일 경로/category로 문서 클래스 ①②③를 판정한 뒤 클래스별 필수 키·enum(category/status/tier/relationship type)·날짜 형식·`summary`≤400자·`base_confidence` 0–1·provenance 합≈1을 검사. 클래스 ③(index/log/hot·decisions·backlog)은 통과. 의미적 품질은 검사하지 않음(LLM+wiki-lint 몫). (스펙 §3-3) | PostToolUse 훅 + `wiki-lint` |
 | **`build-link-graph.sh`** | wiki 전체를 **1회 O(N) 패스**로 스캔해 링크 그래프 산출 — 고아 페이지(inbound 0)·깨진 `[[링크]]`·개념 갭·typed relationship 타깃 부재/자기참조를 한 번에 낸다. 파일당 grep(O(N×M)) 금지. index/log/hot은 스캔·inbound에서 제외. (스펙 §4-6) | `wiki-lint`(체크 1·2·9·12) |
 

@@ -9,7 +9,8 @@
 | 증상 | 항목 |
 |---|---|
 | 스킬이 `E_*` 코드로 중단된다 | [Config Gate 실패](#config-gate-실패-e_-코드) |
-| config는 정상인데 `E_INVALID_CONFIG`가 반복된다 | [python3 확인](#e_invalid_config인데---repair가-듣지-않는다--python3-확인) |
+| `E_NO_RUNTIME` · 세션 시작에 python3 경고가 뜬다 | [python3가 없다](#e_no_runtime--python3가-없다) |
+| config는 정상인데 `E_INVALID_CONFIG`가 반복된다 | [구버전의 오진](#e_no_runtime--python3가-없다) |
 | 검색이 키워드만 잡는다 · `QMD skipped/partial/failed` | [QMD 미설치·미등록](#qmd-미설치미등록--grep-fallback) |
 | `raw/` 쓰기가 차단되지 않는다 | [훅이 발화하지 않는다](#훅이-발화하지-않는다) → 플랫폼별 아래 항목 |
 | Codex에서 가드가 없다 | [trust 미완](#codex--hooks-trust-미완-시-무경고-no-op) · [설정 파싱 실패](#codex--훅-설정-파싱-실패도-같은-증상을-낸다-경고-1줄--훅-0개) |
@@ -31,18 +32,32 @@
 | 4 | `E_INVALID_CONFIG` | `.wiki-config.json`이 깨졌다 | `wiki-setup --repair` |
 | 5 | `E_VERSION` | 설정 버전이 하네스보다 새롭다 | 하네스 `git pull` |
 | 6 | `E_NOT_A_VAULT` | 볼트 구조(`wiki/`)가 없다 | `wiki-setup --repair` |
+| 7 | `E_NO_RUNTIME` | python3이 PATH에 없다 | python3 설치 후 **세션 재시작** ([아래](#e_no_runtime--python3가-없다)) |
 
 스크립트 **파일 자체가 없으면** `./install.sh`를 재실행한다 — `~/.llm-wiki/scripts` 부트스트랩이 안 된 상태다.
 
-## `E_INVALID_CONFIG`인데 `--repair`가 듣지 않는다 → python3 확인
-
-`.wiki-config.json`이 정상인데도 `E_INVALID_CONFIG: config 파싱에 실패했습니다`가 반복되면 **원인은 config가 아니라 python3 부재**다. resolver가 파싱에 python3를 쓰기 때문에 없으면 파싱 실패로 보고된다.
+## `E_NO_RUNTIME` → python3가 없다
 
 ```bash
-python3 --version     # 없으면 설치 후 재시도
+python3 --version     # 없으면 설치 후 세션 재시작
 ```
 
-이 상태에서는 **raw/ 가드와 frontmatter 검증도 함께 발화하지 않는다** — 두 훅이 resolver 실패를 "볼트 밖 세션"으로 해석해 통과시키기 때문이다(비볼트 오탐 방지 설계). 즉 python3 하나가 없으면 보호 장치 전체가 조용히 풀리므로, 진단이 이상하면 가장 먼저 확인한다.
+**증상.** 볼트가 설정된 머신에서 python3가 없으면 세션 시작에 경고가 1회 주입되고(stderr에도 `E_NO_RUNTIME: python3 부재 …`), 모든 wiki 스킬이 Step 0에서 중단된다.
+
+**무엇이 함께 죽는가.** python3는 Config Gate·frontmatter validator·훅의 경로 판정 블록 **전부**가 쓴다. 따라서:
+
+| 구성요소 | 없을 때 |
+|---|---|
+| wiki 스킬 12종 | **중단** (Step 0 fail-closed — 스킬 경유 쓰기는 애초에 일어나지 않는다) |
+| `wiki-protect-raw` (raw/ 보호) | **통과** — 가드 없음 |
+| `wiki-validate-frontmatter` | **통과** — 검증 없음 |
+| `session-start` | 부트스트랩·경고는 동작한다(순수 셸), 규칙 주입은 없음 |
+
+즉 스킬을 우회해 손으로 `raw/`를 편집하면 아무것도 막지 않는다. 볼트 쓰기는 python3를 복구한 뒤에 한다.
+
+**왜 가드가 차단이 아니라 통과인가 (의도된 설계).** 두 가드 훅은 **글로벌**이라 볼트를 쓰지 않는 프로젝트에서도 매 도구 호출에 발화한다 — resolver 실패를 차단으로 해석하면 무관한 모든 작업의 쓰기가 막힌다. 게다가 "이 쓰기가 `raw/`를 향하는가"를 가리는 판정 블록 자체가 python3다. 차단으로 돌리는 것은 `raw/`만 골라 막는 게 아니라 **볼트 안 전체를 막는 것**이 된다. 그래서 강등은 조용히 하고 **고지는 세션 시작 1회**로 분리했다 ([spec](specs/spec.md) §5-2·§5-1).
+
+**`--repair`는 듣지 않는다.** 원인이 config가 아니기 때문이다. 예전 버전은 python3 부재를 `E_INVALID_CONFIG: config 파싱에 실패했습니다`로 **오진**해 사용자가 `wiki-setup --repair`를 반복하게 만들었다 — 그 메시지가 보이고 `.wiki-config.json`이 정상이라면 하네스가 구버전이므로 `git pull` 후 세션을 재시작한다(플러그인 설치본은 [버전 bump](#버전-bump-없이는-배포되지-않는다) 항목 참조).
 
 ## QMD 미설치·미등록 → Grep fallback
 

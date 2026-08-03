@@ -151,6 +151,59 @@ BEFORE="$(readlink "$H6/resolve-vault.sh")"
 (cd "$SB" && HOME="$SB/home6" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
 [ "$(readlink "$H6/resolve-vault.sh")" = "$BEFORE" ] && ok "멱등" || no "멱등 위반"
 
+# ── python3 부재 (§3-2 E_NO_RUNTIME · §5-1) ───────────────────────────────
+# 부트스트랩과 경고 경로는 **python3에 의존할 수 없다** — 런타임 부재를 알리는 경로가
+# 그 런타임을 요구하면 조용히 죽는다(2026-08-01 실측: realpath가 python3라 ROOT가
+# CWD의 부모로 잡히고 부트스트랩이 no-op).
+# 은닉은 PATH를 화이트리스트 디렉토리 **단독**으로 좁혀 만든다 — 뒤에 /usr/bin을 붙이면
+# 거기 있는 python3가 보이고, shim 파일을 두면 `command -v python3`가 성공해 부재가
+# 재현되지 않는다. 목록에서 빠진 명령이 있으면 시끄럽게 실패한다(안전한 방향).
+NOPY="$SB/nopy"; mkdir -p "$NOPY"
+for c in bash dirname head sed readlink ln mkdir cat env; do
+  ln -sf "$(command -v "$c")" "$NOPY/$c"
+done
+
+echo "test: python3 없음 + 볼트 안 — 경고를 주입과 stderr 양쪽에 낸다"
+H7="$SB/home7"; mkdir -p "$H7"
+OUT="$(cd "$VAULT" && HOME="$H7" PATH="$NOPY" "$BASH" "$HOOK" claude </dev/null 2>"$SB/err7")"; CODE=$?
+ERR7="$(cat "$SB/err7")"
+[ "$CODE" = 0 ] && ok "exit 0 (세션을 막지 않는다)" || no "exit 0 (got $CODE)"
+printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
+  && ok "경고도 유효 JSON" || no "invalid JSON: $OUT"
+jpath "경고가 additionalContext로 주입" "d['hookSpecificOutput']['additionalContext']" "python3" "$OUT"
+jpath "가드 훅 비활성 고지" "d['hookSpecificOutput']['additionalContext']" "가드 훅" "$OUT"
+jpath "--repair로는 안 된다는 고지" "d['hookSpecificOutput']['additionalContext']" "--repair" "$OUT"
+jpath "hookEventName=SessionStart 유지" "d['hookSpecificOutput']['hookEventName']" "SessionStart" "$OUT"
+printf '%s' "$ERR7" | grep -qF "E_NO_RUNTIME" && ok "stderr에 E_NO_RUNTIME" || no "stderr에 경고 없음: [$ERR7]"
+
+echo "test: python3 없음 + Cursor 페이로드 — 래퍼 없는 additional_context"
+H8="$SB/home8"; mkdir -p "$H8"
+OUT="$(cd "$VAULT" && HOME="$H8" PATH="$NOPY" "$BASH" "$HOOK" claude \
+  < "$REPO_ROOT/tests/fixtures/cursor-hooks/sessionstart.json" 2>/dev/null)"
+jpath "cursor 포맷 경고" "d['additional_context']" "python3" "$OUT"
+printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if 'hookSpecificOutput' not in json.load(sys.stdin) else 1)" 2>/dev/null \
+  && ok "cursor 경고에 hookSpecificOutput 래퍼 없음" || no "cursor 경고에 래퍼가 남아 있음"
+
+echo "test: python3 없음 + 볼트 없음 — 무성 (무관 프로젝트에 스팸 없음)"
+H9="$SB/home9"; mkdir -p "$H9"
+OUT="$(cd "$SB" && HOME="$H9" PATH="$NOPY" "$BASH" "$HOOK" claude </dev/null 2>"$SB/err9")"; CODE=$?
+ERR9="$(cat "$SB/err9")"
+[ "$CODE" = 0 ] && ok "exit 0" || no "exit 0 (got $CODE)"
+[ -z "$OUT" ] && ok "stdout 무성" || no "볼트 없는데 주입: $OUT"
+[ -z "$ERR9" ] && ok "stderr 무성" || no "볼트 없는데 경고: $ERR9"
+
+echo "test: python3 없음 + symlink 경유 실행 — ROOT가 옳게 잡혀 부트스트랩 동작"
+H10="$SB/home10"; mkdir -p "$H10"
+LINKED="$SB/linked-session-start"; ln -sfn "$MP/0.2.0/hooks/session-start" "$LINKED"
+(cd "$SB" && HOME="$H10" PATH="$NOPY" "$BASH" "$LINKED" claude </dev/null >/dev/null 2>&1)
+BOOTED=0
+for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+  [ -L "$H10/.llm-wiki/scripts/$s" ] && BOOTED=$((BOOTED+1))
+done
+[ "$BOOTED" = 3 ] && ok "symlink 경유 + python3 없음에도 부트스트랩 3개" || no "부트스트랩 $BOOTED/3 (ROOT 오판)"
+[ "$(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "링크 대상이 배포본 scripts/" || no "엉뚱한 대상: $(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")"
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -33,9 +33,9 @@ Andrej Karpathy의 **LLM Wiki 패턴**을 하네스로 구현한 것이다. RAG�
 | | 확인 | 용도 |
 |---|---|---|
 | **bash** | `bash --version` | 공유 스크립트·훅 전부 bash다. Windows는 [Git Bash 또는 WSL](docs/troubleshooting.md#windows--git-bash-또는-wsl-bash가-path에-필요) |
-| **python3** | `python3 --version` | `resolve-vault.sh`(Config Gate)·`validate-frontmatter.sh`가 JSON·YAML 파싱에 쓴다 |
+| **python3** | `python3 --version` | **하드 요구.** `resolve-vault.sh`(Config Gate)·`validate-frontmatter.sh`가 JSON·YAML 파싱에 쓴다 — 버전 무관(표준 라이브러리만 사용) |
 
-> ⚠️ **python3가 없으면 오진과 함께 가드가 조용히 풀린다.** Config Gate가 `E_INVALID_CONFIG: config 파싱에 실패했습니다`를 내보내지만 **실제 원인은 config가 아니라 python3 부재**다 — `--repair`를 반복해도 해결되지 않는다. 동시에 resolver 실패를 "볼트가 아님"으로 해석하는 훅들이 통과 처리되어 **raw/ 보호와 frontmatter 검증이 둘 다 발화하지 않는다.** 진단이 이상하면 먼저 `python3 --version`을 확인한다.
+> ⚠️ **python3가 없으면 스킬 12종과 가드 훅 2종이 전부 비활성이다.** Config Gate가 `E_NO_RUNTIME`(exit 7)로 중단하고, 볼트가 설정된 머신이면 **세션 시작에 경고가 1회 주입**된다. 가드 훅은 설계상 통과(fail-open)하므로 **raw/ 쓰기 보호와 frontmatter 검증이 동작하지 않는다** — 경로 판정 자체가 python3라 raw/만 골라 막을 수 없기 때문이다([근거](docs/troubleshooting.md#e_no_runtime--python3가-없다)). `wiki-setup --repair`로는 해결되지 않는다. python3를 설치하고 세션을 다시 시작한다.
 
 `jq`는 필요하지 않다 (파싱은 전부 python3로 통일돼 있다).
 
