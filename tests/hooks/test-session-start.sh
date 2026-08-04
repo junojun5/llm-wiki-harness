@@ -31,6 +31,23 @@ OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>"$SB/err")"; 
 [ -L "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" ] && ok "부트스트랩: validate-frontmatter.sh symlink" || no "validate symlink 없음"
 [ -z "$OUT" ] && ok "비볼트 → 주입 없음(빈 stdout)" || no "비볼트인데 출력 있음: $OUT"
 
+echo "test: config 경로 표기가 CWD와 달라도 게이트가 통과한다 (Windows 형식 차이 회귀)"
+# 2026-08-04 Windows CI: $PWD(/c/Users/…)와 config의 vault.path(C:/Users/…)가 같은 곳을
+# 가리키는데도 문자열 비교가 어긋나 **주입이 통째로 일어나지 않았다**(stdout 0바이트).
+# Windows 없이 재현하려면 "같은 디렉터리의 다른 표기"면 충분하다 — 비정규 경로를 쓴다.
+SBX="$SB/gatecheck"; mkdir -p "$SBX/vault/wiki"
+printf '# Index\n' > "$SBX/vault/wiki/index.md"; printf 'log\n' > "$SBX/vault/wiki/log.md"
+# config에는 같은 곳을 가리키는 **비정규 표기**를 적는다 (a/./b — 문자열로는 $PWD와 다르다)
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' \
+  "$(native_path "$SBX")/./vault" > "$SBX/vault/.wiki-config.json"
+OUT="$(cd "$SBX/vault" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
+[ -n "$OUT" ] && ok "표기가 달라도 주입됨" || no "표기 차이로 주입이 죽었다 (게이트 문자열 비교)"
+jpath "비정규 표기에서도 규칙 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
+
+echo "test: 볼트 밖은 표기와 무관하게 여전히 무주입 (게이트 완화가 스팸을 만들지 않는다)"
+OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
+[ -z "$OUT" ] && ok "볼트 밖 무주입 유지" || no "게이트가 헐거워져 볼트 밖에서 주입됨: $OUT"
+
 echo "test: 볼트 CWD (claude) — 주입 발생"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
 printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null && ok "유효 JSON" || no "invalid JSON"
