@@ -71,7 +71,12 @@ jobs:
             #    `|| rc=$?`는 실패를 조건문 안으로 넣어 `-e`의 사정권에서 빼낸다.
             rc=0
             timeout -k 10 120 bash "$t" </dev/null >"$RUNNER_TEMP/out.txt" 2>&1 || rc=$?
-            tail -40 "$RUNNER_TEMP/out.txt" || true
+            # 통과한 스위트는 마지막 3줄이면 충분하고, **실패한 스위트는 전문을 찍는다.**
+            # `tail -40`은 큰 스위트(session-start 51단언)에서 **첫 실패를 잘라먹는다** —
+            # 2026-08-04에 그 탓에 원인을 두 사이클 동안 오판했다(꼬리만 보고 게이트를
+            # 지목했으나 앞쪽에 다른 원인이 있었다). 진단 로그는 아끼는 대상이 아니다.
+            if [ "$rc" = 0 ]; then tail -3 "$RUNNER_TEMP/out.txt" || true
+            else cat "$RUNNER_TEMP/out.txt" || true; fi
             printf '=== END %s rc=%s%s\n' "$t" "$rc" "$([ "$rc" = 124 ] && printf ' (TIMEOUT — 매달림)')"
             [ "$rc" = 0 ] || rc_all=1
           done
