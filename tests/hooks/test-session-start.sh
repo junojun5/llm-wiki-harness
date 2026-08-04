@@ -135,6 +135,39 @@ done < "$LAUNCHER"
   && ok "Unix 분기 실행 줄이 전부 ' #'으로 CR을 흡수한다" \
   || no "' #' 없는 실행 줄 ${BAD}개 — CRLF에서 bash 분기가 죽는다"
 
+# ── 런처의 bash 탐색·부재 처리 계약 (2026-08-05) ──────────────────────────
+# 이 세 계약은 **CI에서 실행할 수 없다** — windows-latest 러너에는 Git Bash가 항상 있어
+# "bash 부재" 상태를 만들 수 없고, macOS/Linux에서는 cmd.exe 분기 자체가 돌지 않는다.
+# 그래서 정적으로 고정한다. 각각이 왜 그 모양이어야 하는지는 run-hook.cmd 주석과
+# 배포 설계 §10에 있고, 여기서는 "되돌리면 잡힌다"만 보장한다.
+echo "test: run-hook.cmd cmd.exe 분기 — bash 탐색 순서와 부재 처리"
+
+# ① Git 설치 경로 선탐색이 `where bash`보다 앞에 있어야 한다. 뒤집히면 System32의
+#    레거시 WSL 런처가 먼저 걸려 C:\ 경로를 해석 못 해 훅이 조용히 죽는다.
+GITPROBE="$(grep -n 'ProgramFiles%\\Git\\bin\\bash.exe' "$LAUNCHER" | head -1 | cut -d: -f1)"
+WHEREBASH="$(grep -n '^where bash' "$LAUNCHER" | head -1 | cut -d: -f1)"
+{ [ -n "$GITPROBE" ] && [ -n "$WHEREBASH" ] && [ "$GITPROBE" -lt "$WHEREBASH" ]; } \
+  && ok "Git 설치 경로를 where bash보다 먼저 확인한다 (${GITPROBE} < ${WHEREBASH})" \
+  || no "탐색 순서 역전 — where bash가 System32의 WSL bash를 먼저 집는다"
+
+# ② bash 부재 시 exit 코드가 훅 역할로 갈려야 한다. 전역 PreToolUse matcher에서
+#    fail-closed(2)는 모든 편집을 막고, 비영 exit는 매 호출마다 알림을 띄운다.
+grep -q 'if /i "%SCRIPT%"=="session-start" goto :no_bash_session' "$LAUNCHER" \
+  && ok "bash 부재 처리가 session-start와 가드를 구분한다" \
+  || no "역할 구분 없음 — 전역 matcher에서 알림 도배 또는 전체 차단이 된다"
+# ⚠️ tr을 sed보다 먼저 통과시킨다 — 런처는 CRLF라 `^:no_bash$`가 `:no_bash\r`에 걸리지 않는다.
+NB="$(tr -d '\r' < "$LAUNCHER" | sed -n '/^:no_bash$/,$p')"
+{ printf '%s' "$NB" | grep -q '^exit /b 0$' && printf '%s' "$NB" | grep -q '^exit /b 2$'; } \
+  && ok "가드는 무음 exit 0, session-start는 exit 2" \
+  || no "no_bash 분기에 exit 0/exit 2가 둘 다 있어야 한다"
+
+# ③ 경고 문구는 ASCII여야 한다 — 배치 파일의 한글 리터럴은 활성 코드페이지에 따라
+#    mojibake가 되고, 이 문장은 사용자가 조치해야 하는 유일한 출력이다.
+MSG="$(grep '^echo \[llm-wiki\]' "$LAUNCHER" | tr -d '\r')"
+{ [ -n "$MSG" ] && ! printf '%s' "$MSG" | LC_ALL=C grep -q '[^ -~]'; } \
+  && ok "bash 부재 경고가 ASCII 전용이다" \
+  || no "경고에 비ASCII 문자 — 코드페이지에 따라 mojibake가 된다"
+
 # ── 부트스트랩 ①: 버전 업데이트 시 stale symlink 재지정 ────────────────────
 # 마켓플레이스 캐시는 버전별 디렉토리라, 존재 여부만 보면 symlink가 구버전에 영구히
 # 고정된다. 2026-08-01 실측: 캐시는 0.2.0인데 런타임 홈은 0.1.0이라 고친 결함이 그대로

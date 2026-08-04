@@ -18,7 +18,7 @@
 | 규칙 일부가 무시된다 | [`project_doc_max_bytes`](#codex--agentsmd가-잘려-로드된다-project_doc_max_bytes) |
 | Cloud 환경에서 부트스트랩이 안 된다 | [Cursor 로컬 vs Cloud](#cursor--로컬-agent-vs-cloud-agent) |
 | 워크스페이스 밖 접근이 막힌다 | [sandbox 권한 승인](#cursorantigravity--sandbox-권한-승인) |
-| Windows에서 훅이 전부 죽는다 | [Git Bash / WSL](#windows--git-bash-또는-wsl-bash가-path에-필요) |
+| Windows에서 훅이 전부 죽는다 | [Git for Windows](#windows--git-for-windows가-필요하다) |
 | 고친 걸 머지했는데 설치본이 그대로다 | [버전 bump 없이는 배포되지 않는다](#버전-bump-없이는-배포되지-않는다) |
 
 ## Config Gate 실패 (`E_*` 코드)
@@ -140,15 +140,21 @@ project_doc_max_bytes = 65536
 
 기본 sandbox(`workspace_readwrite`)는 워크스페이스 밖 R/W를 차단하므로 `~/.llm-wiki/scripts/resolve-vault.sh` 호출이 실패할 수 있다. `install.sh --vault <path>`가 배치하는 `.cursor/sandbox.json`이 `~/.llm-wiki`와 볼트 경로를 허용 목록에 넣는다. Antigravity는 권한 프롬프트에서 해당 경로 접근을 **Allow** 한다.
 
-## Windows — Git Bash 또는 WSL bash가 PATH에 필요
+## Windows — Git for Windows가 필요하다
 
-공유 스크립트와 훅은 전부 `.sh`(bash)다. `hooks/run-hook.cmd`가 cmd.exe에서 bash로 위임하는 폴리글랏 런처이지만, **bash 자체는 PATH에 있어야 한다.**
+공유 스크립트와 훅은 전부 `.sh`(bash)다. `hooks/run-hook.cmd`가 cmd.exe에서 bash로 위임하는 폴리글랏 런처이지만, **bash 자체는 있어야 한다.**
 
 ```
-run-hook.cmd: bash를 찾을 수 없습니다. Git Bash 또는 WSL bash를 PATH에 추가하세요.
+[llm-wiki] bash not found - wiki guard hooks are DISABLED. Install Git for Windows, or add bash to PATH.
 ```
 
-이 메시지가 보이면 Git for Windows 또는 WSL을 설치한다. Codex의 플러그인 훅은 비Windows 전제다. `.ps1`/`.bat` 패리티 버전은 향후 보완 항목이다.
+이 경고는 **세션 시작에 1회만** 나온다(SessionStart 훅). 그 세션에서는 `raw/` 보호와 frontmatter 검증이 **비활성**이고, 가드 훅 쪽은 조용히 통과한다 — PreToolUse matcher가 `Write|Edit|MultiEdit|NotebookEdit|Bash`로 전역이라, 여기서 차단하면 볼트와 무관한 모든 편집이 막히고 매 호출마다 에러를 내면 알림이 도배된다. 그래서 "세션 시작에 한 번 크게 알리고, 이후엔 통과"로 설계했다.
+
+**해법은 [Git for Windows](https://git-scm.com/download/win) 설치다.** 런처는 `%ProgramFiles%\Git\bin\bash.exe` → `%ProgramFiles(x86)%\...` → `%LOCALAPPDATA%\Programs\Git\bin\bash.exe` 순으로 실제 설치 위치를 먼저 확인하고, 못 찾으면 마지막에 `where bash`로 PATH를 본다.
+
+> ⚠️ **WSL의 bash로는 동작하지 않는다.** WSL 기능이 켜진 시스템에는 `C:\Windows\System32\bash.exe`(레거시 런처)가 있고 System32는 PATH 앞쪽에 거의 항상 있다. 그 bash는 런처가 넘기는 `C:\...` 형식 Windows 경로를 WSL 안에서 해석할 수 없어 훅이 죽는다. 런처가 Git 설치 경로를 먼저 뒤지는 이유이며, 이전 문서의 "Git Bash 또는 WSL bash" 표기는 2026-08-05에 정정됐다(WSL 갈래는 실기 검증된 적이 없었다).
+
+Claude Code에서는 훅 항목의 `shell` 필드가 실행 셸을 정하고 기본값이 `bash`이므로, **Git Bash가 있으면 이 `.cmd`의 cmd.exe 분기를 아예 타지 않는다** — Claude가 런처를 bash로 직접 실행한다. cmd.exe 분기는 Git Bash 없는 Claude(→PowerShell→`.cmd`)와 Codex·Cursor 경로에서 쓰인다. `.ps1`/`.bat` 패리티 버전은 향후 보완 항목이다.
 
 ## 버전 bump 없이는 배포되지 않는다
 

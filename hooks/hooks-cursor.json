@@ -1,15 +1,15 @@
 {
-  "_comment": "Cursor 훅 등록 **템플릿** — install.sh가 배치하는 설정 파일 전용이다. 플러그인 매니페스트로는 등록되지 않는다: cursor-agent가 .cursor-plugin/plugin.json의 hooks 키를 파싱은 하나 내부 getPluginHooks가 호출되지 않아 훅 실행 엔진에 도달하지 않는다(2026-07-31 실측). 따라서 유효 경로는 install.sh --fallback → ~/.cursor/hooks.json, install.sh --vault → {vault}/.cursor/hooks.json 둘뿐이며, Cursor에 한해 install.sh는 폴백이 아니라 필수다. command의 {{HOOKS_DIR}}는 install.sh가 실제 설치 절대경로로 render한다 — self-locating './hooks/run-hook.cmd' 상대경로는 플러그인 로더가 플러그인 루트 기준으로 spawn해 줄 때만 성립하는 전제였고, 설정 파일 배치 경로에서는 프로세스 cwd(=워크스페이스) 기준으로 해석돼 깨진다. 이벤트명은 camelCase(sessionStart/preToolUse/postToolUse), matcher는 JavaScript 정규식(POSIX 아님), 도구명은 Write·Edit·Shell(대문자 S). 차단 출력은 permission:deny + user_message + exit 0, sessionStart 주입은 additional_context + env. ⚠️ Cursor는 훅 설정을 7개 소스에서 병합하며 ~/.claude/settings.json·{ws}/.claude/settings.json도 실행하므로, 같은 훅을 Claude 설정과 중복 등록하면 2회 발화한다 — 경로를 분리해 유지한다. Cloud Agent는 sessionStart 미지원(로컬 데스크톱 전용). 페이로드 계약은 spec.md §5-4 + tests/fixtures/cursor-hooks/.",
+  "_comment": "Cursor 훅 등록 **템플릿** — install.sh가 배치하는 설정 파일 전용이다. 플러그인 매니페스트로는 등록되지 않는다: cursor-agent가 .cursor-plugin/plugin.json의 hooks 키를 파싱은 하나 내부 getPluginHooks가 호출되지 않아 훅 실행 엔진에 도달하지 않는다(2026-07-31 실측). 따라서 유효 경로는 install.sh --fallback → ~/.cursor/hooks.json, install.sh --vault → {vault}/.cursor/hooks.json 둘뿐이며, Cursor에 한해 install.sh는 폴백이 아니라 필수다. command의 {{HOOKS_DIR}}는 install.sh가 실제 설치 절대경로로 render한다 — self-locating './hooks/run-hook.cmd' 상대경로는 플러그인 로더가 플러그인 루트 기준으로 spawn해 줄 때만 성립하는 전제였고, 설정 파일 배치 경로에서는 프로세스 cwd(=워크스페이스) 기준으로 해석돼 깨진다. 이벤트명은 camelCase(sessionStart/preToolUse/postToolUse), matcher는 JavaScript 정규식(POSIX 아님), 도구명은 Write·Edit·Shell(대문자 S). 차단 출력은 permission:deny + user_message + exit 0, sessionStart 주입은 additional_context + env. ⚠️ Cursor는 훅 설정을 7개 소스에서 병합하며 ~/.claude/settings.json·{ws}/.claude/settings.json도 실행하므로, 같은 훅을 Claude 설정과 중복 등록하면 2회 발화한다 — 경로를 분리해 유지한다. Cloud Agent는 sessionStart 미지원(로컬 데스크톱 전용). 페이로드 계약은 spec.md §5-4 + tests/fixtures/cursor-hooks/. ⚠️ **런처 경로 인용은 문서 근거이고 실측이 아니다** (2026-08-05): Cursor 훅 문서는 command를 \"shell string, an absolute path, or a relative path\"로 기술해 셸 실행을 함의하지만 실행 모델을 명시하지 않는다. 셸을 거치면 인용이 공백 포함 경로를 살리고, argv 단순 분할이라면 인용이 오히려 깨뜨린다(다만 그 경우 공백 경로는 인용 없이도 이미 깨진다). Claude(shell 필드 기본 bash)·Codex($SHELL -lc)는 문서로 확정이라 인용이 안전하다. Cursor는 cursor-agent로 sessionStart를 한 번 발화시켜 확인해야 하며, 어긋나면 이 파일의 큰따옴표 3쌍만 되돌리면 된다.",
   "version": 1,
   "hooks": {
     "sessionStart": [
-      { "command": "{{HOOKS_DIR}}/run-hook.cmd session-start cursor" }
+      { "command": "\"{{HOOKS_DIR}}/run-hook.cmd\" session-start cursor" }
     ],
     "preToolUse": [
-      { "command": "{{HOOKS_DIR}}/run-hook.cmd wiki-protect-raw.sh cursor", "matcher": "Write|Edit|Shell" }
+      { "command": "\"{{HOOKS_DIR}}/run-hook.cmd\" wiki-protect-raw.sh cursor", "matcher": "Write|Edit|Shell" }
     ],
     "postToolUse": [
-      { "command": "{{HOOKS_DIR}}/run-hook.cmd wiki-validate-frontmatter.sh", "matcher": "Write|Edit" }
+      { "command": "\"{{HOOKS_DIR}}/run-hook.cmd\" wiki-validate-frontmatter.sh", "matcher": "Write|Edit" }
     ]
   }
 }

@@ -72,6 +72,32 @@ print("yes" if isinstance(d.get("hooks"), dict) and d["hooks"] else "no")
   assert_eq "$f hooks 존재" "yes" "$HAS"
 done
 
+# ── 런처 경로 인용 계약 (2026-08-05) ────────────────────────────────────────
+# command는 셸 문자열로 실행된다 — Claude는 hook 항목의 `shell` 필드(기본 bash),
+# Codex는 `$SHELL -lc`. 따라서 런처 경로에 공백이 있으면 인용 없이는 인자 경계가
+# 깨진다(플러그인 루트는 Windows 사용자명·macOS 홈을 포함하고 둘 다 공백을 허용한다).
+# hooks-codex.json만 처음부터 인용돼 있었고 claude·cursor는 아니었다 — 세 파일이
+# 서로 달랐다는 것 자체가 결함 신호였으므로 여기서 계약으로 고정한다.
+# (Cursor의 실행 모델은 문서상 "shell string"이나 미실측 — hooks-cursor.json 주석 참조.)
+echo "test: 세 등록 JSON 모두 런처 경로를 큰따옴표로 감싼다"
+UNQUOTED="$(PYTHONUTF8=1 python3 -c '
+import json, sys
+bad = []
+for path in sys.argv[1:]:
+    d = json.load(open(path, encoding="utf-8"))
+    for ev, entries in (d.get("hooks") or {}).items():
+        for e in entries:
+            # Claude·Codex는 entry 안에 hooks 배열, Cursor는 entry 자체가 훅이다
+            for h in (e.get("hooks") or [e]):
+                c = h.get("command", "")
+                if not c:
+                    continue
+                if not (c.startswith("\"") and "run-hook.cmd\"" in c):
+                    bad.append("%s:%s:%s" % (path.rsplit("/", 1)[-1], ev, c))
+print(";".join(bad))
+' "$REPO_ROOT/hooks/hooks.json" "$REPO_ROOT/hooks/hooks-codex.json" "$REPO_ROOT/hooks/hooks-cursor.json")"
+assert_eq "미인용 command 없음" "" "$UNQUOTED"
+
 echo ""
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]
