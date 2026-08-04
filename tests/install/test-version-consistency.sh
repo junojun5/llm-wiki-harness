@@ -35,10 +35,10 @@ for m in .claude-plugin/plugin.json .codex-plugin/plugin.json \
          .cursor-plugin/plugin.json .antigravity-plugin/plugin.json; do
   f="$REPO_ROOT/$m"
   if [ ! -f "$f" ]; then no "$m 부재"; continue; fi
-  V="$(python3 -c '
+  V="$(PYTHONUTF8=1 python3 -c '
 import json, sys
 try:
-    print(json.load(open(sys.argv[1])).get("version", ""))
+    print(json.load(open(sys.argv[1], encoding="utf-8")).get("version", ""))
 except Exception as e:
     print("ERR:%s" % e)
 ' "$f")"
@@ -54,7 +54,7 @@ done
 for m in .claude-plugin/marketplace.json .cursor-plugin/marketplace.json; do
   f="$REPO_ROOT/$m"
   [ -f "$f" ] || continue
-  if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "$f" 2>/dev/null; then
+  if PYTHONUTF8=1 python3 -c 'import json,sys; json.load(open(sys.argv[1], encoding="utf-8"))' "$f" 2>/dev/null; then
     ok "$m 유효한 JSON"
   else
     no "$m JSON 파싱 실패"

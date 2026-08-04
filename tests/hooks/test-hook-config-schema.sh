@@ -17,11 +17,11 @@ assert_eq() { local d="$1" e="$2" a="$3"; if [ "$e" = "$a" ]; then PASS=$((PASS+
 
 # 최상위 키가 허용 집합을 벗어나면 그 키들을 출력, 아니면 빈 문자열
 extra_keys() { # extra_keys <file> <allowed,comma,separated>
-  python3 -c '
+  PYTHONUTF8=1 python3 -c '
 import json, sys
 allowed = set(sys.argv[2].split(","))
 try:
-    d = json.load(open(sys.argv[1]))
+    d = json.load(open(sys.argv[1], encoding="utf-8"))
 except Exception as e:
     print("PARSE_ERROR:%s" % e); sys.exit(0)
 print(",".join(sorted(k for k in d if k not in allowed)))
@@ -30,7 +30,7 @@ print(",".join(sorted(k for k in d if k not in allowed)))
 
 echo "test: 모든 훅 등록 JSON이 유효한 JSON"
 for f in hooks/hooks.json hooks/hooks-codex.json hooks/hooks-cursor.json; do
-  python3 -m json.tool "$REPO_ROOT/$f" >/dev/null 2>&1
+  PYTHONUTF8=1 python3 -m json.tool "$REPO_ROOT/$f" >/dev/null 2>&1
   assert_eq "$f 파싱" "0" "$?"
 done
 
@@ -38,7 +38,7 @@ echo "test: hooks-codex.json 최상위는 description|hooks 만 (Codex strict �
 assert_eq "허용 밖 키 없음" "" "$(extra_keys "$REPO_ROOT/hooks/hooks-codex.json" "description,hooks")"
 
 echo "test: hooks-codex.json 에 hooks 키가 존재하고 3개 이벤트를 등록"
-EVENTS="$(python3 -c '
+EVENTS="$(PYTHONUTF8=1 python3 -c '
 import json
 d = json.load(open("'"$REPO_ROOT"'/hooks/hooks-codex.json"))
 print(",".join(sorted((d.get("hooks") or {}).keys())))
@@ -46,7 +46,7 @@ print(",".join(sorted((d.get("hooks") or {}).keys())))
 assert_eq "이벤트 3종" "PostToolUse,PreToolUse,SessionStart" "$EVENTS"
 
 echo "test: hooks-codex.json command 는 PLUGIN_ROOT 절대참조 (훅 cwd는 세션 cwd)"
-BAD="$(python3 -c '
+BAD="$(PYTHONUTF8=1 python3 -c '
 import json
 d = json.load(open("'"$REPO_ROOT"'/hooks/hooks-codex.json"))
 bad = []
@@ -64,9 +64,9 @@ assert_eq "PLUGIN_ROOT 미참조 없음" "" "$BAD"
 # 관용 여부가 바뀌면 위 Codex 케이스와 같은 방식으로 제약을 추가한다.
 echo "test: hooks.json(Claude)·hooks-cursor.json(Cursor)에 hooks 키 존재"
 for f in hooks/hooks.json hooks/hooks-cursor.json; do
-  HAS="$(python3 -c '
+  HAS="$(PYTHONUTF8=1 python3 -c '
 import json, sys
-d = json.load(open(sys.argv[1]))
+d = json.load(open(sys.argv[1], encoding="utf-8"))
 print("yes" if isinstance(d.get("hooks"), dict) and d["hooks"] else "no")
 ' "$REPO_ROOT/$f")"
   assert_eq "$f hooks 존재" "yes" "$HAS"

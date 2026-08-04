@@ -12,7 +12,7 @@ SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
 ok(){ PASS=$((PASS+1)); echo "  ok: $1"; }
 no(){ FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 jpath(){ # desc pypath needle json
-  local v; v="$(printf '%s' "$4" | python3 -c "import json,sys;d=json.load(sys.stdin);print($2)" 2>/dev/null)"
+  local v; v="$(printf '%s' "$4" | PYTHONUTF8=1 python3 -c "import json,sys;d=json.load(sys.stdin);print($2)" 2>/dev/null)"
   printf '%s' "$v" | grep -qF -- "$3" && ok "$1" || no "$1 (want [$3] at $2)"
 }
 
@@ -33,7 +33,7 @@ OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>"$SB/err")"; 
 
 echo "test: 볼트 CWD (claude) — 주입 발생"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
-printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null && ok "유효 JSON" || no "invalid JSON"
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null && ok "유효 JSON" || no "invalid JSON"
 jpath "additionalContext에 Config Gate" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 jpath "additionalContext에 raw 불변" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
 jpath "EXTREMELY_IMPORTANT 래핑" "d['hookSpecificOutput']['additionalContext']" "EXTREMELY_IMPORTANT" "$OUT"
@@ -50,14 +50,14 @@ echo "test: 볼트 CWD (codex) — Claude와 동일한 hookSpecificOutput 포맷
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" codex </dev/null 2>/dev/null)"
 jpath "codex additionalContext" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 jpath "codex hookEventName=SessionStart" "d['hookSpecificOutput']['hookEventName']" "SessionStart" "$OUT"
-printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if 'additional_context' not in json.load(sys.stdin) else 1)" \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if 'additional_context' not in json.load(sys.stdin) else 1)" \
   && ok "codex에 additional_context 없음" || no "codex에 additional_context가 남아 있음"
 
 echo "test: 볼트 CWD (cursor) — additional_context + env(절대경로)"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" cursor </dev/null 2>/dev/null)"
 jpath "cursor additional_context" "d['additional_context']" "raw/ 는 불변" "$OUT"
 jpath "cursor env.LLM_WIKI_RESOLVER 절대경로" "d['env']['LLM_WIKI_RESOLVER']" "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" "$OUT"
-printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if not json.load(sys.stdin)['env']['LLM_WIKI_RESOLVER'].startswith('~') else 1)" \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if not json.load(sys.stdin)['env']['LLM_WIKI_RESOLVER'].startswith('~') else 1)" \
   && ok "cursor env에 틸드 없음(미확장 방지)" || no "cursor env가 틸드로 시작"
 
 # 페이로드 판별 — Cursor는 Claude 포맷 등록도 실행하므로 argv가 claude인 채 발화할 수 있다 (§5-1).
@@ -189,7 +189,7 @@ ASCII_LOCALE_ENV=(LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0)
 
 echo "test: ASCII locale에서도 주입이 온전하다 (한국어 페이로드)"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
-printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
   && ok "유효 JSON" || no "invalid JSON (인코딩으로 죽었다)"
 jpath "additionalContext에 한국어 규칙 보존" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
 
@@ -231,7 +231,7 @@ H7="$SB/home7"; mkdir -p "$H7"
 OUT="$(cd "$VAULT" && HOME="$H7" PATH="$NOPY" "$BASH" "$HOOK" claude </dev/null 2>"$SB/err7")"; CODE=$?
 ERR7="$(cat "$SB/err7")"
 [ "$CODE" = 0 ] && ok "exit 0 (세션을 막지 않는다)" || no "exit 0 (got $CODE)"
-printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
   && ok "경고도 유효 JSON" || no "invalid JSON: $OUT"
 jpath "경고가 additionalContext로 주입" "d['hookSpecificOutput']['additionalContext']" "python3" "$OUT"
 jpath "가드 훅 비활성 고지" "d['hookSpecificOutput']['additionalContext']" "가드 훅" "$OUT"
@@ -244,7 +244,7 @@ H8="$SB/home8"; mkdir -p "$H8"
 OUT="$(cd "$VAULT" && HOME="$H8" PATH="$NOPY" "$BASH" "$HOOK" claude \
   < "$REPO_ROOT/tests/fixtures/cursor-hooks/sessionstart.json" 2>/dev/null)"
 jpath "cursor 포맷 경고" "d['additional_context']" "python3" "$OUT"
-printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if 'hookSpecificOutput' not in json.load(sys.stdin) else 1)" 2>/dev/null \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if 'hookSpecificOutput' not in json.load(sys.stdin) else 1)" 2>/dev/null \
   && ok "cursor 경고에 hookSpecificOutput 래퍼 없음" || no "cursor 경고에 래퍼가 남아 있음"
 
 echo "test: python3 없음 + 볼트 없음 — 무성 (무관 프로젝트에 스팸 없음)"

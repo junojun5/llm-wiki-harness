@@ -101,9 +101,9 @@ eq "exit 0" "0" "$CODE"; cleanup
 echo "test: 골든 픽스처 posttooluse-apply-patch.json — 위반 페이지에서 검증 발화 (exit 2)"
 new_sandbox
 printf 'title: frontmatter 블록 없음\n' > "$VAULT/wiki/knowledge/notes.md"
-PAYLOAD="$(python3 -c '
+PAYLOAD="$(PYTHONUTF8=1 python3 -c '
 import json, sys
-d = json.load(open(sys.argv[1]))
+d = json.load(open(sys.argv[1], encoding="utf-8"))
 d["cwd"] = sys.argv[2]
 print(json.dumps(d))
 ' "$REPO_ROOT/tests/fixtures/codex-hooks/posttooluse-apply-patch.json" "$VAULT_N/wiki/knowledge")"

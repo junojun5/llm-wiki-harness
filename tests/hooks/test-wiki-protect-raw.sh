@@ -72,7 +72,7 @@ new_sandbox
 run_hook cursor "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/x.md\"}}"
 eq "exit 0 (cursor)" "0" "$CODE"
 # stdout이 유효 JSON이고 permission=deny
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
+PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
 cleanup
 
 # ── 상대경로 해석 (§5-4 실측: Codex·Cursor 경로는 대부분 cwd 상대경로) ──────────
@@ -106,7 +106,7 @@ echo "test: Cursor는 cwd 없이 workspace_roots[0] 기준으로 절대화 (§5-
 new_sandbox
 run_hook cursor "{\"tool_name\":\"Write\",\"workspace_roots\":[\"$VAULT_N\"],\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
 eq "exit 0 (cursor)" "0" "$CODE"
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
+PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
 cleanup
 
 echo "test: raw 형제 디렉토리(raw-backup/)는 오탐 없이 통과"
@@ -135,7 +135,7 @@ OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"fi
   | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" cursor 2>"$SANDBOX/err")"
 CODE=$?
 eq "exit 0 (cursor)" "0" "$CODE"
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'; assert '읽기 전용' in d['user_message']" "$OUT" 2>/dev/null \
+PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'; assert '읽기 전용' in d['user_message']" "$OUT" 2>/dev/null \
   && ok "deny JSON + 한국어 메시지 온전" || no "deny JSON 손실 (got [$OUT])"
 cleanup
 

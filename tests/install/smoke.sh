@@ -76,7 +76,7 @@ printf '%s' "$G" | grep -q "BROKEN	knowledge/ml.md	deep-learning" && ok "깨진 
 
 echo "[7] session-start — 볼트 CWD에서만 주입(자가-게이팅)"
 (cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null) \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'Config Gate' in d['hookSpecificOutput']['additionalContext'] else 1)" \
+  | PYTHONUTF8=1 python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'Config Gate' in d['hookSpecificOutput']['additionalContext'] else 1)" \
   && ok "볼트 CWD → 주입" || no "볼트 CWD → 주입"
 OUT_OUTSIDE="$(cd "$SB" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null)"
 [ -z "$OUT_OUTSIDE" ] && ok "볼트 밖 CWD → 주입 없음(스팸 방지)" || no "볼트 밖인데 주입됨"
