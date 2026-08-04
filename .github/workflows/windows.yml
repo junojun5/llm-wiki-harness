@@ -62,8 +62,15 @@ jobs:
             #    붙잡으면 `tail`이 EOF를 못 받아 **그 자리에서 다시 매달린다**(2026-08-04 실측:
             #    `| tail -40`을 썼더니 timeout 120이 무의미해지고 END 라인이 나오지 않았다).
             #    파일로 받아 스위트가 끝난 뒤에 읽는다. -k 로 SIGTERM 후 강제 종료까지 보장.
-            timeout -k 10 120 bash "$t" </dev/null >"$RUNNER_TEMP/out.txt" 2>&1
-            rc=$?
+            # ⚠️ `|| rc=$?` 없이 rc를 받으면 이 루프는 **첫 실패에서 통째로 죽는다.**
+            #    GitHub Actions의 bash는 `--noprofile --norc -e -o pipefail`로 돈다 — `-e`가
+            #    걸린 상태에서 실패한 명령을 조건문 밖에 두면 셸이 즉시 종료하므로 아래
+            #    `tail`(실패 이유)도 END 라인도 찍히지 않고 남은 스위트도 돌지 않는다.
+            #    2026-08-04 실측: 로그에 `=== START test-resolve-vault.sh` 다음이 곧바로
+            #    `##[error]exit code 1`이었고 나머지 7스위트의 Windows 상태가 미지로 남았다.
+            #    `|| rc=$?`는 실패를 조건문 안으로 넣어 `-e`의 사정권에서 빼낸다.
+            rc=0
+            timeout -k 10 120 bash "$t" </dev/null >"$RUNNER_TEMP/out.txt" 2>&1 || rc=$?
             tail -40 "$RUNNER_TEMP/out.txt" || true
             printf '=== END %s rc=%s%s\n' "$t" "$rc" "$([ "$rc" = 124 ] && printf ' (TIMEOUT — 매달림)')"
             [ "$rc" = 0 ] || rc_all=1
