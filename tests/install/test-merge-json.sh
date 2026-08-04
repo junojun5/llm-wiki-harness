@@ -129,11 +129,15 @@ grep -q '수동 머지 필요' "$SB/coexist.out" && no "병합했는데 수동 �
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[3] 재실행 멱등 — 항목이 누적되지 않는다 (conda#8703 부류)"
 # [2]의 결과 위에 2회 더 돌린다. 2회차와 3회차 산출물이 **바이트 단위로 동일**해야 한다.
-HOME="$H2" bash "$REPO/install.sh" --fallback --vault "$V2" >/dev/null 2>&1
+RC_A=0; HOME="$H2" bash "$REPO/install.sh" --fallback --vault "$V2" >"$SB/runA.out" 2>&1 || RC_A=$?
 for f in "$H2/.claude/settings.json" "$H2/.codex/hooks.json" "$H2/.cursor/hooks.json" "$V2/.cursor/sandbox.json"; do
   cp "$f" "$SB/snap.$(basename "$(dirname "$f")").$(basename "$f")"
 done
-HOME="$H2" bash "$REPO/install.sh" --fallback --vault "$V2" >"$SB/rerun.out" 2>&1
+RC_B=0; HOME="$H2" bash "$REPO/install.sh" --fallback --vault "$V2" >"$SB/rerun.out" 2>&1 || RC_B=$?
+# install.sh가 재실행에서 조용히 죽으면 아래 단언들이 **전부 통과한다** (파일이 안 바뀌므로).
+# 그 상태를 멱등성으로 오독하지 않게 종료 코드를 먼저 고정한다.
+[ "$RC_A" = 0 ] && ok "재실행 A 정상 종료" || no "재실행 A가 rc=$RC_A로 죽었다 — 아래 '불변' 단언은 무의미하다"
+[ "$RC_B" = 0 ] && ok "재실행 B 정상 종료" || no "재실행 B가 rc=$RC_B로 죽었다 — 아래 '불변' 단언은 무의미하다"
 for f in "$H2/.claude/settings.json" "$H2/.codex/hooks.json" "$H2/.cursor/hooks.json" "$V2/.cursor/sandbox.json"; do
   snap="$SB/snap.$(basename "$(dirname "$f")").$(basename "$f")"
   cmp -s "$snap" "$f" && ok "재실행 불변: ${f#"$SB/coexist/"}" || no "재실행이 파일을 변경했다: ${f#"$SB/coexist/"}"
@@ -148,8 +152,8 @@ else
   #    (생성 / 병합 / 이미 최신 / 읽을 수 없어 / 내부 오류) 출력만 보면 원인이 좁혀진다.
   #    2026-08-04 Windows CI에서 이 단언만 실패했는데 로그에 근거가 없어 추측밖에 못 했다 —
   #    §10 함정 ②와 같은 교훈이다(진단 스텝은 실패 경로를 실제로 밟아야 한다).
-  no "재실행 '이미 최신' 보고 없음 — 실제 등록 파일 관련 출력:
-$(grep -E 'settings.json|hooks.json|sandbox.json' "$SB/rerun.out" | sed 's/^/      /')"
+  no "재실행 '이미 최신' 보고 없음 (rc=$RC_B) — 재실행 출력 전문:
+$(sed 's/^/      | /' "$SB/rerun.out")"
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
