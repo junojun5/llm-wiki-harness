@@ -77,7 +77,7 @@ QMD 설정은 `.wiki-config.json`에 저장하지 않는다 — qmd 자체 레�
 /plugin install llm-wiki-harness
 ```
 
-마켓플레이스 미사용 시: `./install.sh --fallback` (skills+hooks → `~/.claude/` + settings.json 머지 안내)
+마켓플레이스 미사용 시: `./install.sh --fallback` (skills+hooks → `~/.claude/` + `~/.claude/settings.json`의 `hooks` 블록에 **병합** — 기존 항목·설정은 보존하고 재실행해도 누적되지 않는다)
 
 플러그인 루트의 `hooks/hooks.json`이 SessionStart·PreToolUse·PostToolUse를 자동 등록하고, 첫 SessionStart가 `~/.llm-wiki/scripts`를 자가치유한다. `install.sh` 없이 훅·스킬·가드가 모두 동작한다. (Claude Code는 이 경로를 **관례로 탐색**한다 — `plugin.json`에 `hooks` 키를 두면 중복 등록되므로 넣지 않는다.)
 

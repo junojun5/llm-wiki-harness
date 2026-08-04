@@ -134,7 +134,8 @@ project_doc_max_bytes = 65536
 
 - **훅은 플러그인으로 등록되지 않는다.** `install.sh`가 필수다([설치 매트릭스](../README.md#설치)).
 - **Cloud Agent는 `sessionStart`·user hooks를 지원하지 않는다** — 부트스트랩 주입이 없으므로 로컬 데스크톱 Agent를 쓴다. Cloud에서 작업해야 하면 `AGENTS.md`가 규칙을 대신 로드한다.
-- Cursor는 훅 설정을 **7개 소스에서 병합**하며 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행한다 — 같은 훅을 Claude 설정과 중복 등록하면 **2회 발화**한다. 경로를 분리해 유지한다.
+- Cursor는 훅 설정을 **7개 소스에서 병합**하며 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행한다 — 같은 훅을 Claude 설정과 중복 등록하면 **2회 발화**한다.
+  - ⚠️ **`install.sh --fallback`은 두 소스에 모두 등록한다** (`~/.claude/settings.json` + `~/.cursor/hooks.json`). 따라서 Claude와 Cursor를 함께 쓰면 Cursor 세션에서 우리 가드가 2회 발화할 수 있다 — **실측 전이다**(배포 설계 §10). 두 등록의 플랫폼 인자가 달라(`… claude` vs `… cursor`) Claude용 항목이 Cursor에서 무해하게 무시될 가능성이 크지만 확정되지 않았다. 증상(주입 2회, deny 2회)이 보이면 `~/.claude/settings.json`의 `hooks`에서 `run-hook.cmd … claude` 항목을 지운다 — Cursor 쪽 등록(`~/.cursor/hooks.json`)만으로 가드는 유지된다. Cursor를 쓰지 않으면 해당 없다.
 
 ## Cursor·Antigravity — sandbox 권한 승인
 

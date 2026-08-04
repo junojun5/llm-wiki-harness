@@ -235,8 +235,10 @@ SKILL.md frontmatter = `name` + `description`만 → 4개 도구 공통이라 �
 [2] (항상, ~/.gemini 감지 시) Antigravity 전역 플러그인 번들 — plugin.json + skills/ + rules/llm-wiki.md(=AGENTS.md).
     훅 미포함(스키마 미공개). Antigravity는 훅 자가치유가 불가하므로 이 경로가 ~/.llm-wiki 부트스트랩의 유일 보장.
 [3] --fallback: 마켓플레이스 미사용 환경용 — Claude/Codex/Cursor 홈 전역 배치. 플러그인 훅 command의 플러그인
-    루트 참조(${CLAUDE_PLUGIN_ROOT}/${PLUGIN_ROOT}/`./hooks/`)를 실제 설치 절대경로로 render(python: 중첩 브레이스 안전):
-      - Claude: hooks.json → ~/.claude/llm-wiki-hooks.settings.json (settings.json 머지 안내)
+    루트 참조(${CLAUDE_PLUGIN_ROOT}/${PLUGIN_ROOT}/`./hooks/`)를 실제 설치 절대경로로 render(python: 중첩 브레이스 안전)한 뒤
+    대상 파일에 **병합**한다(§7-1a):
+      - Claude: hooks.json → ~/.claude/settings.json 의 hooks 블록에 병합
+                (~/.claude/llm-wiki-hooks.settings.json 은 병합 원본 겸 복구용 참조로 함께 남긴다)
       - Codex : hooks-codex.json → ~/.codex/hooks.json (등록 후 /hooks trust 필요)
       - Cursor: hooks-cursor.json → ~/.cursor/hooks.json (절대경로)
 [4] --vault <p>: 프로젝트-로컬 — .agents/skills, 루트 AGENTS.md(+.agents/ symlink),
@@ -247,7 +249,31 @@ SKILL.md frontmatter = `name` + `description`만 → 4개 도구 공통이라 �
 - **Cursor sandbox:** 기본 `workspace_readwrite`는 워크스페이스 밖 R/W를 차단 → `~/.llm-wiki/scripts/` 호출이 실패할 수 있음. `.cursor/sandbox.json`의 `additionalReadwritePaths` 템플릿이 필요 (Antigravity §11-5 권한 프롬프트와 유사하나 Cursor는 별도 sandbox 레이어).
 - **Windows:** 공유 스크립트는 `.sh`(bash) → Git Bash 또는 WSL bash가 PATH에 있어야 함을 README에 명시. `.ps1`/`.bat` 패리티 버전 + 런처 OS 분기는 향후 보완 항목(§10).
 - `--update-path`(전역 볼트 재지정), `--repair` 등 하네스 스펙 §3-1 플래그는 `wiki-setup` 스킬이 담당. install.sh는 *배포*만, 볼트 *설정*은 wiki-setup.
-- 멱등(idempotent): 재실행 안전, 기존 symlink 갱신.
+- 멱등(idempotent): 재실행 안전, 기존 symlink 갱신, 등록 파일은 §7-1a 병합.
+
+### 7-1a. 공유 등록 파일 공존 — 마커 기반 멱등 병합 (2026-08-04)
+
+**문제.** 등록 대상 6곳(`~/.claude/settings.json` · `~/.codex/hooks.json` · `~/.cursor/hooks.json` · `{vault}/.codex/hooks.json` · `{vault}/.cursor/hooks.json` · `{vault}/.cursor/sandbox.json`)은 **우리 소유가 아니다** — 사용자와 다른 레포가 같은 파일에 등록한다. 직전 정책은 "원본 보존 + `.llm-wiki` 사본 + 수동 머지 안내"였다. 덮어쓰지 않으니 안전하지만 **통합이 사용자 손에 남는다**: 다른 레포도 같은 정책을 쓰면 사본만 쌓이고 훅은 하나도 등록되지 않은 채 설치가 "성공"한다 — §5-5 가드 생존 문제의 또 다른 입구다(설치 성공 ≠ 가드 작동).
+
+**해법.** 읽기 → 우리 마커 항목만 제거 → 현재 항목 삽입 → 쓰기. `install.sh`의 `merge_json`(python3, §3-9 준수)이 담당하고 `place_merge`가 감싼다.
+
+| 상황 | 동작 |
+|---|---|
+| 대상 없음 | 우리 항목만 담아 생성 (우리 `_comment`·`description`은 넣지 않는다 — 남의 파일에 우리 산문을 밀어넣지 않고, 호스트의 미지 키 경고도 피한다) |
+| 대상 있음 · 병합 가능 | 이벤트별로 우리 항목 교체, 남의 항목·무관 키(`permissions`·`model` 등) 보존 |
+| 결과가 기존과 동일 | **쓰지 않는다** (멱등 — 재실행이 파일을 건드리지 않는다) |
+| 대상 파싱 불가 | **손대지 않고** `.llm-wiki` 사본으로 강등 + 수동 머지 안내. 병합이 사용자 설정을 파괴하는 것은 수동 머지보다 나쁘다 |
+| 마크다운(`AGENTS.md`) | 병합 불가 → 사본 정책 유지(`place_link`) |
+
+**마커는 경로에 의존하지 않는다.** 우리 항목은 command가 `run-hook.cmd`(폴리글랏 런처)를 경유하고 우리 훅 스크립트명(`session-start`·`wiki-protect-raw.sh`·`wiki-validate-frontmatter.sh`)을 인자로 싣는다 — **둘 다** 요구한다(남의 항목을 지우는 것이 최악의 실패이므로 보수적으로). 절대경로로 식별하면 설치 위치가 바뀔 때(레포 이동·플러그인 캐시 갱신) 자기 항목을 못 찾아 중복을 쌓는다 — `conda init`이 이 방식으로 유명한 멱등성 버그를 남겼다(conda#8703). "제거 후 삽입"은 **제거가 삽입한 것을 정확히 되찾을 때만** 멱등이다.
+
+**세 가지 스키마를 한 함수로 다룬다.** Claude/Codex는 `hooks[Event][]`의 각 항목이 `hooks:[{type,command}]`를 중첩하고, Cursor는 `hooks[event][]`가 평면 `{command,matcher}`다. `command` 문자열을 항목에서 **모아서** 판정하므로 분기가 필요 없다. 최상위 키 규칙은 4개뿐이다: 주석 키는 건너뛴다 · dest에 없으면 복사(Cursor `version`이 이 경로) · `hooks`는 이벤트별 병합 · 문자열 목록은 합집합(`sandbox.json`의 `additionalReadwritePaths`) · 그 외 충돌은 **사용자 값이 이긴다**.
+
+**`additionalReadwritePaths`는 합집합만 취하고 제거하지 않는다.** 개별 경로에는 우리 것을 가릴 마커가 없다 — 사용자 경로를 지우는 위험이 stale 경로가 남는 위험보다 크다(볼트를 옮기면 옛 경로가 남지만, 그건 사용자가 직접 추가할 수도 있었을 R/W 경로 하나다).
+
+**드롭인(`.d`)을 우선하지 않은 이유.** systemd `conf.d`류 드롭인은 병합 자체를 불필요하게 만들어 더 낫다. 그러나 Claude·Codex·Cursor 어느 쪽도 훅 설정에 **드롭인 디렉터리를 공개하지 않는다** — Cursor가 7개 소스를 병합하는 것은 사실이나 그 7개는 고정된 *파일 경로*이고 우리가 독점할 수 있는 슬롯이 아니다. 드롭인 슬롯이 확인되면 그때 병합보다 우선한다(실측 전에는 채택하지 않는다).
+
+**회귀 고정:** `tests/install/test-merge-json.sh` — [1] 첫 설치 · [2] 남의 항목 보존 · [3] 재실행 멱등(바이트 단위 불변) · [4] 우리 stale 항목 교체 · [5] 손상된 대상 파일 · [6] ASCII locale 한국어 왕복. 합성 흐름의 굵은 확인은 `tests/install/smoke.sh` [8].
 
 ### 7-2. 마켓플레이스 (Claude/Codex 병행)
 
@@ -349,4 +375,9 @@ best-skill-creator의 Iron Law(테스트 없는 스킬 금지) 준수. 순서:
   - ~~`wiki-query` index-only · `wiki-lint --fix`~~ → **확인.** dry-run→`--yes` 수리 2건, LINT 17필드 라인.
   - **Cursor 전역 경로**(`install.sh --fallback` → `~/.cursor/hooks.json`) — **여전히 열림.** 전역 오염을 피해 프로젝트-로컬(`--vault`)만 검증.
   - **`ingest-url`·`wiki-capture`** — 범위 밖으로 남았다(12스킬 중 3종 미검증).
+- **⚠️ `--fallback`이 Cursor에서 우리 훅을 2회 발화시킬 수 있다 (2026-08-04 §7-1a 병합 도입으로 신규 개방 · 미실측).** `hooks-cursor.json`의 `_comment`에 이미 적힌 사실에서 나온다: **Cursor는 훅 설정을 7개 소스에서 병합하며 그중 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행한다.** 직전까지 Claude 훅 등록은 스니펫 + 수동 머지였으므로 대부분의 사용자에게 이 경로가 비어 있었으나, §7-1a가 `~/.claude/settings.json` 병합을 **자동화**하면서 `--fallback` 한 번으로 두 소스(`~/.claude/settings.json` + `~/.cursor/hooks.json`)에 우리 항목이 동시에 존재하게 된다. Cursor 세션에서 같은 가드가 2회 발화할 수 있다.
+  - **실제 영향은 불확실하고 그래서 실측이 필요하다.** 두 등록의 플랫폼 인자가 다르다(`… session-start claude` vs `… session-start cursor`). Claude용 항목이 Cursor에서 돌면 `session-start`는 Claude 형태 JSON(`hookSpecificOutput`)을 뱉으므로 Cursor가 `additional_context`로 읽지 못해 **무해하게 무시될 가능성**이 크고, 가드는 `exit 2` + stderr를 내는데 Cursor 계약은 `permission:deny` JSON + `exit 0`이라 **훅 오류로 처리될지 차단으로 처리될지 모른다**. 후자면 무관 프로젝트의 쓰기가 막힌다.
+  - **지금 손대지 않은 이유.** ① Cursor의 `.cursor/hooks.json` 경로는 실측으로 확인된 **유일한 유효 등록 수단**이다(§4-3) — 미실측 가설을 근거로 그걸 빼는 것은 검증된 경로를 깨는 것이다. ② `~/.claude/settings.json` 병합을 되돌리면 §7-1a가 고치려던 문제(사본만 쌓이고 훅 미등록)가 Claude에 그대로 남는다. ③ 조건부 등록("Cursor도 감지되면 Claude 쪽은 생략")은 두 도구를 함께 쓰는 사용자에게 Claude 가드를 꺼 버리는 더 나쁜 절충이다.
+  - **닫는 방법 (측정 먼저).** Cursor 로컬 데스크톱에서 `--fallback` 후 ① `sessionStart` 주입이 1회인지 2회인지, ② 볼트 `raw/` 쓰기 시 deny가 1회인지 2회인지, ③ 볼트 밖 프로젝트에서 Claude용 항목이 무해하게 무시되는지를 관측한다. 2회 발화가 확인되면 방향은 **등록 경로 분리 유지**(`hooks-cursor.json` `_comment`의 기존 지침)를 기계적으로 강제하는 것 — 예: Cursor 감지 시 `~/.claude/settings.json` 쪽 `command`에 Cursor에서 자가-강등하는 가드를 넣는다. 그전까지는 이 항목이 `--fallback`의 알려진 한계다.
+
 - **쓰기 종료 시퀀스 순서를 기계적으로 강제하는 것이 없다** (Phase 3b 신규 발견) — 산문 규칙만 있고 훅·테스트가 검사하지 않아 잘못된 순서가 조용히 통과한다. mtime은 판정 근거로 약하고 훅은 stateless라 설계가 필요하다 — `docs/superpowers/specs/2026-08-01-phase2-deferred-design.md` §4로 이관.
