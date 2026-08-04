@@ -21,7 +21,10 @@ WIKI_DIR="$(printf '%s\n' "$RESOLVED" | sed -n 's/^WIKI_DIR=//p')"
 # (없는 파일에 validator를 걸면 정상 삭제가 exit 2로 오보고된다).
 # PYTHONUTF8=1은 §3-9 계약 — 페이로드 경로에 한글이 올 수 있고, 비UTF-8 locale에서는
 # 디코딩이 어긋나 검증 대상 판정이 조용히 빗나간다.
-TARGET="$(printf '%s' "$(cat)" | BASE_FALLBACK="$PWD" PYTHONUTF8=1 python3 -c '
+# wiki/ 하위 판정까지 **python 안에서** 끝낸다. 셸의 `case` 문자열 비교로 두면 양쪽 경로
+# 표기가 달라 어긋난다 — Windows에서 normpath는 `\`를, config는 `/`를, `cd`+`pwd`는 `/c/…`를
+# 준다. 한 함수(_norm)로 양쪽을 같은 규칙에 통과시키는 것이 유일하게 안전한 방법이다.
+TARGET="$(printf '%s' "$(cat)" | BASE_FALLBACK="$PWD" WIKI_ABS="$VAULT_PATH/$WIKI_DIR" PYTHONUTF8=1 python3 -c '
 import json, os, re, sys
 
 try:
@@ -60,16 +63,23 @@ if not target and tool == "apply_patch":
 if target:
     if not os.path.isabs(target):
         target = os.path.join(base, target)
-    target = os.path.normpath(target)
+    # ⚠️ 비교 전 **양쪽을 같은 규칙으로 정규화**한다. Windows에서 normpath는 구분자를 `\`로
+    #    바꾸고, config 값은 `/`를 유지하며, `a/./b` 같은 비정규 표기도 섞인다. 정규화 없이
+    #    비교하면 wiki/ 판정이 어긋나 **검증이 조용히 통과한다**(2026-08-04 Windows CI 실측).
+    #    wiki-protect-raw.sh의 대응 블록과 **반드시 동일**하게 유지한다
+    #    (한쪽 탐색·비교 범위만 좁으면 그쪽 검증이 조용히 죽는다).
+    def _norm(p):
+        return os.path.normcase(os.path.normpath(p)).replace("\\", "/")
+    wiki_abs = _norm(os.environ["WIKI_ABS"])
+    if not (_norm(target).startswith(wiki_abs + "/") and target.lower().endswith(".md")):
+        print(""); sys.exit(0)
+    target = os.path.normpath(target).replace("\\", "/")
 
 print(target)
 ')"
 
-# 볼트 wiki/ 하위 .md가 아니면 통과
-case "$TARGET" in
-  "$VAULT_PATH/$WIKI_DIR"/*.md) ;;
-  *) exit 0 ;;
-esac
+# 볼트 wiki/ 하위 .md가 아니면 통과 — 판정은 위 python 블록이 했다(빈 문자열 = 대상 아님)
+[ -n "$TARGET" ] || exit 0
 
 # 클래스 판정(①②③)·검증은 validator 단일 출처 — 클래스 ③(index/log/hot·decisions·backlog)은
 # validator가 통과 처리하므로 훅에서 파일명 예외를 따로 두지 않는다 (§3-3, drift 방지).

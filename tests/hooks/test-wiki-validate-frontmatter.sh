@@ -57,6 +57,17 @@ run_hook "{\"tool_input\":{\"file_path\":\"$VAULT_N/wiki/knowledge/bad.md\"}}"
 eq "exit 2" "2" "$CODE"
 [ -n "$ERR" ] && ok "stderr 출력" || no "stderr 출력"; cleanup
 
+echo "test: config 경로가 비정규 표기여도 검증이 발화한다 (Windows 구분자 차이 회귀)"
+# protect-raw와 같은 부류 — 정규화 없이 비교하면 wiki/ 판정이 어긋나 **검증이 조용히 통과**한다.
+new_sandbox
+cat > "$VAULT/.wiki-config.json" <<JSON
+{ "version": 1, "vault": { "path": "$VAULT_N/./", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
+JSON
+printf '%s' "${VALID/summary: \"요약\"$'\n'/}" > "$VAULT/wiki/knowledge/bad.md"
+run_hook "{\"tool_input\":{\"file_path\":\"$VAULT_N/wiki/knowledge/bad.md\"}}"
+eq "비정규 config에서도 발화" "2" "$CODE"
+cleanup
+
 echo "test: 클래스③ 원장(index.md) → exit 0 (validator 면제)"
 new_sandbox
 run_hook "{\"tool_input\":{\"file_path\":\"$VAULT_N/wiki/index.md\"}}"

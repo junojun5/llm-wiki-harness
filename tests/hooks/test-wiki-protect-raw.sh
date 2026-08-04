@@ -42,6 +42,18 @@ run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT
 eq "exit 2" "2" "$CODE"; has "stderr 안내" "raw/" "$ERR"
 cleanup
 
+echo "test: config 경로가 비정규 표기여도 raw/ 차단 (Windows 구분자 차이 회귀)"
+# 2026-08-04 Windows CI: normpath가 target을 `C:\…`로 바꾸는데 RAW_ABS는 config에서 온
+# `C:/…`라 문자열 비교가 어긋나 **hit=False → raw/ 쓰기가 통과**했다. 가드가 조용히 열린다.
+# Windows 없이 재현하려면 "정규화하면 같아지는 다른 표기"면 충분하다.
+new_sandbox
+cat > "$VAULT/.wiki-config.json" <<JSON
+{ "version": 1, "vault": { "path": "$VAULT_N/./", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
+JSON
+run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/articles/x.md\"}}"
+eq "비정규 config에서도 차단" "2" "$CODE"
+cleanup
+
 echo "test: wiki/ Write 통과 (exit 0)"
 new_sandbox
 run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/wiki/concepts/x.md\"}}"

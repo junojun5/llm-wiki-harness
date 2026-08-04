@@ -18,29 +18,37 @@ no() { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 
 echo "test: [§3-9 계약] 모든 python3 호출에 PYTHONUTF8=1 (레포 전체 스캔)"
 
-# 스캔 대상 — 실행 가능한 셸 코드만. docs/는 산문이라 제외한다.
-TARGETS="$(find "$REPO_ROOT/scripts" "$REPO_ROOT/hooks" "$REPO_ROOT/tests" -name '*.sh' -type f 2>/dev/null; \
-           printf '%s\n' "$REPO_ROOT/install.sh" "$REPO_ROOT/hooks/session-start")"
+# ⚠️ 스캔은 **python3 한 번**으로 끝낸다. 줄마다 `sed`를 파이프로 부르는 셸 루프로 짰더니
+#    Windows CI에서 **rc=124로 매달렸다**(2026-08-04 실측, run 30883…) — MSYS는 프로세스
+#    생성이 비싸서 수천 줄 × 서브셸 2개가 120초 상한을 넘긴다. macOS에서는 2초였다.
+#    스캐너가 스스로 CI를 막으면 본말전도다.
+VIOLATIONS="$(REPO_ROOT="$REPO_ROOT" PYTHONUTF8=1 python3 - <<'PY'
+import os
+from pathlib import Path
 
-VIOLATIONS=""
-while IFS= read -r f; do
-  [ -f "$f" ] || continue
-  # 스캐너 자신은 제외한다 — 아래 case 패턴 문자열이 스스로에게 걸린다
-  case "$f" in */test-python-utf8-contract.sh) continue ;; esac
-  # `python3 -c` / `python3 -m` / `python3 - <<` 가 호출 형태다.
-  # 주석 줄과 이미 PYTHONUTF8이 붙은 줄은 건너뛴다.
-  while IFS= read -r line; do
-    case "$(printf '%s' "$line" | sed 's/^[[:space:]]*//')" in \#*) continue ;; esac
-    case "$line" in *PYTHONUTF8*) continue ;; esac
-    case "$line" in
-      *"python3 -c"*|*"python3 -m"*|*"python3 - "*)
-        VIOLATIONS="$VIOLATIONS
-  ${f#$REPO_ROOT/}: $(printf '%s' "$line" | sed 's/^[[:space:]]*//' | cut -c1-90)" ;;
-    esac
-  done < "$f"
-done <<EOF
-$TARGETS
-EOF
+root = Path(os.environ["REPO_ROOT"])
+# 실행 가능한 셸 코드만. docs/는 산문이라 제외한다.
+targets = sorted(set(
+    list((root / "scripts").rglob("*.sh"))
+    + list((root / "hooks").rglob("*.sh"))
+    + list((root / "tests").rglob("*.sh"))
+    + [root / "install.sh", root / "hooks" / "session-start"]
+))
+# `python3 -c` / `python3 -m` / `python3 - <<HEREDOC` 이 호출 형태다.
+CALLS = ("python3 -c", "python3 -m", "python3 - ")
+for f in targets:
+    if not f.is_file():
+        continue
+    if f.name == "test-python-utf8-contract.sh":
+        continue  # 스캐너 자신 — 위 CALLS 리터럴이 스스로에게 걸린다
+    for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+        s = line.lstrip()
+        if s.startswith("#") or "PYTHONUTF8" in line:
+            continue
+        if any(c in line for c in CALLS):
+            print("  %s:%d: %s" % (f.relative_to(root), i, s[:90]))
+PY
+)"
 
 if [ -z "$VIOLATIONS" ]; then
   ok "PYTHONUTF8=1 없는 python3 호출 0건"
