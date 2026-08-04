@@ -116,6 +116,24 @@ HELP="$(bash "$REPO/install.sh" --help)"
 printf '%s' "$HELP" | grep -qE 'set -euo pipefail|while \[ \$# -gt 0 \]' && no "--help에 코드 누출" || ok "--help 코드 누출 없음"
 printf '%s' "$HELP" | grep -q 'install.sh 필수' && ok "--help에 Cursor install.sh 필수 명시" || no "Cursor 필수 명시 없음"
 
+echo "[11] ASCII locale에서도 render가 훅 등록 파일을 만든다 (§3-9 PYTHONUTF8 계약)"
+# Windows CI에서 발견(2026-08-04, run 30872986849): install.sh의 render()만 §3-9 계약에서
+# 빠져 있었다. render 대상 JSON은 전부 한국어 description을 담고 있어 비UTF-8 locale에서
+# UnicodeDecodeError로 죽고 → **훅 등록 파일이 아예 생성되지 않는다**(조용한 설치 실패).
+# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성이므로 그 자동화까지 꺼야 Windows와 같은 조건이 된다.
+SB4="$SB/ascii"; H4="$SB4/home"; V4="$SB4/vault"
+mkdir -p "$H4/.claude" "$H4/.cursor" "$V4"
+HOME="$H4" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 \
+  bash "$REPO/install.sh" --fallback --vault "$V4" >"$SB4/out" 2>&1
+[ -f "$H4/.claude/llm-wiki-hooks.settings.json" ] && ok "Claude 훅 스니펫 생성" || no "ASCII locale에서 render 실패 — Claude 훅 스니펫 없음"
+[ -f "$H4/.cursor/hooks.json" ]                   && ok "Cursor hooks.json 생성"  || no "ASCII locale에서 render 실패 — Cursor hooks.json 없음"
+# render는 읽기만이 아니라 쓰기도 한다 — 한국어가 손상 없이 왕복해야 한다.
+grep -q '게이팅하므로 비볼트 세션에 스팸하지 않는다' "$H4/.claude/llm-wiki-hooks.settings.json" 2>/dev/null \
+  && ok "한국어 description 왕복 보존" || no "render가 한국어를 손상시켰다"
+# 치환도 정상 동작해야 한다 (인코딩만 고치고 기능이 죽으면 의미 없다)
+grep -q "$H4/.cursor/hooks" "$H4/.cursor/hooks.json" 2>/dev/null \
+  && ok "{{HOOKS_DIR}} 절대경로 치환" || no "ASCII locale에서 치환 실패"
+
 echo ""
 echo "SMOKE PASS=$PASS FAIL=$FAIL"
 echo "ⓘ 실제 Claude/Codex/Cursor/Antigravity CLI end-to-end는 in-app 검증 필요 (tests/fixtures/README.md, 배포 설계 §10)."

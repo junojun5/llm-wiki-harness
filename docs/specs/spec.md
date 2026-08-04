@@ -741,7 +741,9 @@ ${QMD_CLI:-qmd} ls "$QMD_WIKI_COLLECTION" | grep "<page-slug>"
 
 **병행 규칙:** 파일을 읽는 코드는 `open(..., encoding="utf-8")`을 **계속 명시**한다. env가 유실되는 경로(다른 런처가 환경을 정제하는 경우)에서도 파일 읽기는 살아야 하고, 이미 `validate-frontmatter.sh`·`build-link-graph.sh`가 쓰는 규칙이다 — 두 겹으로 둔다.
 
-**적용 대상:** `resolve-vault.sh` · `validate-frontmatter.sh` · `build-link-graph.sh` · `wiki-protect-raw.sh`(판정·deny 출력) · `wiki-validate-frontmatter.sh`(경로 추출) · `session-start`(Cursor 판별·주입 페이로드). 즉 **python3를 호출하는 모든 지점**이다. 회귀는 `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`으로 ASCII locale을 만들어 고정한다(macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화되므로 그 자동화까지 껐을 때만 Windows와 동일 조건이 된다).
+**적용 대상:** `resolve-vault.sh` · `validate-frontmatter.sh` · `build-link-graph.sh` · `wiki-protect-raw.sh`(판정·deny 출력) · `wiki-validate-frontmatter.sh`(경로 추출) · `session-start`(Cursor 판별·주입 페이로드) · **`install.sh`의 `render()`**(훅 등록 JSON의 플러그인 루트 치환). 즉 **python3를 호출하는 모든 지점**이다 — `scripts/`·`hooks/` 밖도 포함하며, `install.sh`가 그 예다(2026-08-04 최초 §3-9 적용 시 여기만 누락됐고 Windows CI가 잡았다. 아래 실패 모양 참조). 회귀는 `LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0`으로 ASCII locale을 만들어 고정한다(macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화되므로 그 자동화까지 껐을 때만 Windows와 동일 조건이 된다).
+
+**`render()`의 실패 모양이 특히 나쁘다 (누락이 남긴 교훈).** `open(dest,"w")`가 먼저 열리고 그 다음 `open(src).read()`가 죽으므로, dest는 **0바이트 파일로 남는다.** 훅 등록 파일이 "없음"이 아니라 "빈 파일"이 되어 설치는 성공한 것처럼 보이고 가드만 조용히 비활성화된다. 즉 §3-9 누락의 대가는 예외 하나가 아니라 **가드 무력화**다 — 새 python3 호출 지점을 추가할 때 이 계약을 먼저 확인한다. 회귀 고정: `tests/install/smoke.sh` [11].
 
 ---
 
