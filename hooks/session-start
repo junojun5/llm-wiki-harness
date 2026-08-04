@@ -73,7 +73,7 @@ case "$ROOT" in
   *)                 SIBLING_ROOT="" ;;
 esac
 
-for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh check-guards.sh; do
   SRC="$ROOT/scripts/$f"; DST="$LLMWIKI/$f"
   [ -e "$SRC" ] || continue
   if [ -L "$DST" ]; then
