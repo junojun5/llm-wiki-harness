@@ -53,7 +53,12 @@ link() { # link <src> <dst> — 멱등 symlink (디렉토리 보존)
 say() { printf '  %s\n' "$*"; }
 render() { # render <src.json> <find> <replace> <dest> — 플러그인 루트 참조를 절대경로로 치환(sed 대신 python: 중첩 브레이스 안전)
   mkdir -p "$(dirname "$4")"
-  python3 -c 'import sys; open(sys.argv[4],"w").write(open(sys.argv[1]).read().replace(sys.argv[2],sys.argv[3]))' "$1" "$2" "$3" "$4"
+  # PYTHONUTF8=1 + 명시적 encoding은 §3-9 계약 — render 대상(hooks*.json·plugin.json)은 전부
+  # 한국어 description을 담고 있고, python3의 open() 기본 인코딩은 locale이 결정한다. 비UTF-8
+  # locale(Windows cp1252)에서는 read()가 UnicodeDecodeError로 죽는데, 그때 이미 "w"로 열린
+  # dest는 **빈 파일로 남는다** — 훅 등록 파일이 조용히 0바이트가 되는 최악의 실패 모양이다.
+  # 2026-08-04 Windows CI(run 30872986849) smoke.sh에서 실측. 회귀는 smoke.sh [11]이 고정한다.
+  PYTHONUTF8=1 python3 -c 'import sys; open(sys.argv[4],"w",encoding="utf-8").write(open(sys.argv[1],encoding="utf-8").read().replace(sys.argv[2],sys.argv[3]))' "$1" "$2" "$3" "$4"
 }
 sidecar_path() { # sidecar_path <dest> — 확장자를 보존한 사본 경로 (hooks.json → hooks.llm-wiki.json)
   local d="$1" dir base
