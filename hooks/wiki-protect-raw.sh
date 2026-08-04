@@ -35,7 +35,17 @@ RAW_ABS="$VAULT_ROOT/$RAW_DIR"
 DECISION="$(printf '%s' "$(cat)" | RAW_ABS="$RAW_ABS" BASE_FALLBACK="$PWD" PYTHONUTF8=1 python3 -c '
 import json, os, re, sys
 
-raw_abs = os.environ["RAW_ABS"]
+# ⚠️ 경로 비교 전 **양쪽을 같은 규칙으로 정규화**한다. Windows에서 os.path.normpath는
+# 구분자를 `\`로 바꾸는데 RAW_ABS는 셸이 config 값(`C:/…`)으로 만들어 `/`를 유지한다.
+# 정규화 없이 비교하면 문자열이 어긋나 **hit=False → raw/ 쓰기가 통과한다**
+# (2026-08-04 Windows CI 실측: "raw/ Write 차단"이 exit 0으로 떨어졌다). 가드가 조용히
+# 열리는 실패라 증상이 보이지 않는다. normcase는 Windows의 대소문자 무시까지 흡수한다.
+# 알려진 한계: 드라이브 문자 표기가 다른 UNC/subst 경로는 여전히 별개로 본다(§5-2 수준).
+def _norm(p):
+    return os.path.normcase(os.path.normpath(p)).replace("\\", "/")
+
+raw_abs_literal = os.environ["RAW_ABS"]   # COMMAND 부분문자열 검사는 **원문**으로 한다
+raw_abs = _norm(raw_abs_literal)
 try:
     d = json.load(sys.stdin)
 except Exception:
@@ -74,11 +84,12 @@ if not target and tool == "apply_patch":
 if target:
     if not os.path.isabs(target):
         target = os.path.join(base, target)
-    target = os.path.normpath(target)
+    target = _norm(target)
 
 # raw/ 를 건드리지 않으면 통과. COMMAND는 절대경로 부분문자열만 본다
 # (셸 문법 전면 해석은 비목표 — §5-2 알려진 한계).
-hit = target == raw_abs or target.startswith(raw_abs + os.sep) or (raw_abs in command)
+# 구분자는 _norm이 `/`로 통일했으므로 os.sep이 아니라 "/"로 잇는다.
+hit = target == raw_abs or target.startswith(raw_abs + "/") or (raw_abs_literal in command)
 if not hit:
     print("allow"); sys.exit(0)
 

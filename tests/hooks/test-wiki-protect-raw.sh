@@ -5,6 +5,8 @@
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO_ROOT/hooks/wiki-protect-raw.sh"
+# 페이로드·config의 경로는 python3가 **값으로** 받는다 — 네이티브 형태여야 한다 (MSYS 주의)
+. "$REPO_ROOT/tests/lib/paths.sh"
 PASS=0; FAIL=0
 
 new_sandbox() {
@@ -14,9 +16,10 @@ new_sandbox() {
   ln -sf "$REPO_ROOT/scripts/resolve-vault.sh" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh"
   # 유효 볼트
   VAULT="$SANDBOX/vault"; mkdir -p "$VAULT/wiki" "$VAULT/raw"
+  VAULT_N="$(native_path "$VAULT")"
   : > "$VAULT/wiki/index.md"; : > "$VAULT/wiki/log.md"
   cat > "$VAULT/.wiki-config.json" <<JSON
-{ "version": 1, "vault": { "path": "$VAULT", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
+{ "version": 1, "vault": { "path": "$VAULT_N", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
 JSON
   printf '%s\n' "$VAULT" > "$SANDBOX/home/.llm-wiki/default-vault"
 }
@@ -35,25 +38,37 @@ has(){ printf '%s' "$3" | grep -qF -- "$2" && ok "$1" || no "$1 (want [$2] in [$
 
 echo "test: raw/ Write 차단 (claude → exit 2 + stderr)"
 new_sandbox
-run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/articles/x.md\"}}"
+run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/articles/x.md\"}}"
 eq "exit 2" "2" "$CODE"; has "stderr 안내" "raw/" "$ERR"
+cleanup
+
+echo "test: config 경로가 비정규 표기여도 raw/ 차단 (Windows 구분자 차이 회귀)"
+# 2026-08-04 Windows CI: normpath가 target을 `C:\…`로 바꾸는데 RAW_ABS는 config에서 온
+# `C:/…`라 문자열 비교가 어긋나 **hit=False → raw/ 쓰기가 통과**했다. 가드가 조용히 열린다.
+# Windows 없이 재현하려면 "정규화하면 같아지는 다른 표기"면 충분하다.
+new_sandbox
+cat > "$VAULT/.wiki-config.json" <<JSON
+{ "version": 1, "vault": { "path": "$VAULT_N/./", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
+JSON
+run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/articles/x.md\"}}"
+eq "비정규 config에서도 차단" "2" "$CODE"
 cleanup
 
 echo "test: wiki/ Write 통과 (exit 0)"
 new_sandbox
-run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/wiki/concepts/x.md\"}}"
+run_hook claude "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/wiki/concepts/x.md\"}}"
 eq "exit 0" "0" "$CODE"
 cleanup
 
 echo "test: raw/ 대상 rm 명령은 허용 (exit 0)"
 new_sandbox
-run_hook claude "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm $VAULT/raw/old.md\"}}"
+run_hook claude "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"rm $VAULT_N/raw/old.md\"}}"
 eq "exit 0 (rm 허용)" "0" "$CODE"
 cleanup
 
 echo "test: raw/ 대상 echo 리다이렉트 Bash는 차단 (exit 2)"
 new_sandbox
-run_hook claude "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi > $VAULT/raw/x.md\"}}"
+run_hook claude "{\"tool_name\":\"Bash\",\"tool_input\":{\"command\":\"echo hi > $VAULT_N/raw/x.md\"}}"
 eq "exit 2" "2" "$CODE"
 cleanup
 
@@ -66,10 +81,10 @@ cleanup
 
 echo "test: cursor 플랫폼 — raw/ Write 차단은 JSON permission:deny + exit 0"
 new_sandbox
-run_hook cursor "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/x.md\"}}"
+run_hook cursor "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/x.md\"}}"
 eq "exit 0 (cursor)" "0" "$CODE"
 # stdout이 유효 JSON이고 permission=deny
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
+PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
 cleanup
 
 # ── 상대경로 해석 (§5-4 실측: Codex·Cursor 경로는 대부분 cwd 상대경로) ──────────
@@ -77,38 +92,38 @@ cleanup
 
 echo "test: apply_patch 상대경로가 raw/ 를 가리키면 차단 (exit 2)"
 new_sandbox
-run_hook codex "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Add File: raw/articles/x.md\n+body\n*** End Patch\n\"}}"
+run_hook codex "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Add File: raw/articles/x.md\n+body\n*** End Patch\n\"}}"
 eq "exit 2" "2" "$CODE"; has "stderr 안내" "raw/" "$ERR"
 cleanup
 
 echo "test: apply_patch 상대경로가 wiki/ 를 가리키면 통과 (exit 0)"
 new_sandbox
-run_hook codex "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Add File: wiki/concepts/x.md\n+body\n*** End Patch\n\"}}"
+run_hook codex "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Add File: wiki/concepts/x.md\n+body\n*** End Patch\n\"}}"
 eq "exit 0" "0" "$CODE"
 cleanup
 
 echo "test: Write 상대경로가 raw/ 를 가리키면 차단 (cwd 기준 절대화)"
 new_sandbox
-run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT\",\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
+run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
 eq "exit 2" "2" "$CODE"
 cleanup
 
 echo "test: Write 상대경로가 wiki/ 를 가리키면 통과"
 new_sandbox
-run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT\",\"tool_input\":{\"file_path\":\"wiki/concepts/x.md\"}}"
+run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"file_path\":\"wiki/concepts/x.md\"}}"
 eq "exit 0" "0" "$CODE"
 cleanup
 
 echo "test: Cursor는 cwd 없이 workspace_roots[0] 기준으로 절대화 (§5-4)"
 new_sandbox
-run_hook cursor "{\"tool_name\":\"Write\",\"workspace_roots\":[\"$VAULT\"],\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
+run_hook cursor "{\"tool_name\":\"Write\",\"workspace_roots\":[\"$VAULT_N\"],\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
 eq "exit 0 (cursor)" "0" "$CODE"
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
+PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
 cleanup
 
 echo "test: raw 형제 디렉토리(raw-backup/)는 오탐 없이 통과"
 new_sandbox
-run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT\",\"tool_input\":{\"file_path\":\"raw-backup/x.md\"}}"
+run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"file_path\":\"raw-backup/x.md\"}}"
 eq "exit 0 (오탐 없음)" "0" "$CODE"
 cleanup
 
@@ -118,7 +133,7 @@ cleanup
 #    통과가 아니라 차단으로 바뀌길 원하면 먼저 spec §5-2를 개정해야 한다.
 echo "test: [알려진 한계] shell COMMAND 내 상대경로는 미탐지 → 통과 (exit 0)"
 new_sandbox
-run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT\",\"tool_input\":{\"command\":\"printf 'x' > raw/a.md\"}}"
+run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"command\":\"printf 'x' > raw/a.md\"}}"
 eq "exit 0 (§5-2 비목표)" "0" "$CODE"
 cleanup
 
@@ -128,17 +143,17 @@ cleanup
 # (2026-08-04 Windows CI 실측: cp1252에서 permission:deny JSON이 빈 출력).
 echo "test: ASCII locale에서도 Cursor deny JSON이 나온다 (한국어 메시지)"
 new_sandbox
-OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/x.md\"}}" \
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/x.md\"}}" \
   | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" cursor 2>"$SANDBOX/err")"
 CODE=$?
 eq "exit 0 (cursor)" "0" "$CODE"
-python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'; assert '읽기 전용' in d['user_message']" "$OUT" 2>/dev/null \
+PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'; assert '읽기 전용' in d['user_message']" "$OUT" 2>/dev/null \
   && ok "deny JSON + 한국어 메시지 온전" || no "deny JSON 손실 (got [$OUT])"
 cleanup
 
 echo "test: ASCII locale + 한글 경로 raw/ 쓰기도 차단 (claude)"
 new_sandbox
-OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/한글문서.md\"}}" \
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/한글문서.md\"}}" \
   | HOME="$SANDBOX/home" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 bash "$HOOK" claude 2>"$SANDBOX/err")"
 CODE=$?; ERR="$(cat "$SANDBOX/err")"
 eq "exit 2 (한글 경로도 판정)" "2" "$CODE"
@@ -168,7 +183,7 @@ echo "test: [의도된 fail-open] python3 없음 + 볼트 안 raw/ Write → 통
 new_sandbox
 NOPY="$SANDBOX/nopy"; mkdir -p "$NOPY"
 for c in bash dirname head sed cat env; do ln -sf "$(command -v "$c")" "$NOPY/$c"; done
-OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT/raw/x.md\"}}" \
+OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/x.md\"}}" \
   | HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$HOOK" claude 2>"$SANDBOX/err")"; CODE=$?
 ERR="$(cat "$SANDBOX/err")"
 eq "exit 0 (§5-2 fail-open)" "0" "$CODE"

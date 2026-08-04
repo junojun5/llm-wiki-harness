@@ -5,6 +5,8 @@ set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 RESOLVER="$REPO_ROOT/scripts/resolve-vault.sh"
+# config에 담기는 경로는 python3가 **값으로** 받으므로 네이티브 형태여야 한다 (MSYS 주의)
+. "$REPO_ROOT/tests/lib/paths.sh"
 
 PASS=0
 FAIL=0
@@ -27,7 +29,7 @@ make_valid_vault() {
   cat > "$vault/.wiki-config.json" <<JSON
 {
   "version": 1,
-  "vault": { "path": "$vault", "wiki_dir": "wiki", "raw_dir": "raw" },
+  "vault": { "path": "$(native_path "$vault")", "wiki_dir": "wiki", "raw_dir": "raw" },
   "created": "2026-06-25"
 }
 JSON
@@ -90,7 +92,7 @@ new_sandbox
 make_valid_vault "$SANDBOX/work/myvault"
 run_resolver "$SANDBOX/work/myvault"
 assert_eq "exit 0" "0" "$CODE"
-assert_contains "VAULT_PATH 출력" "VAULT_PATH=$SANDBOX/work/myvault" "$OUT"
+assert_contains "VAULT_PATH 출력" "VAULT_PATH=$(native_path "$SANDBOX/work/myvault")" "$OUT"
 assert_contains "WIKI_DIR 출력" "WIKI_DIR=wiki" "$OUT"
 assert_contains "RAW_DIR 출력" "RAW_DIR=raw" "$OUT"
 cleanup
@@ -103,7 +105,7 @@ mkdir -p "$SANDBOX/home/.llm-wiki"
 printf '%s\n' "$SANDBOX/elsewhere" > "$SANDBOX/home/.llm-wiki/default-vault"
 run_resolver "$SANDBOX/work"          # work엔 config 없음
 assert_eq "exit 0" "0" "$CODE"
-assert_contains "포인터 볼트로 resolve" "VAULT_PATH=$SANDBOX/elsewhere" "$OUT"
+assert_contains "포인터 볼트로 resolve" "VAULT_PATH=$(native_path "$SANDBOX/elsewhere")" "$OUT"
 cleanup
 
 # === 테스트 3: E_NO_CONFIG (exit 2) — config도 포인터도 없음 =============
@@ -131,7 +133,7 @@ mkdir -p "$SANDBOX/work/badvault/wiki"
 : > "$SANDBOX/work/badvault/wiki/index.md"
 : > "$SANDBOX/work/badvault/wiki/log.md"
 cat > "$SANDBOX/work/badvault/.wiki-config.json" <<JSON
-{ "version": 1, "vault": { "path": "$SANDBOX/work/badvault" } }
+{ "version": 1, "vault": { "path": "$(native_path "$SANDBOX/work/badvault")" } }
 JSON
 run_resolver "$SANDBOX/work/badvault"
 assert_eq "exit 4" "4" "$CODE"
@@ -144,7 +146,7 @@ new_sandbox
 make_valid_vault "$SANDBOX/work/futurevault"
 # version을 999로 덮어쓴다
 cat > "$SANDBOX/work/futurevault/.wiki-config.json" <<JSON
-{ "version": 999, "vault": { "path": "$SANDBOX/work/futurevault", "wiki_dir": "wiki", "raw_dir": "raw" } }
+{ "version": 999, "vault": { "path": "$(native_path "$SANDBOX/work/futurevault")", "wiki_dir": "wiki", "raw_dir": "raw" } }
 JSON
 run_resolver "$SANDBOX/work/futurevault"
 assert_eq "exit 5" "5" "$CODE"
@@ -156,7 +158,7 @@ echo "test: index.md/log.md 없으면 E_NOT_A_VAULT exit 6"
 new_sandbox
 mkdir -p "$SANDBOX/work/notvault/wiki" "$SANDBOX/work/notvault/raw"
 cat > "$SANDBOX/work/notvault/.wiki-config.json" <<JSON
-{ "version": 1, "vault": { "path": "$SANDBOX/work/notvault", "wiki_dir": "wiki", "raw_dir": "raw" } }
+{ "version": 1, "vault": { "path": "$(native_path "$SANDBOX/work/notvault")", "wiki_dir": "wiki", "raw_dir": "raw" } }
 JSON
 run_resolver "$SANDBOX/work/notvault"
 assert_eq "exit 6" "6" "$CODE"
@@ -218,7 +220,7 @@ new_sandbox
 make_valid_vault "$SANDBOX/work/한글볼트"
 run_resolver_ascii_locale "$SANDBOX/work/한글볼트"
 assert_eq "exit 0 (오진 없음)" "0" "$CODE"
-assert_contains "VAULT_PATH가 한글 경로 그대로" "VAULT_PATH=$SANDBOX/work/한글볼트" "$OUT"
+assert_contains "VAULT_PATH가 한글 경로 그대로" "VAULT_PATH=$(native_path "$SANDBOX/work/한글볼트")" "$OUT"
 assert_contains "WIKI_DIR 출력" "WIKI_DIR=wiki" "$OUT"
 cleanup
 

@@ -5,19 +5,22 @@
 # HOME을 샌드박스로 격리해 실제 ~/.llm-wiki를 건드리지 않는다.
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$REPO_ROOT/tests/lib/paths.sh"
 HOOK="$REPO_ROOT/hooks/session-start"
 PASS=0; FAIL=0
 SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
 ok(){ PASS=$((PASS+1)); echo "  ok: $1"; }
 no(){ FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 jpath(){ # desc pypath needle json
-  local v; v="$(printf '%s' "$4" | python3 -c "import json,sys;d=json.load(sys.stdin);print($2)" 2>/dev/null)"
+  local v; v="$(printf '%s' "$4" | PYTHONUTF8=1 python3 -c "import json,sys;d=json.load(sys.stdin);print($2)" 2>/dev/null)"
   printf '%s' "$v" | grep -qF -- "$3" && ok "$1" || no "$1 (want [$3] at $2)"
 }
 
 HOMESB="$SB/home"; mkdir -p "$HOMESB"
 VAULT="$SB/vault"; mkdir -p "$VAULT/wiki"
-printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-01-01"}\n' "$VAULT" > "$VAULT/.wiki-config.json"
+# config의 vault.path는 python3가 **값으로** 받는다 — 네이티브 형태여야 한다 (MSYS 주의)
+VAULT_N="$(native_path "$VAULT")"
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-01-01"}\n' "$VAULT_N" > "$VAULT/.wiki-config.json"
 printf '# Index\n' > "$VAULT/wiki/index.md"
 printf 'log\n' > "$VAULT/wiki/log.md"
 
@@ -28,9 +31,26 @@ OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>"$SB/err")"; 
 [ -L "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" ] && ok "부트스트랩: validate-frontmatter.sh symlink" || no "validate symlink 없음"
 [ -z "$OUT" ] && ok "비볼트 → 주입 없음(빈 stdout)" || no "비볼트인데 출력 있음: $OUT"
 
+echo "test: config 경로 표기가 CWD와 달라도 게이트가 통과한다 (Windows 형식 차이 회귀)"
+# 2026-08-04 Windows CI: $PWD(/c/Users/…)와 config의 vault.path(C:/Users/…)가 같은 곳을
+# 가리키는데도 문자열 비교가 어긋나 **주입이 통째로 일어나지 않았다**(stdout 0바이트).
+# Windows 없이 재현하려면 "같은 디렉터리의 다른 표기"면 충분하다 — 비정규 경로를 쓴다.
+SBX="$SB/gatecheck"; mkdir -p "$SBX/vault/wiki"
+printf '# Index\n' > "$SBX/vault/wiki/index.md"; printf 'log\n' > "$SBX/vault/wiki/log.md"
+# config에는 같은 곳을 가리키는 **비정규 표기**를 적는다 (a/./b — 문자열로는 $PWD와 다르다)
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' \
+  "$(native_path "$SBX")/./vault" > "$SBX/vault/.wiki-config.json"
+OUT="$(cd "$SBX/vault" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
+[ -n "$OUT" ] && ok "표기가 달라도 주입됨" || no "표기 차이로 주입이 죽었다 (게이트 문자열 비교)"
+jpath "비정규 표기에서도 규칙 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
+
+echo "test: 볼트 밖은 표기와 무관하게 여전히 무주입 (게이트 완화가 스팸을 만들지 않는다)"
+OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
+[ -z "$OUT" ] && ok "볼트 밖 무주입 유지" || no "게이트가 헐거워져 볼트 밖에서 주입됨: $OUT"
+
 echo "test: 볼트 CWD (claude) — 주입 발생"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
-printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null && ok "유효 JSON" || no "invalid JSON"
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null && ok "유효 JSON" || no "invalid JSON"
 jpath "additionalContext에 Config Gate" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 jpath "additionalContext에 raw 불변" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
 jpath "EXTREMELY_IMPORTANT 래핑" "d['hookSpecificOutput']['additionalContext']" "EXTREMELY_IMPORTANT" "$OUT"
@@ -47,14 +67,14 @@ echo "test: 볼트 CWD (codex) — Claude와 동일한 hookSpecificOutput 포맷
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" codex </dev/null 2>/dev/null)"
 jpath "codex additionalContext" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 jpath "codex hookEventName=SessionStart" "d['hookSpecificOutput']['hookEventName']" "SessionStart" "$OUT"
-printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if 'additional_context' not in json.load(sys.stdin) else 1)" \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if 'additional_context' not in json.load(sys.stdin) else 1)" \
   && ok "codex에 additional_context 없음" || no "codex에 additional_context가 남아 있음"
 
 echo "test: 볼트 CWD (cursor) — additional_context + env(절대경로)"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" cursor </dev/null 2>/dev/null)"
 jpath "cursor additional_context" "d['additional_context']" "raw/ 는 불변" "$OUT"
 jpath "cursor env.LLM_WIKI_RESOLVER 절대경로" "d['env']['LLM_WIKI_RESOLVER']" "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" "$OUT"
-printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if not json.load(sys.stdin)['env']['LLM_WIKI_RESOLVER'].startswith('~') else 1)" \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if not json.load(sys.stdin)['env']['LLM_WIKI_RESOLVER'].startswith('~') else 1)" \
   && ok "cursor env에 틸드 없음(미확장 방지)" || no "cursor env가 틸드로 시작"
 
 # 페이로드 판별 — Cursor는 Claude 포맷 등록도 실행하므로 argv가 claude인 채 발화할 수 있다 (§5-1).
@@ -186,13 +206,13 @@ ASCII_LOCALE_ENV=(LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0)
 
 echo "test: ASCII locale에서도 주입이 온전하다 (한국어 페이로드)"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
-printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
   && ok "유효 JSON" || no "invalid JSON (인코딩으로 죽었다)"
 jpath "additionalContext에 한국어 규칙 보존" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
 
 echo "test: ASCII locale + 한글 볼트 경로에서도 주입"
-KV="$SB/한글볼트"; mkdir -p "$KV/wiki"
-printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' "$KV" > "$KV/.wiki-config.json"
+KV="$SB/한글볼트"; mkdir -p "$KV/wiki"; KV_N="$(native_path "$KV")"
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' "$KV_N" > "$KV/.wiki-config.json"
 printf '# Index\n' > "$KV/wiki/index.md"; printf 'log\n' > "$KV/wiki/log.md"
 OUT="$(cd "$KV" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
 jpath "한글 경로 볼트도 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
@@ -228,7 +248,7 @@ H7="$SB/home7"; mkdir -p "$H7"
 OUT="$(cd "$VAULT" && HOME="$H7" PATH="$NOPY" "$BASH" "$HOOK" claude </dev/null 2>"$SB/err7")"; CODE=$?
 ERR7="$(cat "$SB/err7")"
 [ "$CODE" = 0 ] && ok "exit 0 (세션을 막지 않는다)" || no "exit 0 (got $CODE)"
-printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/null \
   && ok "경고도 유효 JSON" || no "invalid JSON: $OUT"
 jpath "경고가 additionalContext로 주입" "d['hookSpecificOutput']['additionalContext']" "python3" "$OUT"
 jpath "가드 훅 비활성 고지" "d['hookSpecificOutput']['additionalContext']" "가드 훅" "$OUT"
@@ -241,7 +261,7 @@ H8="$SB/home8"; mkdir -p "$H8"
 OUT="$(cd "$VAULT" && HOME="$H8" PATH="$NOPY" "$BASH" "$HOOK" claude \
   < "$REPO_ROOT/tests/fixtures/cursor-hooks/sessionstart.json" 2>/dev/null)"
 jpath "cursor 포맷 경고" "d['additional_context']" "python3" "$OUT"
-printf '%s' "$OUT" | python3 -c "import json,sys;sys.exit(0 if 'hookSpecificOutput' not in json.load(sys.stdin) else 1)" 2>/dev/null \
+printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if 'hookSpecificOutput' not in json.load(sys.stdin) else 1)" 2>/dev/null \
   && ok "cursor 경고에 hookSpecificOutput 래퍼 없음" || no "cursor 경고에 래퍼가 남아 있음"
 
 echo "test: python3 없음 + 볼트 없음 — 무성 (무관 프로젝트에 스팸 없음)"

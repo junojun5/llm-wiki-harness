@@ -10,6 +10,9 @@ no(){ FAIL=$((FAIL+1)); echo "  ✗ $1"; }
 
 SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
 HOME_DIR="$SB/home"; VAULT="$SB/vault"
+# config·페이로드의 경로는 python3가 **값으로** 받는다 — 네이티브 형태여야 한다 (MSYS 주의)
+. "$REPO/tests/lib/paths.sh"
+VAULT_N="$(native_path "$VAULT")"
 mkdir -p "$HOME_DIR/.claude" "$HOME_DIR/.cursor" "$HOME_DIR/.gemini" "$VAULT"
 
 echo "[1] install.sh --fallback --vault → ~/.llm-wiki 부트스트랩 + Antigravity + 홈 전역(fallback) + 볼트 로컬"
@@ -31,15 +34,15 @@ echo "[2] wiki-setup 시뮬레이션 (config + pointer + 서명)"
 mkdir -p "$VAULT/wiki/knowledge" "$VAULT/raw/articles"
 : > "$VAULT/wiki/index.md"; : > "$VAULT/wiki/log.md"
 cat > "$VAULT/.wiki-config.json" <<JSON
-{ "version": 1, "vault": { "path": "$VAULT", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
+{ "version": 1, "vault": { "path": "$VAULT_N", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
 JSON
 printf '%s\n' "$VAULT" > "$HOME_DIR/.llm-wiki/default-vault"
 
 echo "[3] resolve-vault — CWD 내부 & 외부 포인터"
 R_IN="$(cd "$VAULT/wiki" && HOME="$HOME_DIR" bash "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh")"
-printf '%s' "$R_IN" | grep -q "VAULT_PATH=$VAULT" && ok "CWD 내부 resolve" || no "CWD 내부 resolve"
+printf '%s' "$R_IN" | grep -q "VAULT_PATH=$VAULT_N" && ok "CWD 내부 resolve" || no "CWD 내부 resolve"
 R_OUT="$(cd "$SB" && HOME="$HOME_DIR" bash "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh")"
-printf '%s' "$R_OUT" | grep -q "VAULT_PATH=$VAULT" && ok "외부→포인터 resolve" || no "외부→포인터 resolve"
+printf '%s' "$R_OUT" | grep -q "VAULT_PATH=$VAULT_N" && ok "외부→포인터 resolve" || no "외부→포인터 resolve"
 
 echo "[4] 유효 페이지 작성 + frontmatter 검증 통과 (PostToolUse 훅 경로)"
 cat > "$VAULT/wiki/knowledge/ml.md" <<'MD'
@@ -56,14 +59,14 @@ base_confidence: 0.8
 ---
 [[deep-learning]] 참조.
 MD
-printf '{"tool_input":{"file_path":"%s"}}' "$VAULT/wiki/knowledge/ml.md" \
+printf '{"tool_input":{"file_path":"%s"}}' "$VAULT_N/wiki/knowledge/ml.md" \
   | (cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/wiki-validate-frontmatter.sh") && ok "유효 페이지 통과" || no "유효 페이지 통과"
 
 echo "[5] protect-raw — raw/ 쓰기 차단, rm 허용"
-printf '{"tool_name":"Write","tool_input":{"file_path":"%s/raw/articles/y.md"}}' "$VAULT" \
+printf '{"tool_name":"Write","tool_input":{"file_path":"%s/raw/articles/y.md"}}' "$VAULT_N" \
   | (cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/wiki-protect-raw.sh" claude) 2>/dev/null
 [ $? -eq 2 ] && ok "raw/ 쓰기 차단(exit 2)" || no "raw/ 쓰기 차단"
-printf '{"tool_name":"Bash","tool_input":{"command":"rm %s/raw/articles/y.md"}}' "$VAULT" \
+printf '{"tool_name":"Bash","tool_input":{"command":"rm %s/raw/articles/y.md"}}' "$VAULT_N" \
   | (cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/wiki-protect-raw.sh" claude) 2>/dev/null
 [ $? -eq 0 ] && ok "raw/ rm 허용(exit 0)" || no "raw/ rm 허용"
 
@@ -73,7 +76,7 @@ printf '%s' "$G" | grep -q "BROKEN	knowledge/ml.md	deep-learning" && ok "깨진 
 
 echo "[7] session-start — 볼트 CWD에서만 주입(자가-게이팅)"
 (cd "$VAULT" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null) \
-  | python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'Config Gate' in d['hookSpecificOutput']['additionalContext'] else 1)" \
+  | PYTHONUTF8=1 python3 -c "import json,sys; d=json.load(sys.stdin); sys.exit(0 if 'Config Gate' in d['hookSpecificOutput']['additionalContext'] else 1)" \
   && ok "볼트 CWD → 주입" || no "볼트 CWD → 주입"
 OUT_OUTSIDE="$(cd "$SB" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null)"
 [ -z "$OUT_OUTSIDE" ] && ok "볼트 밖 CWD → 주입 없음(스팸 방지)" || no "볼트 밖인데 주입됨"
