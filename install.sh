@@ -109,9 +109,16 @@ def is_ours(entry):
     return any(MARKER in c and any(s in c for s in OURS) for c in commands(entry))
 
 src_path, dest_path = sys.argv[1], sys.argv[2]
-src = json.load(open(src_path, encoding="utf-8"))
+# src(우리가 방금 render한 것)가 안 읽히는 것은 dest 손상과 **다른 사건**이다 — 하네스 결함이다.
+# 둘을 같은 코드로 뭉개면 우리 버그가 "사용자 파일이 이상해서 사본으로 강등했다"로 위장된다.
+try:
+    src = json.load(open(src_path, encoding="utf-8"))
+except Exception as e:
+    print("src(%s) 읽기 실패: %s" % (src_path, e), file=sys.stderr)
+    sys.exit(5)
 
-if os.path.exists(dest_path):
+exists = os.path.exists(dest_path)
+if exists:
     try:
         dest = json.loads(open(dest_path, encoding="utf-8").read())
         if not isinstance(dest, dict):
@@ -152,7 +159,9 @@ PY
 # place_merge <src> <find> <rep> <dest> <라벨> — 공유 JSON 등록 파일에 병합 배치.
 #   dest 없음/병합 가능 → 우리 항목 반영 (남의 항목·무관 키 보존)
 #   변경 없음           → 아무것도 쓰지 않음 (멱등)
-#   dest 파싱 불가      → 손대지 않고 사본 + 수동 머지 안내로 강등
+#   dest 파싱 불가      → 손대지 않고 사본 + 수동 머지 안내로 강등 (사용자 파일 사정)
+#   그 외 rc            → 하네스 결함이다. 사본으로 강등하되 **결함이라고 말한다** —
+#                         우리 버그를 "사용자 파일이 이상하다"로 위장하면 조용히 넘어간다.
 place_merge() {
   local src="$1" find="$2" rep="$3" dest="$4" label="$5" existed=0 tmp sc rc err
   [ -e "$dest" ] && existed=1
@@ -165,10 +174,14 @@ place_merge() {
     0) if [ "$existed" = 1 ]; then say "$label 병합: $dest (하네스 항목 갱신 · 기존 항목 보존)"
        else say "$label 생성: $dest"; fi ;;
     3) say "$label 이미 최신: $dest (변경 없음)" ;;
-    *) sc="$(sidecar_path "$dest")"
+    4) sc="$(sidecar_path "$dest")"
        render "$src" "$find" "$rep" "$sc"
        say "⚠️ $dest 를 JSON으로 읽을 수 없어 손대지 않았습니다($err) — 하네스 사본을 $sc 에 두었습니다."
        MERGE_TODO+=("$dest  ←  $sc  (JSON 파싱 실패로 병합 불가)") ;;
+    *) sc="$(sidecar_path "$dest")"
+       render "$src" "$find" "$rep" "$sc"
+       say "⚠️ 하네스 내부 오류로 $dest 병합을 건너뜁니다 (rc=$rc: $err) — 사본을 $sc 에 두었습니다. 이건 버그이니 보고해 주세요."
+       MERGE_TODO+=("$dest  ←  $sc  (하네스 내부 오류 rc=$rc)") ;;
   esac
 }
 # place_link <src> <dest> <라벨> — 비파괴 symlink. 우리 symlink면 갱신(멱등),

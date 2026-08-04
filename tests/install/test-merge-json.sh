@@ -141,7 +141,16 @@ done
 [ "$(count_all "$H2/.claude/settings.json" SessionStart)" = "2" ] && ok "3회 실행 후에도 SessionStart 2건(누적 없음)" || no "재실행이 항목을 누적했다: $(count_all "$H2/.claude/settings.json" SessionStart)"
 [ "$(count_ours "$H2/.cursor/hooks.json" sessionStart)" = "1" ]  && ok "3회 실행 후에도 cursor sessionStart 1건"    || no "cursor 항목 누적: $(count_ours "$H2/.cursor/hooks.json" sessionStart)"
 [ "$(grep -c '~/.llm-wiki' "$V2/.cursor/sandbox.json")" = "1" ]  && ok "sandbox 경로 중복 삽입 없음"                || no "sandbox 경로가 중복됐다"
-grep -q '이미 최신' "$SB/rerun.out" && ok "재실행은 '이미 최신'으로 보고" || no "재실행 '이미 최신' 보고 없음"
+if grep -q '이미 최신' "$SB/rerun.out"; then
+  ok "재실행은 '이미 최신'으로 보고"
+else
+  # ⚠️ 실패하면 **어느 분기를 탔는지** 로그가 말해야 한다. 각 분기의 문장이 다르므로
+  #    (생성 / 병합 / 이미 최신 / 읽을 수 없어 / 내부 오류) 출력만 보면 원인이 좁혀진다.
+  #    2026-08-04 Windows CI에서 이 단언만 실패했는데 로그에 근거가 없어 추측밖에 못 했다 —
+  #    §10 함정 ②와 같은 교훈이다(진단 스텝은 실패 경로를 실제로 밟아야 한다).
+  no "재실행 '이미 최신' 보고 없음 — 실제 등록 파일 관련 출력:
+$(grep -E 'settings.json|hooks.json|sandbox.json' "$SB/rerun.out" | sed 's/^/      /')"
+fi
 
 # ─────────────────────────────────────────────────────────────────────────────
 echo "[4] 우리 stale 항목 교체 — 설치 경로가 바뀌어도 중복이 남지 않는다"
