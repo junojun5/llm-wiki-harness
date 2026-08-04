@@ -375,6 +375,17 @@ best-skill-creator의 Iron Law(테스트 없는 스킬 금지) 준수. 순서:
   - ~~`wiki-query` index-only · `wiki-lint --fix`~~ → **확인.** dry-run→`--yes` 수리 2건, LINT 17필드 라인.
   - **Cursor 전역 경로**(`install.sh --fallback` → `~/.cursor/hooks.json`) — **여전히 열림.** 전역 오염을 피해 프로젝트-로컬(`--vault`)만 검증.
   - **`ingest-url`·`wiki-capture`** — 범위 밖으로 남았다(12스킬 중 3종 미검증).
+- **`install.sh`는 Windows에서 세 번째 실행이 죽는다 — `link()`의 MSYS `ln -sfn` 시맨틱 (2026-08-04, `test-merge-json.sh`가 발견 · 선재 결함).** 실측 에러:
+
+  ```
+  ln: /tmp/.../home/.claude/skills/ingest-url/ingest-url: cannot overwrite directory
+  ```
+  MSYS의 `ln -s`는 진짜 symlink를 만들지 않고 복사한다. 관측된 진행: 1회차는 파일로 복사 → 2회차의 `ln -sfn`이 그 파일을 `-f`로 지우고 **디렉터리로** 복사 → 3회차는 `-f`가 디렉터리를 지우지 못해 `ln`이 실패하고, `set -euo pipefail` 아래서 **install.sh가 §7-1 [3] skills 루프에서 즉시 죽는다.** 그 뒤의 훅 등록(`place_merge` 6곳)이 **한 번도 실행되지 않는다** — 재실행이 "아무것도 안 바뀜"처럼 보이지만 실은 아무것도 안 한 것이다.
+  - **왜 지금까지 안 보였는가.** `smoke.sh` [9]는 install을 **2회**만 돌린다 — 죽는 것은 3회차부터다. `test-merge-json.sh` [3]이 3회 돌리면서 처음 드러났다. 그리고 이 결함은 **테스트를 통과시키는 모양**이다: 재실행이 죽으면 파일이 안 바뀌므로 `cmp` 불변·항목 수 불변·중복 없음이 **전부 통과**한다. 죽은 것을 멱등성으로 오독한다. 그래서 [3]에 재실행 **종료 코드 단언**을 먼저 두고, 실패 시 재실행 출력 전문을 찍게 했다.
+  - **`merge_json`의 결함이 아니다.** `link()`과 skills 루프는 §7-1a 변경에 포함되지 않았고, 같은 run의 `smoke.sh` [8]에서 병합 단언(settings.json·codex·cursor·sandbox에 우리 항목 삽입 + 사본 0건)은 **Windows에서 전부 통과**한다. 병합 계약 자체는 Windows에서 성립한다.
+  - **닫는 방법이 자명하지 않아 별도 항목으로 둔다.** 순진한 해법(`rm -rf "$dest"` 후 링크)은 **사용자 데이터를 지울 수 있다** — 그 자리에 사용자가 직접 만든 `~/.claude/skills/<name>/`이 있을 수 있고, 우리 복사본과 사용자 디렉터리를 신뢰성 있게 구별할 수단이 없다. MSYS에서 진짜 symlink를 얻는 `MSYS=winsymlinks:nativestrict`(개발자 모드/관리자 권한 필요)를 요구할지, 디렉터리 dest는 내용 동기화로 처리할지가 결정 사항이다. 위 "MSYS `ln -s` 시맨틱"(`AGENTS 사본 없음`) 항목과 **같은 뿌리**이므로 함께 닫는다.
+  - 이것도 이 사이클의 다른 4건과 같은 모양이다: **fail-open · 증상 없음 · 재실행이 성공한 것처럼 보인다.**
+
 - **⚠️ `--fallback`이 Cursor에서 우리 훅을 2회 발화시킬 수 있다 (2026-08-04 §7-1a 병합 도입으로 신규 개방 · 미실측).** `hooks-cursor.json`의 `_comment`에 이미 적힌 사실에서 나온다: **Cursor는 훅 설정을 7개 소스에서 병합하며 그중 `~/.claude/settings.json`·`{ws}/.claude/settings.json`도 실행한다.** 직전까지 Claude 훅 등록은 스니펫 + 수동 머지였으므로 대부분의 사용자에게 이 경로가 비어 있었으나, §7-1a가 `~/.claude/settings.json` 병합을 **자동화**하면서 `--fallback` 한 번으로 두 소스(`~/.claude/settings.json` + `~/.cursor/hooks.json`)에 우리 항목이 동시에 존재하게 된다. Cursor 세션에서 같은 가드가 2회 발화할 수 있다.
   - **실제 영향은 불확실하고 그래서 실측이 필요하다.** 두 등록의 플랫폼 인자가 다르다(`… session-start claude` vs `… session-start cursor`). Claude용 항목이 Cursor에서 돌면 `session-start`는 Claude 형태 JSON(`hookSpecificOutput`)을 뱉으므로 Cursor가 `additional_context`로 읽지 못해 **무해하게 무시될 가능성**이 크고, 가드는 `exit 2` + stderr를 내는데 Cursor 계약은 `permission:deny` JSON + `exit 0`이라 **훅 오류로 처리될지 차단으로 처리될지 모른다**. 후자면 무관 프로젝트의 쓰기가 막힌다.
   - **지금 손대지 않은 이유.** ① Cursor의 `.cursor/hooks.json` 경로는 실측으로 확인된 **유일한 유효 등록 수단**이다(§4-3) — 미실측 가설을 근거로 그걸 빼는 것은 검증된 경로를 깨는 것이다. ② `~/.claude/settings.json` 병합을 되돌리면 §7-1a가 고치려던 문제(사본만 쌓이고 훅 미등록)가 Claude에 그대로 남는다. ③ 조건부 등록("Cursor도 감지되면 Claude 쪽은 생략")은 두 도구를 함께 쓰는 사용자에게 Claude 가드를 꺼 버리는 더 나쁜 절충이다.
