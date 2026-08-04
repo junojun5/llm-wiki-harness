@@ -3,11 +3,14 @@
 # 배포만 담당 — 볼트 *설정*(.wiki-config.json 등)은 wiki-setup 스킬이 한다.
 #
 # ── 덮어쓰기 정책 (비파괴) ──
-#   기존 파일은 절대 덮어쓰지 않는다. 이미 있으면 원본을 그대로 두고 render 결과를
-#   `<이름>.llm-wiki.<확장자>` 사본으로 옆에 두고 수동 머지를 안내한다(설치 요약에 재고지).
-#   내용이 이미 동일하면 사본도 만들지 않는다 → 재실행 안전(멱등).
+#   기존 파일은 절대 덮어쓰지 않는다.
+#   **JSON 등록 파일은 마커 기반으로 병합한다** (place_merge). 우리 항목만 교체하고 남의 항목은
+#   그대로 둔다 — 다른 레포도 같은 파일에 등록하므로 공존이 기본값이어야 한다.
+#   병합할 수 없는 것(마크다운, 파싱 불가한 JSON)만 원본을 두고 `<이름>.llm-wiki.<확장자>`
+#   사본으로 강등하고 수동 머지를 안내한다(설치 요약에 재고지).
+#   내용이 이미 동일하면 아무것도 쓰지 않는다 → 재실행 안전(멱등).
 #   예외는 하네스가 스스로 생성·소유하는 파일뿐이다:
-#     ~/.claude/llm-wiki-hooks.settings.json (머지용 스니펫) ·
+#     ~/.claude/llm-wiki-hooks.settings.json (병합 원본 · 복구용 참조) ·
 #     ~/.gemini/config/plugins/llm-wiki-harness/* (하네스 전용 번들)
 #
 # ── 권장 설치 = 플러그인 마켓플레이스 (Cursor 제외 — 아래 참조) ──
@@ -68,24 +71,105 @@ sidecar_path() { # sidecar_path <dest> — 확장자를 보존한 사본 경로 
     *)   printf '%s/%s.llm-wiki\n'    "$dir" "$base" ;;
   esac
 }
-# place_render <src> <find> <replace> <dest> <라벨> — 비파괴 배치 (덮어쓰기 정책은 헤더 참조).
-#   dest 없음        → render해서 배치
-#   dest 있고 동일   → 아무것도 안 함 (멱등)
-#   dest 있고 다름   → 원본 보존 + 사본을 옆에 두고 머지 안내
-place_render() {
-  local src="$1" find="$2" rep="$3" dest="$4" label="$5" sc tmp
-  if [ ! -e "$dest" ]; then
-    render "$src" "$find" "$rep" "$dest"; say "$label 생성: $dest"; return
-  fi
+# merge_json <src.json> <dest> — 공유 등록 파일에 우리 항목을 **마커 기반으로 멱등 병합**한다.
+#   exit 0 = 병합 반영(변경 있음) · 3 = 이미 최신(쓰지 않음) · 4 = dest 파싱 불가(손대지 않음)
+#
+# 왜 병합인가: ~/.claude/settings.json·~/.codex/hooks.json·~/.cursor/hooks.json은 **공유 파일**이다.
+# 원본 보존 + 사본 안내만 하면 통합이 사용자 손에 남고, 다른 레포도 같은 정책을 쓰면 사본만
+# 쌓인 채 훅은 하나도 등록되지 않는다 — 설치는 성공한 것처럼 보이고 가드만 죽는다(§5-5).
+#
+# 마커는 **경로에 의존하지 않는다.** 우리 항목은 command가 `run-hook.cmd`(폴리글랏 런처)를 경유하고
+# 우리 훅 스크립트명을 인자로 싣는다. 절대경로로 식별하면 설치 위치가 바뀔 때(레포 이동·플러그인
+# 캐시 갱신) 자기 항목을 못 찾아 중복을 쌓는다 — `conda init`이 이 방식으로 유명한 멱등성 버그를
+# 남겼다(conda#8703). 회귀는 tests/install/test-merge-json.sh [3][4]가 고정한다.
+#
+# 남의 항목을 지우는 것이 최악의 실패이므로 마커는 런처와 훅 스크립트명을 **둘 다** 요구한다.
+merge_json() {
+  # §3-9: 대상 파일에는 사용자가 쓴 한국어가 들어 있을 수 있고, 병합은 render와 달리
+  # 그 파일을 **읽어 되쓴다** — 인코딩 누락의 대가가 사용자 설정 손상이다.
+  PYTHONUTF8=1 python3 - "$1" "$2" <<'PY'
+import json, os, sys
+
+MARKER = "run-hook.cmd"                                    # 폴리글랏 런처 — 경로 무관
+OURS = ("session-start", "wiki-protect-raw.sh", "wiki-validate-frontmatter.sh")
+COMMENT_KEYS = ("_comment", "description")                 # 우리 설명문은 남의 파일에 밀어넣지 않는다
+
+def commands(entry):
+    """항목 하나에 실린 command 문자열 전부. Claude/Codex는 중첩(hooks[]), Cursor는 평면."""
+    out = []
+    if isinstance(entry, dict):
+        if isinstance(entry.get("command"), str):
+            out.append(entry["command"])
+        for h in (entry.get("hooks") or []):
+            if isinstance(h, dict) and isinstance(h.get("command"), str):
+                out.append(h["command"])
+    return out
+
+def is_ours(entry):
+    return any(MARKER in c and any(s in c for s in OURS) for c in commands(entry))
+
+src_path, dest_path = sys.argv[1], sys.argv[2]
+src = json.load(open(src_path, encoding="utf-8"))
+
+if os.path.exists(dest_path):
+    try:
+        dest = json.loads(open(dest_path, encoding="utf-8").read())
+        if not isinstance(dest, dict):
+            raise ValueError("최상위가 JSON object가 아니다")
+    except Exception as e:
+        print("%s" % e, file=sys.stderr)
+        sys.exit(4)
+else:
+    dest = {}
+
+before = json.dumps(dest, ensure_ascii=False, sort_keys=True)
+
+for key, val in src.items():
+    if key in COMMENT_KEYS:
+        continue
+    if key not in dest:
+        dest[key] = val
+    elif key == "hooks" and isinstance(val, dict) and isinstance(dest[key], dict):
+        # 이벤트별로 우리 항목만 걷어내고 현재 항목을 뒤에 붙인다 → 같은 src면 같은 결과(멱등).
+        for event, entries in val.items():
+            kept = [e for e in (dest[key].get(event) or []) if not is_ours(e)]
+            dest[key][event] = kept + list(entries)
+    elif isinstance(val, list) and isinstance(dest[key], list):
+        # 문자열 목록(Cursor sandbox의 additionalReadwritePaths)은 합집합만 취한다.
+        # 개별 경로에는 우리 것을 가릴 마커가 없으므로 **제거하지 않는다** — 사용자 경로를
+        # 지우는 위험이 stale 경로가 남는 위험보다 크다.
+        dest[key] = dest[key] + [v for v in val if v not in dest[key]]
+    # 그 외(스칼라 충돌·타입 불일치)는 사용자 값을 그대로 둔다 — 우리가 이길 근거가 없다.
+
+if json.dumps(dest, ensure_ascii=False, sort_keys=True) == before:
+    sys.exit(3)
+os.makedirs(os.path.dirname(dest_path) or ".", exist_ok=True)
+with open(dest_path, "w", encoding="utf-8") as f:
+    json.dump(dest, f, ensure_ascii=False, indent=2)
+    f.write("\n")
+PY
+}
+# place_merge <src> <find> <rep> <dest> <라벨> — 공유 JSON 등록 파일에 병합 배치.
+#   dest 없음/병합 가능 → 우리 항목 반영 (남의 항목·무관 키 보존)
+#   변경 없음           → 아무것도 쓰지 않음 (멱등)
+#   dest 파싱 불가      → 손대지 않고 사본 + 수동 머지 안내로 강등
+place_merge() {
+  local src="$1" find="$2" rep="$3" dest="$4" label="$5" existed=0 tmp sc rc err
+  [ -e "$dest" ] && existed=1
+  mkdir -p "$(dirname "$dest")"
   tmp="$(mktemp)"
   render "$src" "$find" "$rep" "$tmp"
-  if cmp -s "$tmp" "$dest"; then
-    rm -f "$tmp"; say "$label 이미 최신: $dest (변경 없음)"; return
-  fi
-  sc="$(sidecar_path "$dest")"
-  mv "$tmp" "$sc"
-  say "⚠️ 기존 $dest 보존 — 하네스 사본을 $sc 에 두었습니다. 필요한 항목을 수동 머지하세요."
-  MERGE_TODO+=("$dest  ←  $sc")
+  rc=0; err="$(merge_json "$tmp" "$dest" 2>&1)" || rc=$?
+  rm -f "$tmp"
+  case "$rc" in
+    0) if [ "$existed" = 1 ]; then say "$label 병합: $dest (하네스 항목 갱신 · 기존 항목 보존)"
+       else say "$label 생성: $dest"; fi ;;
+    3) say "$label 이미 최신: $dest (변경 없음)" ;;
+    *) sc="$(sidecar_path "$dest")"
+       render "$src" "$find" "$rep" "$sc"
+       say "⚠️ $dest 를 JSON으로 읽을 수 없어 손대지 않았습니다($err) — 하네스 사본을 $sc 에 두었습니다."
+       MERGE_TODO+=("$dest  ←  $sc  (JSON 파싱 실패로 병합 불가)") ;;
+  esac
 }
 # place_link <src> <dest> <라벨> — 비파괴 symlink. 우리 symlink면 갱신(멱등),
 #   사용자 파일/다른 링크면 보존하고 사본 경로에 건다.
@@ -149,10 +233,14 @@ if [ "$FALLBACK" = 1 ]; then
   if [ -d "$HOME/.claude" ]; then
     for d in "$REPO"/skills/*/; do link "$d" "$HOME/.claude/skills/$(basename "$d")"; done
     for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$HOME/.claude/hooks/$f"; done
+    # 스니펫은 병합 원본이자 복구용 참조다(하네스 소유 파일이라 무조건 덮어쓴다).
+    # settings.json 병합이 파싱 실패로 강등될 때 사용자가 손으로 옮길 대상이 여기다.
     GUARD_SNIPPET="$HOME/.claude/llm-wiki-hooks.settings.json"
     render "$REPO/hooks/hooks.json" '${CLAUDE_PLUGIN_ROOT}' "$HOME/.claude" "$GUARD_SNIPPET"
-    say "Claude: skills+hooks → ~/.claude/ ; 훅 등록은 $GUARD_SNIPPET 의 hooks 블록을 settings.json에 수동 머지(기존 보존)."
-    SUMMARY+=("✅ Claude(fallback): skills+hooks / ⚠️ settings.json 머지 수동 → $GUARD_SNIPPET")
+    place_merge "$REPO/hooks/hooks.json" '${CLAUDE_PLUGIN_ROOT}' "$HOME/.claude" \
+      "$HOME/.claude/settings.json" "Claude ~/.claude/settings.json"
+    say "Claude: skills+hooks → ~/.claude/ ; 훅 등록은 settings.json에 병합됨(참조 사본: $GUARD_SNIPPET)."
+    SUMMARY+=("✅ Claude(fallback): skills+hooks + settings.json 훅 병합")
   else
     SUMMARY+=("➖ Claude(fallback): ~/.claude 없음 — 건너뜀")
   fi
@@ -161,7 +249,7 @@ if [ "$FALLBACK" = 1 ]; then
   if [ -d "$HOME/.agents" ] || [ -d "$HOME/.codex" ] || command -v codex >/dev/null 2>&1; then
     for d in "$REPO"/skills/*/; do link "$d" "$HOME/.agents/skills/$(basename "$d")"; done
     for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$HOME/.agents/hooks/$f"; done
-    place_render "$REPO/hooks/hooks-codex.json" '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}' "$HOME/.agents" \
+    place_merge "$REPO/hooks/hooks-codex.json" '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}' "$HOME/.agents" \
       "$HOME/.codex/hooks.json" "Codex ~/.codex/hooks.json"
     say "Codex: skills → ~/.agents/skills/ ; hooks → ~/.agents/hooks/ ; 등록 후 /hooks에서 trust 필요(미완 시 무경고 no-op)."
     SUMMARY+=("✅ Codex(fallback): skills+hooks / ⚠️ ~/.codex/hooks.json trust 필요")
@@ -173,7 +261,7 @@ if [ "$FALLBACK" = 1 ]; then
   if [ -d "$HOME/.cursor" ]; then
     for d in "$REPO"/skills/*/; do link "$d" "$HOME/.cursor/skills/$(basename "$d")"; done
     for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$HOME/.cursor/hooks/$f"; done
-    place_render "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$HOME/.cursor/hooks" \
+    place_merge "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$HOME/.cursor/hooks" \
       "$HOME/.cursor/hooks.json" "Cursor ~/.cursor/hooks.json (User 전역, 절대경로)"
     say "Cursor: skills → ~/.cursor/skills/ ; hooks → ~/.cursor/hooks/"
     SUMMARY+=("✅ Cursor 전역(User): skills+hooks — Cursor는 이 경로가 훅의 유일한 등록 수단")
@@ -197,14 +285,14 @@ if [ -n "$VAULT" ]; then
   place_link "$REPO/AGENTS.md" "$VAULT/.agents/AGENTS.md" "볼트 .agents/AGENTS.md"
   # Codex 볼트 로컬 훅 (플러그인/전역 미사용 시). 훅 스크립트 symlink + hooks.json을 볼트 절대경로로 렌더.
   for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$VAULT/.codex/hooks/$f"; done
-  place_render "$REPO/hooks/hooks-codex.json" '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}' "$VAULT/.codex" \
+  place_merge "$REPO/hooks/hooks-codex.json" '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}' "$VAULT/.codex" \
     "$VAULT/.codex/hooks.json" "Codex 볼트 로컬 hooks.json (/hooks trust 필요)"
   # Cursor 볼트 로컬 훅 + 스크립트
   for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$VAULT/.cursor/hooks/$f"; done
-  place_render "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$VAULT/.cursor/hooks" \
+  place_merge "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$VAULT/.cursor/hooks" \
     "$VAULT/.cursor/hooks.json" "Cursor 볼트 로컬 hooks.json"
   # Cursor sandbox: 템플릿의 {{VAULT_ABS}} 치환. render()로 통일(sed와 이중 구현 제거).
-  place_render "$REPO/hooks/cursor-sandbox.template.json" '{{VAULT_ABS}}' "$VAULT" \
+  place_merge "$REPO/hooks/cursor-sandbox.template.json" '{{VAULT_ABS}}' "$VAULT" \
     "$VAULT/.cursor/sandbox.json" "Cursor sandbox.json"
   say ".agents/skills/, 루트 AGENTS.md(+.agents/ symlink), .codex/hooks(+hooks.json), .cursor/hooks(+hooks.json), .cursor/sandbox.json"
   SUMMARY+=("✅ 프로젝트-로컬: Codex/Cursor 볼트 로컬 hooks + AGENTS.md, .agents/skills")

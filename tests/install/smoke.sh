@@ -81,8 +81,10 @@ echo "[7] session-start — 볼트 CWD에서만 주입(자가-게이팅)"
 OUT_OUTSIDE="$(cd "$SB" && HOME="$HOME_DIR" bash "$REPO/hooks/session-start" claude </dev/null)"
 [ -z "$OUT_OUTSIDE" ] && ok "볼트 밖 CWD → 주입 없음(스팸 방지)" || no "볼트 밖인데 주입됨"
 
-echo "[8] install.sh 덮어쓰기 정책 — 기존 파일 보존 + .llm-wiki 사본 (비파괴)"
-# 별도 격리 HOME/vault. 대상 파일을 미리 만들어 두고 install → 원본이 그대로 남고 사본이 생기는지.
+echo "[8] install.sh 비파괴 정책 — JSON 등록 파일은 병합, 병합 불가한 것만 .llm-wiki 사본"
+# 별도 격리 HOME/vault. 대상 파일을 미리 만들어 두고 install → 사용자 내용이 그대로 남는지.
+# 세부 병합 계약(멱등·stale 교체·손상 파일·남의 항목 보존)은 tests/install/test-merge-json.sh 담당.
+# 여기서는 합성 흐름에서 "사용자 것을 잃지 않는다"만 굵게 확인한다.
 SB2="$SB/nondestructive"
 H2="$SB2/home"; V2="$SB2/vault"
 mkdir -p "$H2/.claude" "$H2/.cursor" "$H2/.codex" "$H2/.gemini/config" "$V2/.cursor"
@@ -96,15 +98,21 @@ grep -q 'USER_ORIGINAL' "$V2/.cursor/hooks.json"         && ok "볼트 .cursor/h
 grep -q 'USER_ORIGINAL' "$V2/.cursor/sandbox.json"       && ok "볼트 .cursor/sandbox.json 원본 보존"    || no "볼트 .cursor/sandbox.json 덮어씀"
 grep -q '사용자 전역' "$H2/.gemini/config/AGENTS.md"      && ok "~/.gemini AGENTS.md 원본 보존"          || no "~/.gemini AGENTS.md 덮어씀"
 [ ! -L "$H2/.gemini/config/AGENTS.md" ]                  && ok "~/.gemini AGENTS.md symlink 교체 안 함" || no "일반 파일이 symlink로 교체됨"
-# 사본이 확장자를 보존한 이름으로 옆에 생겼는지
-[ -f "$H2/.codex/hooks.llm-wiki.json" ]      && ok "사본 ~/.codex/hooks.llm-wiki.json"          || no "codex 사본 없음"
-[ -f "$V2/.cursor/hooks.llm-wiki.json" ]     && ok "사본 .cursor/hooks.llm-wiki.json"           || no "cursor hooks 사본 없음"
-[ -f "$V2/.cursor/sandbox.llm-wiki.json" ]   && ok "사본 .cursor/sandbox.llm-wiki.json"         || no "cursor sandbox 사본 없음"
-[ -L "$H2/.gemini/config/AGENTS.llm-wiki.md" ] && ok "사본 AGENTS.llm-wiki.md"                  || no "AGENTS 사본 없음"
+# 우리 항목이 같은 파일에 함께 들어갔는지 (사본이 아니라 병합)
+grep -q 'run-hook.cmd' "$H2/.codex/hooks.json"     && ok "~/.codex/hooks.json에 우리 항목 병합"     || no "~/.codex에 우리 항목이 없다 — 훅 미등록"
+grep -q 'run-hook.cmd' "$V2/.cursor/hooks.json"    && ok "볼트 .cursor/hooks.json에 우리 항목 병합" || no "볼트 .cursor에 우리 항목이 없다"
+grep -q '~/.llm-wiki'  "$V2/.cursor/sandbox.json"  && ok "sandbox.json에 우리 R/W 경로 병합"        || no "sandbox에 우리 경로가 없다"
+grep -q 'run-hook.cmd' "$H2/.claude/settings.json" && ok "~/.claude/settings.json에 우리 항목 병합" || no "settings.json에 우리 항목이 없다 — Claude 훅 미등록"
+# 병합에 성공한 JSON은 사본을 남기지 않는다 (사본만 쌓이는 것이 이 정책이 고치려던 문제다)
+for f in "$H2/.codex/hooks.llm-wiki.json" "$V2/.cursor/hooks.llm-wiki.json" "$V2/.cursor/sandbox.llm-wiki.json"; do
+  [ ! -e "$f" ] && ok "사본 없음(병합됨): ${f#"$SB2/"}" || no "병합했는데 사본이 남았다: $f"
+done
+# 마크다운은 병합할 수 없으므로 사본 + 수동 머지 안내가 유지된다
+[ -L "$H2/.gemini/config/AGENTS.llm-wiki.md" ] && ok "사본 AGENTS.llm-wiki.md (마크다운은 병합 불가)" || no "AGENTS 사본 없음"
 grep -q '수동 머지 필요' "$SB2/out"           && ok "머지 TODO를 설치 요약에 재고지"             || no "머지 TODO 미고지"
-# 사본 내용이 실제 render 결과인지 (placeholder가 남아 있으면 안 된다)
-grep -q '{{HOOKS_DIR}}'  "$V2/.cursor/hooks.llm-wiki.json"   && no "cursor 사본에 placeholder 잔존"   || ok "cursor 사본 절대경로 render됨"
-grep -q '{{VAULT_ABS}}'  "$V2/.cursor/sandbox.llm-wiki.json" && no "sandbox 사본에 placeholder 잔존"  || ok "sandbox 사본 {{VAULT_ABS}} 치환됨"
+# 병합된 내용이 실제 render 결과인지 (placeholder가 남아 있으면 훅 경로가 깨진다)
+grep -q '{{HOOKS_DIR}}'  "$V2/.cursor/hooks.json"   && no "cursor hooks.json에 placeholder 잔존"  || ok "cursor 병합분 절대경로 render됨"
+grep -q '{{VAULT_ABS}}'  "$V2/.cursor/sandbox.json" && no "sandbox.json에 placeholder 잔존"       || ok "sandbox 병합분 {{VAULT_ABS}} 치환됨"
 
 echo "[9] install.sh 멱등성 — 재실행 시 사본을 만들지 않는다"
 SB3="$SB/idempotent"; H3="$SB3/home"; V3="$SB3/vault"
