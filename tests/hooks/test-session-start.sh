@@ -5,6 +5,7 @@
 # HOME을 샌드박스로 격리해 실제 ~/.llm-wiki를 건드리지 않는다.
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+. "$REPO_ROOT/tests/lib/paths.sh"
 HOOK="$REPO_ROOT/hooks/session-start"
 PASS=0; FAIL=0
 SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
@@ -17,7 +18,9 @@ jpath(){ # desc pypath needle json
 
 HOMESB="$SB/home"; mkdir -p "$HOMESB"
 VAULT="$SB/vault"; mkdir -p "$VAULT/wiki"
-printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-01-01"}\n' "$VAULT" > "$VAULT/.wiki-config.json"
+# config의 vault.path는 python3가 **값으로** 받는다 — 네이티브 형태여야 한다 (MSYS 주의)
+VAULT_N="$(native_path "$VAULT")"
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-01-01"}\n' "$VAULT_N" > "$VAULT/.wiki-config.json"
 printf '# Index\n' > "$VAULT/wiki/index.md"
 printf 'log\n' > "$VAULT/wiki/log.md"
 
@@ -191,8 +194,8 @@ printf '%s' "$OUT" | python3 -c "import json,sys;json.load(sys.stdin)" 2>/dev/nu
 jpath "additionalContext에 한국어 규칙 보존" "d['hookSpecificOutput']['additionalContext']" "raw/ 는 불변" "$OUT"
 
 echo "test: ASCII locale + 한글 볼트 경로에서도 주입"
-KV="$SB/한글볼트"; mkdir -p "$KV/wiki"
-printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' "$KV" > "$KV/.wiki-config.json"
+KV="$SB/한글볼트"; mkdir -p "$KV/wiki"; KV_N="$(native_path "$KV")"
+printf '{"version":1,"vault":{"path":"%s","wiki_dir":"wiki","raw_dir":"raw"},"created":"2026-08-04"}\n' "$KV_N" > "$KV/.wiki-config.json"
 printf '# Index\n' > "$KV/wiki/index.md"; printf 'log\n' > "$KV/wiki/log.md"
 OUT="$(cd "$KV" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
 jpath "한글 경로 볼트도 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
