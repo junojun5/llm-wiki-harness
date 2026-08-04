@@ -106,7 +106,7 @@ echo "── LLM Wiki Harness 설치 ──"
 # ─────────────────────────────────────────────────────────────────────────────
 # [1] 도구 비종속 런타임 홈 (항상) — 공유 스크립트 symlink
 echo "[1] ~/.llm-wiki/scripts (도구 비종속 런타임)"
-for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
+for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh check-guards.sh; do
   link "$REPO/scripts/$s" "$HOME/.llm-wiki/scripts/$s"
 done
 say "scripts/* → ~/.llm-wiki/scripts/ (symlink) — Config Gate·가드 훅의 공용 의존"

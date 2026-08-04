@@ -2487,6 +2487,37 @@ bash "$HOME/.llm-wiki/scripts/validate-frontmatter.sh" "$TARGET" >&2 || exit 2
 
 ---
 
+### 5-5. 가드 생존 점검 — `check-guards.sh`
+
+**계약:** `wiki-status`가 Step 3.5에서 `~/.llm-wiki/scripts/check-guards.sh`를 실행해 가드가 **등록되어 살아 있는지** 보고한다. 설계 근거는 [`guard-liveness-design.md`](guard-liveness-design.md).
+
+**왜 필요한가.** §5-2의 가드는 **fail-open**이다 — resolver가 죽으면 `RAW_ABS`가 정의되지 않아 raw/만 골라 막을 수 없으므로 통과시킨다. 이 결정은 옳지만, 그 강등을 알리는 §5-1 `session-start` 고지가 **같은 훅 시스템 위에 살아 함께 죽는다**(상관된 실패). 2026-08-04 Windows에서 실측됐다: `install.sh`의 `render()`가 인코딩으로 죽어 훅 등록 파일이 0바이트로 남자 가드와 고지가 동시에 사라졌고, 설치는 성공한 것처럼 보였다. 따라서 세 번째 방어선은 **훅 밖** — 스킬이 직접 실행하는 경로여야 한다.
+
+**검증 범위의 경계 (반드시 함께 보고한다).**
+
+| 층 | 검증 | 비고 |
+|---|---|---|
+| 배치 | ✅ | 훅 본체가 실재하는가 |
+| 등록 | ✅ | 에이전트가 읽는 설정에 command가 있는가 |
+| **발화** | ❌ **불가** | 에이전트 런타임 소관. Codex는 `/hooks` trust 전까지 **등록 정상 + 무발화**이며 여기서 초록불이 나온다 |
+
+이 경계를 리포트에 함께 내지 않으면 점검 자체가 새로운 거짓 안심이 된다.
+
+**2층 구조.** L1(등록 건강)과 L2(판정 정확성)는 서로를 대체하지 못한다 — L2가 초록불이어도 등록이 없으면 실사용에서 안 돌고, L1이 초록불이어도 본체가 깨졌으면 통과시킨다.
+
+- **L1** — 등록 파일을 4상태로 가른다: `n/a`(미설치 — **정상**) · `absent` · `corrupt`(0바이트·파싱 실패) · `broken-ref`. "없음"을 전부 경고로 만들면 이 점검은 무시된다.
+- **L2** — 훅 본체에 합성 페이로드를 먹여 판정만 받는다. **음성 대조군(`wiki/`) 필수** — 양성만 보면 "무조건 차단"하는 고장도 초록불로 통과한다. 훅은 경로 판정만 하므로 **볼트 무부작용**이고 read-only 스킬 경계를 넘지 않는다.
+
+**함정 — `~/.claude/llm-wiki-hooks.settings.json`은 등록이 아니다.** `install.sh`가 만드는 **수동 머지 안내 파일**이다. 그 존재를 등록으로 세면 이 점검이 잡아야 할 바로 그 결함을 놓친다. Claude fallback 경로는 `settings.json` **본체**를 봐야 한다. 마켓플레이스 설치는 플러그인 캐시의 `hooks/hooks.json`을 보되 경로가 **버전 스코프**이므로 하드코딩하지 않고 glob으로 찾으며, `$`+`{CLAUDE_PLUGIN_ROOT}`는 그 파일 기준 `parent.parent`로 해석한다.
+
+**출력·종료 코드:** `GUARD <platform> <layer> <status> <detail>` + `SUMMARY guards=N ok=N degraded=N skipped=N`. 종료 `0`=정상·해당없음 / `1`=degraded ≥1 / `2`=점검 불가(resolver 실패). **`2`를 `1`과 구분한다** — "가드가 꺼졌다"와 "확인하지 못했다"는 다른 사실이다.
+
+**주기:** `wiki-status` 전용이다. 쓰기 스킬 종료 시퀀스(§3-6)에는 넣지 않는다 — 매 쓰기마다 L2 프로브를 도는 비용이 이득을 넘고, §5-2의 "강등 지점과 고지 지점을 분리" 원칙과도 어긋난다.
+
+**회귀:** `tests/scripts/test-check-guards.sh` 13케이스(0바이트·파싱실패·오탐금지·absent·broken-ref·거짓초록불·마켓플레이스 확장·L2 양성/음성·read-only·n/a·exit 2·ASCII locale).
+
+---
+
 ## 6. Phase 로드맵
 
 ### Phase 1 — 현재 (스킬 12개 + Hooks + 배포)

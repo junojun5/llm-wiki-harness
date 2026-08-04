@@ -15,6 +15,7 @@ mkdir -p "$HOME_DIR/.claude" "$HOME_DIR/.cursor" "$HOME_DIR/.gemini" "$VAULT"
 echo "[1] install.sh --fallback --vault → ~/.llm-wiki 부트스트랩 + Antigravity + 홈 전역(fallback) + 볼트 로컬"
 HOME="$HOME_DIR" bash "$REPO/install.sh" --fallback --vault "$VAULT" >/dev/null 2>&1
 [ -L "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh" ] && ok "런타임 스크립트 설치" || no "런타임 스크립트 설치"
+[ -L "$HOME_DIR/.llm-wiki/scripts/check-guards.sh" ] && ok "check-guards.sh 부트스트랩" || no "check-guards.sh 미부트스트랩"
 [ -L "$VAULT/AGENTS.md" ] && ok "AGENTS.md 배치" || no "AGENTS.md 배치"
 # Cursor 전역(User): skills + hooks.json(절대경로)
 [ -L "$HOME_DIR/.cursor/skills/using-llm-wiki" ] && ok "Cursor 전역 skills" || no "Cursor 전역 skills"
