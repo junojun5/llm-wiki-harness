@@ -205,4 +205,4 @@ rm -f ~/.llm-wiki/scripts/{resolve-vault,validate-frontmatter,build-link-graph}.
 bash ~/.claude/plugins/cache/llm-wiki-harness/llm-wiki-harness/<새버전>/hooks/session-start claude </dev/null
 ```
 
-**적용은 재시작 후다.** `update`는 캐시를 교체하지만 실행 중인 세션은 옛 스킬을 들고 있다. 런타임 홈(`~/.llm-wiki/scripts/`)은 캐시를 symlink하므로 **스크립트는 즉시 새 버전이 되고 스킬 문서만 재시작을 기다린다** — 이 비대칭이 "스크립트는 고쳐졌는데 스킬이 옛 절차를 따르는" 상태를 만들 수 있으니 릴리스 검증은 재시작 후에 한다.
+**적용은 재시작 후다.** `update`는 캐시를 교체하지만 실행 중인 세션은 옛 스킬을 들고 있다. 런타임 홈(`~/.llm-wiki/scripts/`)은 캐시를 symlink하므로 **스크립트는 즉시 새 버전이 되고 스킬 문서만 재시작을 기다린다**(Windows/MSYS는 복사이므로 스크립트도 다음 SessionStart의 재지정을 기다린다 — 배포 설계 §7-1b) — 이 비대칭이 "스크립트는 고쳐졌는데 스킬이 옛 절차를 따르는" 상태를 만들 수 있으니 릴리스 검증은 재시작 후에 한다.

@@ -6,6 +6,7 @@
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$REPO_ROOT/tests/lib/paths.sh"
+. "$REPO_ROOT/tests/lib/placement.sh"
 HOOK="$REPO_ROOT/hooks/session-start"
 PASS=0; FAIL=0
 SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
@@ -27,8 +28,8 @@ printf 'log\n' > "$VAULT/wiki/log.md"
 echo "test: 비볼트 CWD — 부트스트랩만, 주입 없음"
 OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>"$SB/err")"; CODE=$?
 [ "$CODE" = 0 ] && ok "exit 0" || no "exit 0 (got $CODE)"
-[ -L "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" ] && ok "부트스트랩: resolve-vault.sh symlink 생성" || no "부트스트랩 symlink 없음"
-[ -L "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" ] && ok "부트스트랩: validate-frontmatter.sh symlink" || no "validate symlink 없음"
+placed "$HOMESB" "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" && ok "부트스트랩: resolve-vault.sh 배치" || no "부트스트랩 배치 없음"
+placed "$HOMESB" "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" && ok "부트스트랩: validate-frontmatter.sh 배치" || no "validate 배치 없음"
 [ -z "$OUT" ] && ok "비볼트 → 주입 없음(빈 stdout)" || no "비볼트인데 출력 있음: $OUT"
 
 echo "test: config 경로 표기가 CWD와 달라도 게이트가 통과한다 (Windows 형식 차이 회귀)"
@@ -311,11 +312,11 @@ LINKED="$SB/linked-session-start"; ln -sfn "$MP/0.2.0/hooks/session-start" "$LIN
 (cd "$SB" && HOME="$H10" PATH="$NOPY" "$BASH" "$LINKED" claude </dev/null >/dev/null 2>&1)
 BOOTED=0
 for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
-  [ -L "$H10/.llm-wiki/scripts/$s" ] && BOOTED=$((BOOTED+1))
+  placed "$H10" "$H10/.llm-wiki/scripts/$s" && BOOTED=$((BOOTED+1))
 done
 [ "$BOOTED" = 3 ] && ok "symlink 경유 + python3 없음에도 부트스트랩 3개" || no "부트스트랩 $BOOTED/3 (ROOT 오판)"
-[ "$(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
-  && ok "링크 대상이 배포본 scripts/" || no "엉뚱한 대상: $(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")"
+[ "$(grep -F "	$H10/.llm-wiki/scripts/resolve-vault.sh	" "$H10/.llm-wiki/.placements" | cut -f3)" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "배치 출처가 배포본 scripts/" || no "엉뚱한 출처: $(grep -F "	$H10/.llm-wiki/scripts/resolve-vault.sh	" "$H10/.llm-wiki/.placements" | cut -f3)"
 
 fi
 

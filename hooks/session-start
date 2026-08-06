@@ -73,23 +73,75 @@ case "$ROOT" in
   *)                 SIBLING_ROOT="" ;;
 esac
 
+# 소유권과 출처는 **배치 원장**으로 판정한다 — 종전 판정 `[ -L "$DST" ]`은 MSYS(Git Bash)에서
+# 무너진다: `ln -s`가 진짜 symlink가 아니라 **복사본**을 만들므로 판정이 항상 "사용자 파일"로
+# 떨어져 `[ -e "$DST" ] && continue`에 걸리고, **재지정이 영구히 일어나지 않는다.** 그러면
+# 플러그인을 업데이트해도 스킬 12종과 가드 2종이 계속 옛 스크립트를 호출한다 — 위 2026-08-01
+# 결함의 Windows 재발이고, 조용하다. 원장은 install.sh와 같은 형식이다:
+#   `<mechanism>\t<dest>\t<src>`  (dest·src는 절대경로라 탭이 들어가지 않는다)
+# ⚠️ 헬퍼를 install.sh와 **공유하지 않고 복제한다.** 이 훅은 마켓플레이스 캐시에서 install.sh
+#    없이 단독 실행되고, 사본으로 배포되면(MSYS) 형제 파일을 찾을 수 없어 source가 깨진다.
+#    자족성이 DRY보다 우선이다 — 형식이 갈리지 않게 위 한 줄을 양쪽 주석에 박아 둔다.
+LEDGER="$HOME/.llm-wiki/.placements"
+# ⚠️ 원장 I/O는 **bash 내장만으로** 구현한다 — `grep`·`cut`·`cp`·`mv`·`rm`을 쓰지 않는다.
+#    이 훅은 "python3가 없다"를 알리는 경로여서 풍부한 환경을 가정할 수 없고, 그 계약을
+#    `tests/hooks/test-session-start.sh`가 PATH를 `bash dirname head sed readlink ln mkdir
+#    cat env`로 좁혀 검증한다. 외부 도구를 늘리면 그 스위트가 조용히 0/3으로 떨어진다
+#    (작성 중 실제로 걸렸다).
+_rec_src() { # _rec_src <dest> → 기록된 src (없으면 빈 문자열)
+  local m d s out=""
+  [ -f "$LEDGER" ] || return 0
+  while IFS=$'\t' read -r m d s; do
+    [ "$d" = "$1" ] && out="$s"
+  done <"$LEDGER"
+  printf '%s' "$out"
+}
+_rec_put() { # _rec_put <dest> <src> <mechanism>
+  local m d s buf=""
+  if [ -f "$LEDGER" ]; then
+    while IFS=$'\t' read -r m d s; do
+      [ "$d" = "$1" ] && continue
+      buf="$buf$m"$'\t'"$d"$'\t'"$s"$'\n'
+    done <"$LEDGER"
+  fi
+  buf="$buf$3"$'\t'"$1"$'\t'"$2"$'\n'
+  # 임시파일+mv가 아니라 직접 쓴다(`mv`가 축소 PATH에 없다). 원장은 작고 자가치유이므로
+  # 찢어진 쓰기는 다음 세션이 다시 만든다 — 볼트 데이터가 아니라 부트스트랩 메모다.
+  printf '%s' "$buf" >"$LEDGER" 2>/dev/null || true
+}
+_place() { # _place <src> <dst> — 배치하고 원장에 남긴다. 실패는 조용히 넘긴다(비치명 계약).
+  local mech=symlink
+  ln -sfn "$1" "$2" 2>/dev/null || true
+  if [ ! -L "$2" ]; then
+    # MSYS: 위 `ln`이 복사로 떨어졌다. 리다이렉트로 내용을 옮긴다 — dest를 truncate하므로
+    # 기존 사본도 덮인다. 실행 비트는 세우지 않는다(`chmod`도 축소 PATH 밖) — 호출자가
+    # 전부 `bash <path>` 형태라 필요하지 않다(AGENTS.md Step 0·가드 훅 2개·이 훅).
+    cat "$1" >"$2" 2>/dev/null || return 0
+    mech=copy
+  fi
+  _rec_put "$2" "$1" "$mech"
+}
+
 for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   SRC="$ROOT/scripts/$f"; DST="$LLMWIKI/$f"
   [ -e "$SRC" ] || continue
-  if [ -L "$DST" ]; then
-    CUR="$(readlink "$DST" 2>/dev/null || true)"
-    [ "$CUR" = "$SRC" ] && continue                       # 이미 이 배포본
-    if [ ! -e "$DST" ]; then                              # 깨진 링크 → 복구
-      ln -sfn "$SRC" "$DST" 2>/dev/null || true; continue
-    fi
-    if [ -n "$SIBLING_ROOT" ]; then                       # 형제 버전만 재지정
-      CURDIR="$(cd "$(dirname "$CUR")" 2>/dev/null && pwd -P)"
-      case "$CURDIR" in "$SIBLING_ROOT"/*) ln -sfn "$SRC" "$DST" 2>/dev/null || true ;; esac
-    fi
-    continue                                              # 그 밖(사용자 클론 등)은 보존
+
+  # 기록된 출처. 원장이 없으면 symlink 원문으로 폴백한다 — 원장 도입 이전 설치를 흡수한다
+  # (이 폴백이 없으면 기존 macOS/Linux 사용자의 런타임 홈이 전부 "사용자 소유"로 읽힌다).
+  CUR="$(_rec_src "$DST")"
+  [ -z "$CUR" ] && [ -L "$DST" ] && CUR="$(readlink "$DST" 2>/dev/null || true)"
+
+  if [ -z "$CUR" ]; then
+    [ -e "$DST" ] && continue                             # 원장에 없고 실제 파일 = 사용자 소유
+    _place "$SRC" "$DST"; continue                         # 비어 있으면 새로 놓는다
   fi
-  [ -e "$DST" ] && continue                               # symlink 아닌 실제 파일 = 사용자 소유
-  ln -sfn "$SRC" "$DST" 2>/dev/null || true
+  [ "$CUR" = "$SRC" ] && { [ -e "$DST" ] || _place "$SRC" "$DST"; continue; }  # 이 배포본(깨졌으면 복구)
+  [ -e "$DST" ] || { _place "$SRC" "$DST"; continue; }                          # 깨진 배치 → 복구
+  # 우리 것이지만 출처가 다르다 → **형제 버전일 때만** 재지정하고 사용자 클론은 보존한다.
+  if [ -n "$SIBLING_ROOT" ]; then
+    CURDIR="$(cd "$(dirname "$CUR")" 2>/dev/null && pwd -P)"
+    case "$CURDIR" in "$SIBLING_ROOT"/*) _place "$SRC" "$DST" ;; esac
+  fi
 done
 
 # ② 볼트 게이트 — 볼트가 설정돼 있고(resolve 성공) CWD가 그 볼트 안일 때만 주입.

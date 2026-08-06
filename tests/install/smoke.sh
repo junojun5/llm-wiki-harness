@@ -12,19 +12,20 @@ SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
 HOME_DIR="$SB/home"; VAULT="$SB/vault"
 # config·페이로드의 경로는 python3가 **값으로** 받는다 — 네이티브 형태여야 한다 (MSYS 주의)
 . "$REPO/tests/lib/paths.sh"
+. "$REPO/tests/lib/placement.sh"
 VAULT_N="$(native_path "$VAULT")"
 mkdir -p "$HOME_DIR/.claude" "$HOME_DIR/.cursor" "$HOME_DIR/.gemini" "$VAULT"
 
 echo "[1] install.sh --fallback --vault → ~/.llm-wiki 부트스트랩 + Antigravity + 홈 전역(fallback) + 볼트 로컬"
 HOME="$HOME_DIR" bash "$REPO/install.sh" --fallback --vault "$VAULT" >/dev/null 2>&1
-[ -L "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh" ] && ok "런타임 스크립트 설치" || no "런타임 스크립트 설치"
-[ -L "$VAULT/AGENTS.md" ] && ok "AGENTS.md 배치" || no "AGENTS.md 배치"
+placed "$HOME_DIR" "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh" && ok "런타임 스크립트 설치" || no "런타임 스크립트 설치"
+placed "$HOME_DIR" "$VAULT/AGENTS.md" && ok "AGENTS.md 배치" || no "AGENTS.md 배치"
 # Cursor 전역(User): skills + hooks.json(절대경로)
-[ -L "$HOME_DIR/.cursor/skills/using-llm-wiki" ] && ok "Cursor 전역 skills" || no "Cursor 전역 skills"
+placed "$HOME_DIR" "$HOME_DIR/.cursor/skills/using-llm-wiki" && ok "Cursor 전역 skills" || no "Cursor 전역 skills"
 [ -f "$HOME_DIR/.cursor/hooks.json" ] && grep -q "$HOME_DIR/.cursor/hooks/" "$HOME_DIR/.cursor/hooks.json" && ok "Cursor ~/.cursor/hooks.json (절대경로)" || no "Cursor hooks.json"
 # Antigravity 전역 플러그인: plugin.json + skills, hooks.json 없음(스키마 미검증)
 [ -f "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/plugin.json" ] && ok "Antigravity plugin.json" || no "Antigravity plugin.json"
-[ -L "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/skills/wiki-setup" ] && ok "Antigravity plugin skills" || no "Antigravity plugin skills"
+placed "$HOME_DIR" "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/skills/wiki-setup" && ok "Antigravity plugin skills" || no "Antigravity plugin skills"
 [ ! -e "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/hooks.json" ] && ok "Antigravity hooks.json 미포함(의도)" || no "Antigravity hooks.json이 있으면 안 됨(스키마 미검증)"
 # 매니페스트는 레포 소스(.antigravity-plugin/plugin.json)가 단일 출처 — heredoc 리터럴 생성 금지
 cmp -s "$REPO/.antigravity-plugin/plugin.json" "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/plugin.json" \
@@ -100,7 +101,7 @@ grep -q '사용자 전역' "$H2/.gemini/config/AGENTS.md"      && ok "~/.gemini 
 [ -f "$H2/.codex/hooks.llm-wiki.json" ]      && ok "사본 ~/.codex/hooks.llm-wiki.json"          || no "codex 사본 없음"
 [ -f "$V2/.cursor/hooks.llm-wiki.json" ]     && ok "사본 .cursor/hooks.llm-wiki.json"           || no "cursor hooks 사본 없음"
 [ -f "$V2/.cursor/sandbox.llm-wiki.json" ]   && ok "사본 .cursor/sandbox.llm-wiki.json"         || no "cursor sandbox 사본 없음"
-[ -L "$H2/.gemini/config/AGENTS.llm-wiki.md" ] && ok "사본 AGENTS.llm-wiki.md"                  || no "AGENTS 사본 없음"
+placed "$H2" "$H2/.gemini/config/AGENTS.llm-wiki.md" && ok "사본 AGENTS.llm-wiki.md"                  || no "AGENTS 사본 없음"
 grep -q '수동 머지 필요' "$SB2/out"           && ok "머지 TODO를 설치 요약에 재고지"             || no "머지 TODO 미고지"
 # 사본 내용이 실제 render 결과인지 (placeholder가 남아 있으면 안 된다)
 grep -q '{{HOOKS_DIR}}'  "$V2/.cursor/hooks.llm-wiki.json"   && no "cursor 사본에 placeholder 잔존"   || ok "cursor 사본 절대경로 render됨"
