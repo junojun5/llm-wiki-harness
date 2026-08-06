@@ -113,6 +113,18 @@ for kw in resolve-vault raw index log hot QMD; do
   else bad "'$kw' 한쪽에만 존재 (skill=$in_s agents=$in_a) — 규칙이 도구별로 갈린다"; fi
 done
 
+# [8] 되돌아오면 안 되는 표기 — `docs/plans/2026-07-31-spec-implementation-sync.md` §4의
+#     "완료 판정" grep 2건을 승격한 것이다. 그 계획서도 실행이 끝났고(Phase 2 보류 1·2·3
+#     닫힘) 검증은 1회성 수동 grep으로만 남아 있었다. 위 [1]~[7]과 같은 이유로 기계화한다.
+echo "test: 되돌아오면 안 되는 표기 (Phase 2에서 정리된 것)"
+# 답변 프리픽스가 영어로 되돌아가지 않는가. 스킬 본문·출력 포맷은 한국어가 계약이다.
+hit="$(grep -rn 'Based on the wiki' "$REPO_ROOT/skills/" 2>/dev/null | head -1)"
+[ -z "$hit" ] && ok "영어 답변 프리픽스 없음" || bad "영어 프리픽스 잔존 — ${hit#$REPO_ROOT/}"
+# frontmatter의 provenance는 인라인 오브젝트(`provenance: {`)가 아니다 — 형식 정본은
+# skills/using-llm-wiki/references/page-format.md다.
+hit="$(grep -rnE 'provenance: *\{' "$REPO_ROOT/skills/" 2>/dev/null | head -1)"
+[ -z "$hit" ] && ok "인라인 provenance 오브젝트 없음" || bad "인라인 provenance 잔존 — ${hit#$REPO_ROOT/}"
+
 echo
 echo "PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" -eq 0 ]

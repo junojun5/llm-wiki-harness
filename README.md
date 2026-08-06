@@ -179,8 +179,8 @@ llm-wiki-harness/
     ├── specs/spec.md                # 하네스 스펙 — wiki 구조·문서 클래스·훅 계약의 단일 출처
     ├── specs/distribution-design.md # 멀티플랫폼 배포 설계(근거·트레이드오프)
     ├── specs/hooks-and-scripts.md   # hooks/·scripts/ 파일별 상세 레퍼런스
-    ├── plans/                       # 실행 계획(작업 단위 스냅샷)
     ├── reports/                     # 검증 리포트(무엇을 실측했고 무엇이 미검증인지)
+    ├── skill-authoring-guide.md     # SKILL.md 형식 계약 (tests/skills/가 기계 검사)
     ├── best-practices.md            # 케이스별 사용 시나리오
     └── troubleshooting.md           # 증상별 진단·복구
 ```
