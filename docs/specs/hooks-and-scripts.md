@@ -31,7 +31,7 @@
 
 | 파일 | 역할 |
 |---|---|
-| **`run-hook.cmd`** | **폴리글랏 런처** — Unix(bash)·Windows(cmd.exe) 양쪽에서 동작. `run-hook.cmd <script> [platform]` → `bash <hookdir>/<script> [platform]`로 위임(자기 위치를 `$0`로 찾음). 세 플랫폼이 모두 이걸 경유해 훅 스크립트를 부르되 command 표기가 갈린다 — Claude `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd`, Codex `${PLUGIN_ROOT}/hooks/run-hook.cmd`(둘 다 플러그인 매니페스트가 자동 등록), Cursor는 `install.sh`가 `{{HOOKS_DIR}}`를 실제 설치 절대경로로 render한다(플러그인 자동 등록이 불가하므로 self-locating 상대경로 전제가 성립하지 않는다 — 2026-07-31 실측). Windows 네이티브 에이전트가 `.sh`를 직접 못 돌릴 때 Git Bash/WSL bash로 넘긴다. |
+| **`run-hook.cmd`** | **폴리글랏 런처** — Unix(bash)·Windows(cmd.exe) 양쪽에서 동작. `run-hook.cmd <script> [platform]` → `bash <hookdir>/<script> [platform]`로 위임(자기 위치를 `$0`로 찾음). 세 플랫폼이 모두 이걸 경유해 훅 스크립트를 부르되 command 표기가 갈린다 — Claude `${CLAUDE_PLUGIN_ROOT}/hooks/run-hook.cmd`, Codex `${PLUGIN_ROOT}/hooks/run-hook.cmd`(둘 다 플러그인 매니페스트가 자동 등록), Cursor는 `install.sh`가 `{{HOOKS_DIR}}`를 실제 설치 절대경로로 render한다(플러그인 자동 등록이 불가하므로 self-locating 상대경로 전제가 성립하지 않는다 — 2026-07-31 실측). Windows 네이티브 에이전트가 `.sh`를 직접 못 돌릴 때 **Git for Windows의 bash**로 넘긴다 — bash 탐색은 `%ProgramFiles%\Git\bin\bash.exe` → `%ProgramFiles(x86)%\…` → `%LOCALAPPDATA%\Programs\Git\bin\bash.exe` → `where bash` 순이다. **`where bash`를 먼저 쓰면 안 된다:** WSL 기능이 켜진 시스템의 `C:\Windows\System32\bash.exe`(레거시 런처)가 PATH 앞쪽에서 먼저 걸리고, 그 bash는 런처가 넘기는 `C:\…` 경로를 해석하지 못해 훅이 죽는다(2026-08-05 정정 — 종전 "Git Bash 또는 WSL bash" 표기는 실기 검증된 적이 없는 주장이었다). **bash 부재 시의 동작은 훅 역할로 갈린다:** `session-start`는 stderr + `exit 2`(SessionStart는 exit 2로 차단되지 않고 stderr만 노출 → 세션당 1회 "가드 비활성" 경고), 가드 2개는 **무음 `exit 0`**. 전역 matcher(`Write\|Edit\|…\|Bash`)에서 fail-closed면 모든 편집이 막히고, 비영 exit면 매 호출마다 훅 에러 알림이 뜬다 — 둘 다 못 쓴다. 경고 문구는 **ASCII**여야 한다(배치 파일의 한글 리터럴은 활성 코드페이지에 따라 mojibake). |
 | **`probe-hook.sh`** | **픽스처 캡처 도구**(개발용). 훅 이벤트의 raw stdin 페이로드·argv를 파일로 저장하고 항상 통과(exit 0). Codex/Cursor의 실제 stdin/stdout 스키마를 실측해 골든 픽스처로 확보하기 위한 것. 평상시 훅 등록에는 쓰지 않는다. (배포 설계 §9-6) |
 
 ### 플랫폼별 등록 JSON (같은 bash 로직을 각 플랫폼 형식으로 등록)
@@ -80,4 +80,6 @@ hooks/    = 그 판정을 이벤트에 물려 자동 실행
 
 **`~/.llm-wiki/scripts` 소유권 주의.** 마켓플레이스 부트스트랩(session-start ①)은 이 경로를 **플러그인 캐시**로 링크하고, `install.sh [1]`은 **자기 체크아웃**으로 링크한다. 둘 다 하네스 소유 파일이라 비파괴 정책의 예외이므로 **나중에 실행한 쪽이 이긴다.** 임시 클론·git worktree에서 `install.sh`를 돌리면 4개 플랫폼이 공유하는 런타임이 그 임시 경로에 묶이고, 그 디렉토리를 지우면 전부 깨진다(가드 훅은 fail-open이라 조용히 무방비가 된다). 안정된 클론에서 실행하거나, 링크를 지워 다음 SessionStart의 자가-부트스트랩에 맡긴다.
 
-> Windows(`run-hook.cmd` cmd.exe 분기)는 여전히 정적 검토만 됐다 — 실기 검증은 Windows 환경 확보 시.
+> **Windows 실행 경로는 두 갈래다 (2026-08-05 공식 문서 확인).** Claude Code는 훅 항목의 `shell` 필드로 실행 셸을 정하고 **기본값이 `bash`**이며, Windows에서 **Git Bash가 없을 때만** `powershell`로 떨어진다. 따라서 Git Bash가 있으면 Claude는 `run-hook.cmd`를 **bash로 실행**해 폴리글랏의 Unix 분기를 탄다 — CRLF + `' #'` 페어가 Windows Claude 경로에서도 필수인 이유다. cmd.exe 분기가 실제로 쓰이는 쪽은 ① Git Bash 없는 Claude(→PowerShell→`.cmd`) ② Codex·Cursor다.
+>
+> 검증 커버리지: cmd.exe 분기는 `.github/workflows/windows.yml`의 `cmd-launcher` 잡(required)이 `tests/hooks/test-run-hook-cmd.cmd`로 인자 전달 계약을 실기 검증한다. bash 분기의 CRLF 계약은 `tests/hooks/test-session-start.sh`가 CR 존재 + `' #'` 누락을 정적으로 고정한다. **아직 실기 검증이 없는 것은 bash 부재 시의 역할별 exit 분기다** — windows-latest 러너에는 Git Bash가 항상 있어 그 경로를 만들 수 없다. `shell` 필드를 명시하지 않는 것도 계약이다: `"bash"`로 못박으면 Git Bash 없는 Windows에서 PowerShell 폴백이 사라져 매 호출이 훅 에러가 된다.
