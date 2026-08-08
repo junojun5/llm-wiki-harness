@@ -4,16 +4,20 @@ name: windows
 # **정적 검토로만** 확인돼 있었다. macOS/Linux에서는 cmd.exe를 실행할 수 없기 때문이다.
 # 환경 확보를 기다리는 대신 CI로 닫는다 (보류 3건 설계 §3).
 #
-# 필수/선택 경계 — cmd.exe 갈래만 required로 둔다. bash 갈래는 처음부터 통과하지 않을
-# 가능성이 실재한다(경로 구분자·realpath·symlink 동작이 다르고, session-start의 readlink
-# 루프도 Windows symlink에서 다르게 돈다). **통과하지 않으면 그건 발견이지 실패가 아니다.**
-# 다만 이 레포의 첫 CI가 빨간불로 시작하면 신호가 죽으므로 bash 갈래는
-# continue-on-error로 시작한다.
+# 두 잡 모두 required다. bash 갈래는 2026-08-04에 `continue-on-error: true`로 시작했다 —
+# 경로 구분자·realpath·symlink 동작이 달라 처음부터 통과하지 않을 가능성이 실재했고,
+# 첫 CI가 빨간불이면 신호가 죽기 때문이다. 그때 남긴 승격 조건은 "전 스위트 PASS로 3회
+# 연속"이었다.
 #
-# 승격 조건 (이걸 남기지 않으면 continue-on-error가 영구화되고 "Windows 지원"이
-# 검증 없는 주장으로 남는다): bash-suite가 **9스위트 전부 PASS**로 3회 연속 통과하면
-# continue-on-error를 제거하고 required로 승격한다. 그때까지 실패 항목은 개별 이슈로
-# 분리해 따로 닫는다. 진행 상태는 docs/specs/distribution-design.md §10에 기록한다.
+# **2026-08-09 승격 완료.** master에서 3회 연속(31262878491 · 31262918439 · 31263911242)
+# 전 스위트 통과해 `continue-on-error`를 제거했다. 이제 Windows 실패가 PR을 막는다.
+# 그전까지 열려 있던 실패 3스위트의 뿌리는 배포 설계 §7-1b(배치 원장)에 기록돼 있다 —
+# 소유권을 `[ -L ]`로 물은 것 하나였고, 나머지 절반은 테스트가 계약이 아니라 구현
+# 메커니즘을 단언한 결과였다.
+#
+# ⚠️ **되돌리려면 근거를 남긴다.** 다시 `continue-on-error`를 붙이는 것은 "Windows 지원"을
+# 검증 없는 주장으로 되돌리는 일이다. 특정 스위트가 불안정하면 그 스위트만 격리하고
+# 사유를 여기 적는다 — 잡 전체를 정보용으로 내리지 않는다.
 
 on:
   push:
@@ -33,10 +37,9 @@ jobs:
         run: tests\hooks\test-run-hook-cmd.cmd
 
   bash-suite:
-    # 정보용 — 결과를 보며 별도로 닫는다. 위 "승격 조건" 참조.
-    name: 셸 스위트 (Git Bash, 정보용)
+    # required — 2026-08-09 승격(위 헤더 참조). 실패하면 PR을 막는다.
+    name: 셸 스위트 (Git Bash)
     runs-on: windows-latest
-    continue-on-error: true
     # ⚠️ 타임아웃은 필수다. 2026-08-04에 이 잡이 **매달렸다**(0.3.1 인코딩 수정으로 이전보다
     # 더 진행되면서 어느 스위트가 입력을 기다리는 상태에 도달했다). 실행 중에는 로그 blob이
     # 아직 없어 어디서 멈췄는지 볼 수 없으므로, 타임아웃으로 강제 종료시켜 **그 시점까지의
