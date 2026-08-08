@@ -132,8 +132,22 @@ HOME="$H4" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 \
 [ -f "$H4/.claude/llm-wiki-hooks.settings.json" ] && ok "Claude 훅 스니펫 생성" || no "ASCII locale에서 render 실패 — Claude 훅 스니펫 없음"
 [ -f "$H4/.cursor/hooks.json" ]                   && ok "Cursor hooks.json 생성"  || no "ASCII locale에서 render 실패 — Cursor hooks.json 없음"
 # render는 읽기만이 아니라 쓰기도 한다 — 한국어가 손상 없이 왕복해야 한다.
-grep -q '게이팅하므로 비볼트 세션에 스팸하지 않는다' "$H4/.claude/llm-wiki-hooks.settings.json" 2>/dev/null \
-  && ok "한국어 description 왕복 보존" || no "render가 한국어를 손상시켰다"
+# ⚠️ **특정 문장을 핀으로 잡지 않는다.** 종전 단언은 hooks.json 주석의 한 문장을 박아 뒀는데,
+#    그 주석을 손보면 인코딩과 무관하게 실패했다(2026-08-08 실측). 검사할 성질은 "한국어가
+#    왕복 보존되는가"이지 "그 문장이 거기 있는가"가 아니다. 소스에서 비ASCII를 담은 최상위
+#    문자열 값을 뽑아 렌더 결과와 **같은지** 본다 — 문구를 바꿔도 계약은 그대로 검사된다.
+PYTHONUTF8=1 python3 -c '
+import json, sys
+def pick(path):
+    d = json.load(open(path, encoding="utf-8"))
+    for v in d.values():
+        if isinstance(v, str) and any(ord(c) > 127 for c in v):
+            return v
+    return None
+a, b = pick(sys.argv[1]), pick(sys.argv[2])
+sys.exit(0 if a and a == b else 1)
+' "$REPO/hooks/hooks.json" "$H4/.claude/llm-wiki-hooks.settings.json" 2>/dev/null \
+  && ok "한국어 왕복 보존" || no "render가 한국어를 손상시켰다"
 # 치환도 정상 동작해야 한다 (인코딩만 고치고 기능이 죽으면 의미 없다)
 grep -q "$(native_path "$H4/.cursor/hooks")" "$H4/.cursor/hooks.json" 2>/dev/null \
   && ok "{{HOOKS_DIR}} 절대경로 치환" || no "ASCII locale에서 치환 실패"
