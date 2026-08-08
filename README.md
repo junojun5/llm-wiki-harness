@@ -208,7 +208,7 @@ for t in tests/hooks/test-*.sh; do bash "$t"; done   # 훅 테스트
 
 ## 업데이트
 
-`install.sh`는 멱등이며 symlink 기반이라 설치본이 drift하지 않는다. `git pull` 후 재실행하면 최신 상태가 반영된다.
+`install.sh`는 멱등이다 — 배치를 `~/.llm-wiki/.placements` 원장에 기록해 자기 산물만 갱신하고 사용자 파일은 보존한다. 기본은 symlink이고 그게 성립하지 않는 환경(Windows/MSYS)에서는 복사로 떨어진다. `git pull` 후 재실행하면 최신 상태가 반영된다 — symlink 경로에서는 pull만으로도 스크립트가 즉시 최신이다.
 
 ## 라이선스
 

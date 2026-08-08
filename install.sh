@@ -27,7 +27,7 @@
 #         이 부트스트랩이 유일 경로*이고, 나머지 도구엔 마켓플레이스 자가-부트스트랩의 안전망.
 #     [2] Antigravity 전역 플러그인 번들(skills + rules/AGENTS.md) — ~/.gemini 감지 시. 훅 미포함(스키마 미공개).
 #   옵션:
-#     --fallback  : 마켓플레이스를 못 쓰는 환경용. Claude/Codex/Cursor에 skills+hooks를 홈 전역으로 symlink하고
+#     --fallback  : 마켓플레이스를 못 쓰는 환경용. Claude/Codex/Cursor에 skills+hooks를 홈 전역으로 배치하고
 #                   플러그인과 동일한 훅 등록을 수동 재현(command의 플러그인 루트 참조를 절대경로로 치환).
 #     --vault <p> : 프로젝트-로컬 배치(Cursor/Codex 볼트 로컬 hooks + 루트 AGENTS.md).
 set -euo pipefail
@@ -46,9 +46,70 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-link() { # link <src> <dst> — 멱등 symlink (디렉토리 보존)
-  mkdir -p "$(dirname "$2")"
-  ln -sfn "$1" "$2"
+# ── 배치 원장 ────────────────────────────────────────────────────────────────
+# "이 파일 우리가 놓았나?"를 **파일시스템 메타데이터로 묻지 않는다.** 종전 판정은 `[ -L ]`
+# 이었는데 MSYS(Git Bash)의 `ln -s`는 진짜 symlink가 아니라 **복사본**을 만들므로(진짜
+# symlink는 `MSYS=winsymlinks:nativestrict` + 개발자 모드/관리자 권한이 필요하다) Windows에서
+# 판정이 **항상 "사용자 파일"로 떨어졌다**: 2회차가 자기 산물에 사이드카 3건을 만들고,
+# 3회차는 `ln: …/skills/ingest-url/ingest-url: cannot overwrite directory`로 즉사해
+# **그 뒤의 훅 등록 구간이 한 줄도 실행되지 않았다.**
+# Homebrew의 `INSTALL_RECEIPT.json`·dpkg의 `.list`와 같은 방식으로 **놓을 때 기록을 남기고
+# 그 기록을 본다.** 이 레포도 ingest 쪽에서는 이미 같은 패턴을 쓴다(`.manifest.json`).
+# 한 줄 = `<mechanism>\t<dest>\t<src>`. dest·src는 절대경로라 탭이 들어가지 않는다.
+# 회귀는 `tests/install/test-msys-placement.sh`가 MSYS 셰임으로 고정한다.
+LEDGER="$HOME/.llm-wiki/.placements"
+stamp_get() { # stamp_get <dest> → 기록이 있으면 그 줄, 없으면 빈 문자열
+  [ -f "$LEDGER" ] || return 0
+  grep -F "	$1	" "$LEDGER" | tail -1
+}
+stamp_put() { # stamp_put <dest> <src> <mechanism>
+  local tmp
+  mkdir -p "$(dirname "$LEDGER")"
+  tmp="$LEDGER.$$"
+  if [ -f "$LEDGER" ]; then grep -vF "	$1	" "$LEDGER" >"$tmp" || :; else : >"$tmp"; fi
+  printf '%s\t%s\t%s\n' "$3" "$1" "$2" >>"$tmp"
+  mv "$tmp" "$LEDGER"
+}
+owned() { # owned <dest> <src> — 하네스가 놓은 자리인가
+  # ① 원장에 있으면 우리 것.
+  [ -n "$(stamp_get "$1")" ] && return 0
+  # ② 원장이 없고 dest가 **src를 가리키는 진짜 symlink**면 원장 도입 이전의 설치다 → 흡수.
+  #    이 갈래가 없으면 기존 macOS/Linux 사용자 전부가 다음 실행에서 사이드카를 뒤집어쓴다.
+  [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ] && return 0
+  # ③ 내용이 src와 **바이트 단위로 같으면** 우리 것으로 본다 (2026-08-08 Windows CI 실측).
+  #    ②만으로는 Windows의 원장 이전 설치를 흡수하지 못한다 — 거기서는 `ln -s`가 애초에
+  #    복사본을 만들었으므로 흡수할 symlink가 존재하지 않고, 판정이 "사용자 파일"로 떨어져
+  #    **기존 Windows 사용자 전부가 다음 실행에서 사이드카를 뒤집어쓴다**(CI가 실제로 잡았다:
+  #    `기존 설치가 사이드카 1건을 얻었다`).
+  #    **왜 안전한가:** 내용이 같으면 "사용자 파일을 보존한다"와 "우리 것을 갱신한다"가
+  #    **같은 동작**이다 — 어느 쪽으로 판정하든 디스크 결과가 동일하다. 사용자가 손댄 파일은
+  #    내용이 달라지므로 이 갈래에 걸리지 않고 비파괴 정책이 그대로 유지된다.
+  #    `place_render`가 처음부터 `cmp`로 하던 판정과 같은 것이고, 그 함수는 Windows에서
+  #    한 번도 실패하지 않았다.
+  [ -f "$1" ] && [ -f "$2" ] && cmp -s "$1" "$2" && return 0
+  return 1
+}
+
+link() { # link <src> <dst> — 멱등 배치. 우리 자리면 갱신, 아니면 **건드리지 않는다.**
+  local src="$1" dst="$2"
+  [ -n "$dst" ] || return 0
+  mkdir -p "$(dirname "$dst")"
+  # 소유권 확인 없이 배치하면 어느 쪽으로도 안전하지 않다: 아래 `rm -rf`는 사용자 디렉터리를
+  # 지우고, 그게 없으면 `ln -sfn`이 실존 디렉터리 **안쪽**에 만들어 사용자 트리를 오염시킨다
+  # (후자는 종전 동작의 결함이었다 — 조용해서 보이지 않았을 뿐이다).
+  if { [ -e "$dst" ] || [ -L "$dst" ]; } && ! owned "$dst" "$src"; then
+    say "⚠️ $dst 보존 — 하네스가 놓은 자리가 아닙니다(사용자 소유)."
+    return 0
+  fi
+  rm -rf "$dst"
+  ln -sfn "$src" "$dst" 2>/dev/null || true
+  # **결과를 검증한다.** MSYS에서는 위 `ln`이 복사로 떨어지므로 `-L`이 false다 — 그때는
+  # 복사를 우리가 명시적으로 하고 원장에 `copy`로 남긴다. 플랫폼 분기가 아니라 결과 확인이다.
+  if [ -L "$dst" ]; then
+    stamp_put "$dst" "$src" symlink
+  else
+    rm -rf "$dst"; cp -R "$src" "$dst"; stamp_put "$dst" "$src" copy
+  fi
 }
 say() { printf '  %s\n' "$*"; }
 render() { # render <src.json> <find> <replace> <dest> — 플러그인 루트 참조를 절대경로로 치환(sed 대신 python: 중첩 브레이스 안전)
@@ -87,14 +148,14 @@ place_render() {
   say "⚠️ 기존 $dest 보존 — 하네스 사본을 $sc 에 두었습니다. 필요한 항목을 수동 머지하세요."
   MERGE_TODO+=("$dest  ←  $sc")
 }
-# place_link <src> <dest> <라벨> — 비파괴 symlink. 우리 symlink면 갱신(멱등),
+# place_link <src> <dest> <라벨> — 비파괴 배치. 우리가 놓은 자리면 갱신(멱등, 소유권은 원장 판정),
 #   사용자 파일/다른 링크면 보존하고 사본 경로에 건다.
 place_link() {
   local src="$1" dest="$2" label="$3" sc
   if [ ! -e "$dest" ] && [ ! -L "$dest" ]; then
     link "$src" "$dest"; say "$label 생성: $dest"; return
   fi
-  if [ -L "$dest" ] && [ "$(readlink "$dest")" = "$src" ]; then
+  if owned "$dest" "$src"; then
     link "$src" "$dest"; say "$label 이미 최신: $dest (변경 없음)"; return
   fi
   sc="$(sidecar_path "$dest")"
@@ -109,12 +170,12 @@ MERGE_TODO=()
 echo "── LLM Wiki Harness 설치 ──"
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [1] 도구 비종속 런타임 홈 (항상) — 공유 스크립트 symlink
+# [1] 도구 비종속 런타임 홈 (항상) — 공유 스크립트 배치
 echo "[1] ~/.llm-wiki/scripts (도구 비종속 런타임)"
 for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   link "$REPO/scripts/$s" "$HOME/.llm-wiki/scripts/$s"
 done
-say "scripts/* → ~/.llm-wiki/scripts/ (symlink) — Config Gate·가드 훅의 공용 의존"
+say "scripts/* → ~/.llm-wiki/scripts/ (symlink, MSYS에선 복사) — Config Gate·가드 훅의 공용 의존"
 SUMMARY+=("✅ ~/.llm-wiki/scripts (공유 런타임)")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -129,7 +190,7 @@ if [ -d "$HOME/.gemini" ] || command -v agy >/dev/null 2>&1; then
   cp "$REPO/.antigravity-plugin/plugin.json" "$AGP/plugin.json"
   for d in "$REPO"/skills/*/; do link "$d" "$AGP/skills/$(basename "$d")"; done
   link "$REPO/AGENTS.md" "$AGP/rules/llm-wiki.md"
-  # 전역 AGENTS.md는 사용자가 직접 쓴 파일일 수 있다 — 기존 파일을 symlink로 교체하지 않는다
+  # 전역 AGENTS.md는 사용자가 직접 쓴 파일일 수 있다 — 기존 파일을 우리 배치로 교체하지 않는다
   place_link "$REPO/AGENTS.md" "$HOME/.gemini/config/AGENTS.md" "Antigravity 전역 AGENTS.md"
   say "plugin → ~/.gemini/config/plugins/llm-wiki-harness/ (plugin.json + skills + rules/llm-wiki.md=AGENTS.md)"
   say "⚠️ hooks.json 미포함 — Antigravity 훅 스키마 미공개(agy가 파싱은 하나 0 handlers). raw/ 보호는 AGENTS.md 지침."
@@ -191,11 +252,11 @@ if [ -n "$VAULT" ]; then
   echo "[4] 프로젝트-로컬 배치 → $VAULT (Codex/Cursor 볼트 로컬 hooks + AGENTS.md)"
   # 공용 .agents/skills (Cursor·Codex 프로젝트 공통)
   for d in "$REPO"/skills/*/; do link "$d" "$VAULT/.agents/skills/$(basename "$d")"; done
-  # AGENTS.md: 루트(canonical, Cursor·Codex) + .agents/(Antigravity) symlink.
+  # AGENTS.md: 루트(canonical, Cursor·Codex) + .agents/(Antigravity) 배치.
   # 볼트에 이미 사용자 AGENTS.md가 있을 수 있으므로 비파괴 배치한다.
   place_link "$REPO/AGENTS.md" "$VAULT/AGENTS.md" "볼트 루트 AGENTS.md"
   place_link "$REPO/AGENTS.md" "$VAULT/.agents/AGENTS.md" "볼트 .agents/AGENTS.md"
-  # Codex 볼트 로컬 훅 (플러그인/전역 미사용 시). 훅 스크립트 symlink + hooks.json을 볼트 절대경로로 렌더.
+  # Codex 볼트 로컬 훅 (플러그인/전역 미사용 시). 훅 스크립트 배치 + hooks.json을 볼트 절대경로로 렌더.
   for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$VAULT/.codex/hooks/$f"; done
   place_render "$REPO/hooks/hooks-codex.json" '${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}' "$VAULT/.codex" \
     "$VAULT/.codex/hooks.json" "Codex 볼트 로컬 hooks.json (/hooks trust 필요)"
@@ -206,7 +267,7 @@ if [ -n "$VAULT" ]; then
   # Cursor sandbox: 템플릿의 {{VAULT_ABS}} 치환. render()로 통일(sed와 이중 구현 제거).
   place_render "$REPO/hooks/cursor-sandbox.template.json" '{{VAULT_ABS}}' "$VAULT" \
     "$VAULT/.cursor/sandbox.json" "Cursor sandbox.json"
-  say ".agents/skills/, 루트 AGENTS.md(+.agents/ symlink), .codex/hooks(+hooks.json), .cursor/hooks(+hooks.json), .cursor/sandbox.json"
+  say ".agents/skills/, 루트 AGENTS.md(+.agents/), .codex/hooks(+hooks.json), .cursor/hooks(+hooks.json), .cursor/sandbox.json"
   SUMMARY+=("✅ 프로젝트-로컬: Codex/Cursor 볼트 로컬 hooks + AGENTS.md, .agents/skills")
 else
   SUMMARY+=("➖ 프로젝트-로컬(--vault): 미지정 — 건너뜀")

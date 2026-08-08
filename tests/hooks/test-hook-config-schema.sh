@@ -8,6 +8,13 @@
 #              unknown field `_comment`, expected `description` or `hooks`
 #   설치는 성공하고 `codex plugin list`도 "installed, enabled"로 보이므로 조용히 무방비가 된다.
 #   Claude·Cursor는 `_comment`를 관용하므로(실측) 이 제약은 Codex 파일에만 적용한다.
+#
+# ⚠️ 경로는 python **소스 문자열에 박지 않고 argv로 넘긴다** (2026-08-07 Windows CI 실측).
+#   MSYS(Git Bash)는 native 바이너리를 부를 때 **argv에 한해** 경로를 자동 변환한다. 소스
+#   문자열 안의 `/d/a/...`는 변환되지 않아 native python3가 열지 못하고, 이 스위트가
+#   `FileNotFoundError` → `이벤트 3종 got []`로 실패했다. `install.sh`의 `render()`는
+#   처음부터 argv라서 같은 자리에서 살았다 — 규칙이 있었는데 여기만 빠져 있었다.
+#   같은 계열: `tests/lib/paths.sh`(값으로 건너가는 경로) · §3-9(PYTHONUTF8).
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -39,16 +46,16 @@ assert_eq "허용 밖 키 없음" "" "$(extra_keys "$REPO_ROOT/hooks/hooks-codex
 
 echo "test: hooks-codex.json 에 hooks 키가 존재하고 3개 이벤트를 등록"
 EVENTS="$(PYTHONUTF8=1 python3 -c '
-import json
-d = json.load(open("'"$REPO_ROOT"'/hooks/hooks-codex.json"))
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
 print(",".join(sorted((d.get("hooks") or {}).keys())))
-')"
+' "$REPO_ROOT/hooks/hooks-codex.json")"
 assert_eq "이벤트 3종" "PostToolUse,PreToolUse,SessionStart" "$EVENTS"
 
 echo "test: hooks-codex.json command 는 PLUGIN_ROOT 절대참조 (훅 cwd는 세션 cwd)"
 BAD="$(PYTHONUTF8=1 python3 -c '
-import json
-d = json.load(open("'"$REPO_ROOT"'/hooks/hooks-codex.json"))
+import json, sys
+d = json.load(open(sys.argv[1], encoding="utf-8"))
 bad = []
 for ev, entries in (d.get("hooks") or {}).items():
     for e in entries:
@@ -57,7 +64,7 @@ for ev, entries in (d.get("hooks") or {}).items():
             if "PLUGIN_ROOT" not in c:
                 bad.append("%s:%s" % (ev, c))
 print(";".join(bad))
-')"
+' "$REPO_ROOT/hooks/hooks-codex.json")"
 assert_eq "PLUGIN_ROOT 미참조 없음" "" "$BAD"
 
 # Claude·Cursor는 _comment를 관용한다(실측). 여기서는 "파싱 가능 + hooks 존재"만 보장한다 —

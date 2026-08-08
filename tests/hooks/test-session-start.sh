@@ -6,6 +6,7 @@
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$REPO_ROOT/tests/lib/paths.sh"
+. "$REPO_ROOT/tests/lib/placement.sh"
 HOOK="$REPO_ROOT/hooks/session-start"
 PASS=0; FAIL=0
 SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
@@ -27,8 +28,8 @@ printf 'log\n' > "$VAULT/wiki/log.md"
 echo "test: 비볼트 CWD — 부트스트랩만, 주입 없음"
 OUT="$(cd "$SB" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>"$SB/err")"; CODE=$?
 [ "$CODE" = 0 ] && ok "exit 0" || no "exit 0 (got $CODE)"
-[ -L "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" ] && ok "부트스트랩: resolve-vault.sh symlink 생성" || no "부트스트랩 symlink 없음"
-[ -L "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" ] && ok "부트스트랩: validate-frontmatter.sh symlink" || no "validate symlink 없음"
+placed "$HOMESB" "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" && ok "부트스트랩: resolve-vault.sh 배치" || no "부트스트랩 배치 없음"
+placed "$HOMESB" "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" && ok "부트스트랩: validate-frontmatter.sh 배치" || no "validate 배치 없음"
 [ -z "$OUT" ] && ok "비볼트 → 주입 없음(빈 stdout)" || no "비볼트인데 출력 있음: $OUT"
 
 echo "test: config 경로 표기가 CWD와 달라도 게이트가 통과한다 (Windows 형식 차이 회귀)"
@@ -73,7 +74,9 @@ printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if 'add
 echo "test: 볼트 CWD (cursor) — additional_context + env(절대경로)"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" cursor </dev/null 2>/dev/null)"
 jpath "cursor additional_context" "d['additional_context']" "raw/ 는 불변" "$OUT"
-jpath "cursor env.LLM_WIKI_RESOLVER 절대경로" "d['env']['LLM_WIKI_RESOLVER']" "$HOMESB/.llm-wiki/scripts/resolve-vault.sh" "$OUT"
+# 기대값은 native 형식이어야 한다 — 이 경로는 argv로 python3에 건너가므로 MSYS가 변환한다
+# (2026-08-08 CI: POSIX 기대값이라 Windows에서만 실패했다). macOS/Linux는 항등이라 동작 불변.
+jpath "cursor env.LLM_WIKI_RESOLVER 절대경로" "d['env']['LLM_WIKI_RESOLVER']" "$(native_path "$HOMESB/.llm-wiki/scripts/resolve-vault.sh")" "$OUT"
 printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if not json.load(sys.stdin)['env']['LLM_WIKI_RESOLVER'].startswith('~') else 1)" \
   && ok "cursor env에 틸드 없음(미확장 방지)" || no "cursor env가 틸드로 시작"
 
@@ -186,14 +189,20 @@ for v in 0.1.0 0.2.0; do
   done
 done
 
-echo "test: 형제 버전 stale symlink → 새 버전으로 재지정"
+# ⚠️ 단언은 **원장**을 본다. `readlink`로 물으면 구현 메커니즘을 단언하는 것이고, MSYS에서는
+#    배치가 복사본이라 항상 빈 문자열이 돌아온다(2026-08-08 CI: 이 블록에서만 5건이 실패했다).
+#    셋업도 `ln -sfn`에 기대지 않는다 — MSYS에서는 그것도 복사라서 "0.1.0을 가리키는 설치"라는
+#    상태가 만들어지지 않는다. 원장을 함께 심어 **의도한 상태를 플랫폼 무관하게** 표현한다.
+#    (원장 없는 symlink의 흡수는 test-msys-placement.sh [4]와 macOS 실행이 덮는다.)
+echo "test: 형제 버전 stale 배치 → 새 버전으로 재지정"
 H2="$SB/home2/.llm-wiki/scripts"; mkdir -p "$H2"
 for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   ln -sfn "$MP/0.1.0/scripts/$s" "$H2/$s"
+  printf 'symlink\t%s\t%s\n' "$H2/$s" "$MP/0.1.0/scripts/$s" >>"$SB/home2/.llm-wiki/.placements"
 done
 (cd "$SB" && HOME="$SB/home2" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
-[ "$(readlink "$H2/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
-  && ok "형제 버전 재지정 (0.1.0 → 0.2.0)" || no "재지정 안 됨: $(readlink "$H2/resolve-vault.sh")"
+[ "$(placed_src "$SB/home2" "$H2/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "형제 버전 재지정 (0.1.0 → 0.2.0)" || no "재지정 안 됨: $(placed_src "$SB/home2" "$H2/resolve-vault.sh")"
 [ "$(bash "$H2/build-link-graph.sh")" = "0.2.0" ] \
   && ok "재지정 후 새 버전이 실행된다" || no "여전히 옛 스크립트 실행"
 
@@ -203,17 +212,19 @@ CLONE="$SB/my-clone/scripts"; mkdir -p "$CLONE"
 for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   printf '#!/usr/bin/env bash\necho clone\n' > "$CLONE/$s"
   ln -sfn "$CLONE/$s" "$H3/$s"
+  printf 'symlink\t%s\t%s\n' "$H3/$s" "$CLONE/$s" >>"$SB/home3/.llm-wiki/.placements"
 done
 (cd "$SB" && HOME="$SB/home3" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
-[ "$(readlink "$H3/resolve-vault.sh")" = "$CLONE/resolve-vault.sh" ] \
-  && ok "사용자 클론 링크 보존" || no "클론 링크가 덮어써짐: $(readlink "$H3/resolve-vault.sh")"
+[ "$(placed_src "$SB/home3" "$H3/resolve-vault.sh")" = "$CLONE/resolve-vault.sh" ] \
+  && ok "사용자 클론 배치 보존" || no "클론 배치가 덮어써짐: $(placed_src "$SB/home3" "$H3/resolve-vault.sh")"
 
 echo "test: 깨진 symlink → 복구"
 H4="$SB/home4/.llm-wiki/scripts"; mkdir -p "$H4"
 ln -sfn "$SB/gone/scripts/resolve-vault.sh" "$H4/resolve-vault.sh"
+printf 'symlink\t%s\t%s\n' "$H4/resolve-vault.sh" "$SB/gone/scripts/resolve-vault.sh" >>"$SB/home4/.llm-wiki/.placements"
 (cd "$SB" && HOME="$SB/home4" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
-[ "$(readlink "$H4/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
-  && ok "깨진 링크 복구" || no "깨진 링크 방치: $(readlink "$H4/resolve-vault.sh")"
+[ "$(placed_src "$SB/home4" "$H4/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "깨진 배치 복구" || no "깨진 배치 방치: $(placed_src "$SB/home4" "$H4/resolve-vault.sh")"
 
 echo "test: symlink가 아닌 실제 파일은 손대지 않는다"
 H5="$SB/home5/.llm-wiki/scripts"; mkdir -p "$H5"
@@ -311,11 +322,11 @@ LINKED="$SB/linked-session-start"; ln -sfn "$MP/0.2.0/hooks/session-start" "$LIN
 (cd "$SB" && HOME="$H10" PATH="$NOPY" "$BASH" "$LINKED" claude </dev/null >/dev/null 2>&1)
 BOOTED=0
 for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
-  [ -L "$H10/.llm-wiki/scripts/$s" ] && BOOTED=$((BOOTED+1))
+  placed "$H10" "$H10/.llm-wiki/scripts/$s" && BOOTED=$((BOOTED+1))
 done
 [ "$BOOTED" = 3 ] && ok "symlink 경유 + python3 없음에도 부트스트랩 3개" || no "부트스트랩 $BOOTED/3 (ROOT 오판)"
-[ "$(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
-  && ok "링크 대상이 배포본 scripts/" || no "엉뚱한 대상: $(readlink "$H10/.llm-wiki/scripts/resolve-vault.sh")"
+[ "$(grep -F "	$H10/.llm-wiki/scripts/resolve-vault.sh	" "$H10/.llm-wiki/.placements" | cut -f3)" = "$MP/0.2.0/scripts/resolve-vault.sh" ] \
+  && ok "배치 출처가 배포본 scripts/" || no "엉뚱한 출처: $(grep -F "	$H10/.llm-wiki/scripts/resolve-vault.sh	" "$H10/.llm-wiki/.placements" | cut -f3)"
 
 fi
 
