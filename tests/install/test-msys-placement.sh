@@ -59,8 +59,11 @@ cp -R "$SRC" "$DST"
 SHIM_EOF
 chmod +x "$SHIM/ln"
 
-run_install() { # run_install <home> <vault> <outfile>
-  HOME="$1" PATH="$SHIM:$PATH" bash "$REPO/install.sh" --fallback --vault "$2" >"$3" 2>&1
+# ⚠️ Windows에서 install 1회가 ~20초다(셰임이 symlink를 전부 복사로 떨어뜨려 스킬 트리를
+# 통째로 복사한다). 전체 install을 남발하면 스위트가 CI 상한을 넘는다 — 2026-08-08에 실제로
+# rc=124로 잘렸다(120.09초). 그래서 `--fallback`은 그게 **꼭 필요한 케이스에서만** 붙인다.
+run_install() { # run_install <home> <vault> <outfile> [--fallback]
+  HOME="$1" PATH="$SHIM:$PATH" bash "$REPO/install.sh" ${4:+--fallback} --vault "$2" >"$3" 2>&1
 }
 sidecars() { find "$@" -name '*.llm-wiki.*' 2>/dev/null | wc -l | tr -d ' '; }
 
@@ -68,9 +71,9 @@ sidecars() { find "$@" -name '*.llm-wiki.*' 2>/dev/null | wc -l | tr -d ' '; }
 echo "[1] MSYS 시맨틱에서 install.sh 3회 연속 실행"
 H="$SB/h1"; V="$SB/v1"; mkdir -p "$H/.claude" "$H/.cursor" "$H/.gemini" "$V"
 rc1=0; rc2=0; rc3=0
-run_install "$H" "$V" "$SB/o1" || rc1=$?
-run_install "$H" "$V" "$SB/o2" || rc2=$?
-run_install "$H" "$V" "$SB/o3" || rc3=$?
+run_install "$H" "$V" "$SB/o1" --fallback || rc1=$?
+run_install "$H" "$V" "$SB/o2" --fallback || rc2=$?
+run_install "$H" "$V" "$SB/o3" --fallback || rc3=$?
 
 [ "$rc1" = 0 ] && ok "1회차 rc=0" || no "1회차 rc=$rc1"
 [ "$rc2" = 0 ] && ok "2회차 rc=0" || no "2회차 rc=$rc2"
@@ -118,7 +121,7 @@ n3="$(sidecars "$H3" "$V3")"
 echo "[5] 사용자 소유 디렉터리를 지우지도 오염시키지도 않는다"
 H4="$SB/h4"; V4="$SB/v4"; mkdir -p "$H4/.claude/skills/wiki-setup" "$H4/.cursor" "$H4/.gemini" "$V4"
 printf '내 스킬이다.\n' >"$H4/.claude/skills/wiki-setup/mine.md"
-run_install "$H4" "$V4" "$SB/o6" || true
+run_install "$H4" "$V4" "$SB/o6" --fallback || true
 [ -f "$H4/.claude/skills/wiki-setup/mine.md" ] && ok "사용자 파일 생존" || no "사용자 디렉터리가 삭제됐다"
 [ ! -e "$H4/.claude/skills/wiki-setup/wiki-setup" ] && ok "사용자 트리에 중첩 링크 없음" \
   || no "사용자 디렉터리 안쪽에 중첩 배치됐다 (ln이 dest 내부를 노렸다)"

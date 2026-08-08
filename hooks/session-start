@@ -109,6 +109,13 @@ _rec_put() { # _rec_put <dest> <src> <mechanism>
   # 찢어진 쓰기는 다음 세션이 다시 만든다 — 볼트 데이터가 아니라 부트스트랩 메모다.
   printf '%s' "$buf" >"$LEDGER" 2>/dev/null || true
 }
+_same() { # _same <a> <b> — 내용이 같은가. `cmp`는 축소 PATH 밖이라 `cat`으로 비교한다
+  local _a _b                                  # ($(...)가 양쪽 끝 개행을 똑같이 벗기므로 비교는 유효)
+  [ -f "$1" ] && [ -f "$2" ] || return 1
+  _a="$(cat "$1" 2>/dev/null)" || return 1
+  _b="$(cat "$2" 2>/dev/null)" || return 1
+  [ "$_a" = "$_b" ]
+}
 _place() { # _place <src> <dst> — 배치하고 원장에 남긴다. 실패는 조용히 넘긴다(비치명 계약).
   local mech=symlink
   ln -sfn "$1" "$2" 2>/dev/null || true
@@ -130,6 +137,16 @@ for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   # (이 폴백이 없으면 기존 macOS/Linux 사용자의 런타임 홈이 전부 "사용자 소유"로 읽힌다).
   CUR="$(_rec_src "$DST")"
   [ -z "$CUR" ] && [ -L "$DST" ] && CUR="$(readlink "$DST" 2>/dev/null || true)"
+
+  # 원장도 symlink도 없는데 **내용이 SRC와 같다** → 원장 이전 설치다. Windows에서는 그때도
+  # `ln -s`가 복사본을 만들었으므로 흡수할 symlink가 존재하지 않고, 위 폴백만으로는 기존
+  # 설치가 영영 "사용자 소유"로 읽혀 **재지정이 일어나지 않는다**(런타임 홈 영구 stale).
+  # 내용이 같으면 다시 놓아도 디스크 결과가 불변이므로 안전하게 원장에 등록할 수 있고,
+  # 그 다음 업데이트부터 형제 재지정이 정상 동작한다. 사용자가 손댄 파일은 내용이 달라
+  # 이 갈래에 걸리지 않는다(아래 "실제 파일 = 사용자 소유" 정책 유지).
+  if [ -z "$CUR" ] && _same "$DST" "$SRC"; then
+    _place "$SRC" "$DST"; continue
+  fi
 
   if [ -z "$CUR" ]; then
     [ -e "$DST" ] && continue                             # 원장에 없고 실제 파일 = 사용자 소유
