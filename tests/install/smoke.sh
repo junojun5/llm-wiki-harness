@@ -22,7 +22,7 @@ placed "$HOME_DIR" "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh" && ok "런타�
 placed "$HOME_DIR" "$VAULT/AGENTS.md" && ok "AGENTS.md 배치" || no "AGENTS.md 배치"
 # Cursor 전역(User): skills + hooks.json(절대경로)
 placed "$HOME_DIR" "$HOME_DIR/.cursor/skills/using-llm-wiki" && ok "Cursor 전역 skills" || no "Cursor 전역 skills"
-[ -f "$HOME_DIR/.cursor/hooks.json" ] && grep -q "$HOME_DIR/.cursor/hooks/" "$HOME_DIR/.cursor/hooks.json" && ok "Cursor ~/.cursor/hooks.json (절대경로)" || no "Cursor hooks.json"
+[ -f "$HOME_DIR/.cursor/hooks.json" ] && grep -q "$(native_path "$HOME_DIR/.cursor/hooks")" "$HOME_DIR/.cursor/hooks.json" && ok "Cursor ~/.cursor/hooks.json (절대경로)" || no "Cursor hooks.json"
 # Antigravity 전역 플러그인: plugin.json + skills, hooks.json 없음(스키마 미검증)
 [ -f "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/plugin.json" ] && ok "Antigravity plugin.json" || no "Antigravity plugin.json"
 placed "$HOME_DIR" "$HOME_DIR/.gemini/config/plugins/llm-wiki-harness/skills/wiki-setup" && ok "Antigravity plugin skills" || no "Antigravity plugin skills"
@@ -135,7 +135,7 @@ HOME="$H4" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 \
 grep -q '게이팅하므로 비볼트 세션에 스팸하지 않는다' "$H4/.claude/llm-wiki-hooks.settings.json" 2>/dev/null \
   && ok "한국어 description 왕복 보존" || no "render가 한국어를 손상시켰다"
 # 치환도 정상 동작해야 한다 (인코딩만 고치고 기능이 죽으면 의미 없다)
-grep -q "$H4/.cursor/hooks" "$H4/.cursor/hooks.json" 2>/dev/null \
+grep -q "$(native_path "$H4/.cursor/hooks")" "$H4/.cursor/hooks.json" 2>/dev/null \
   && ok "{{HOOKS_DIR}} 절대경로 치환" || no "ASCII locale에서 치환 실패"
 
 echo ""
