@@ -17,7 +17,7 @@
 #                 ([features] hooks=true는 0.145.0에서 불필요 — stable·기본 활성)
 #   Cursor      : ⚠️ **install.sh 필수.** 플러그인은 skills만 실린다 — cursor-agent가 매니페스트의
 #                 hooks를 소비하지 않으므로(실측) 훅은 이 스크립트가 .cursor/hooks.json을 배치해야
-#                 등록된다. `--fallback`(전역) 또는 `--vault <p>`(프로젝트)를 반드시 실행한다.
+#                 등록된다. `--fallback`(전역) 또는 기본 실행(프로젝트, default-vault 자동 해석)을 반드시 실행한다.
 #                 Cloud Agent는 sessionStart 미지원(로컬 데스크톱 전용).
 #   Antigravity : 훅 스키마 미공개 → 플러그인은 skills+rules(AGENTS.md)만. raw/ 가드는 AGENTS.md 소프트 룰.
 #
@@ -29,15 +29,14 @@
 #   옵션:
 #     --fallback  : 마켓플레이스를 못 쓰는 환경용. Claude/Codex/Cursor에 skills+hooks를 홈 전역으로 배치하고
 #                   플러그인과 동일한 훅 등록을 수동 재현(command의 플러그인 루트 참조를 절대경로로 치환).
-#     --vault <p> : 프로젝트-로컬 배치(Cursor/Codex 볼트 로컬 hooks + 루트 AGENTS.md).
+#     [4] 프로젝트-로컬(Cursor/Codex): ~/.llm-wiki/default-vault에서 볼트 경로를 자동 해석.
+#                   파일이 없으면 [4]를 건너뛰고 wiki-setup 재실행을 안내한다.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-VAULT=""
 FALLBACK=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --vault) VAULT="${2:-}"; shift 2 ;;
     --fallback) FALLBACK=1; shift ;;
     # 헤더 주석 블록만 출력한다 — 첫 비주석 행에서 멈추므로 헤더가 자라도 코드가 새지 않는다
     # (구현: sed -n '2,30p'는 set -euo pipefail·변수 선언·while 루프까지 도움말로 출력했다)
@@ -246,8 +245,12 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────────────
-# [4] 프로젝트-로컬 (Cursor/Codex) — --vault 지정 시
-if [ -n "$VAULT" ]; then
+# [4] 프로젝트-로컬 (Cursor/Codex) — ~/.llm-wiki/default-vault 자동 해석
+VAULT=""
+if [ -f "$HOME/.llm-wiki/default-vault" ]; then
+  VAULT="$(cat "$HOME/.llm-wiki/default-vault")"
+fi
+if [ -n "$VAULT" ] && [ -d "$VAULT" ]; then
   VAULT="$(cd "$VAULT" && pwd)"
   echo "[4] 프로젝트-로컬 배치 → $VAULT (Codex/Cursor 볼트 로컬 hooks + AGENTS.md)"
   # 공용 .agents/skills (Cursor·Codex 프로젝트 공통)
@@ -264,13 +267,19 @@ if [ -n "$VAULT" ]; then
   for f in "${HOOK_FILES[@]}"; do link "$REPO/hooks/$f" "$VAULT/.cursor/hooks/$f"; done
   place_render "$REPO/hooks/hooks-cursor.json" '{{HOOKS_DIR}}' "$VAULT/.cursor/hooks" \
     "$VAULT/.cursor/hooks.json" "Cursor 볼트 로컬 hooks.json"
-  # Cursor sandbox: 템플릿의 {{VAULT_ABS}} 치환. render()로 통일(sed와 이중 구현 제거).
+  # Cursor sandbox: 볼트 로컬 + 전역(~/.cursor) 동시 배치.
+  # 전역 배치 시 어느 워크스페이스에서 Cursor를 열어도 볼트·~/.llm-wiki 경로에 접근 가능.
   place_render "$REPO/hooks/cursor-sandbox.template.json" '{{VAULT_ABS}}' "$VAULT" \
-    "$VAULT/.cursor/sandbox.json" "Cursor sandbox.json"
-  say ".agents/skills/, 루트 AGENTS.md(+.agents/), .codex/hooks(+hooks.json), .cursor/hooks(+hooks.json), .cursor/sandbox.json"
+    "$VAULT/.cursor/sandbox.json" "Cursor sandbox.json (볼트 로컬)"
+  if [ -d "$HOME/.cursor" ]; then
+    place_render "$REPO/hooks/cursor-sandbox.template.json" '{{VAULT_ABS}}' "$VAULT" \
+      "$HOME/.cursor/sandbox.json" "Cursor sandbox.json (전역 ~/.cursor)"
+  fi
+  say ".agents/skills/, 루트 AGENTS.md(+.agents/), .codex/hooks(+hooks.json), .cursor/hooks(+hooks.json), .cursor/sandbox.json(볼트+전역)"
   SUMMARY+=("✅ 프로젝트-로컬: Codex/Cursor 볼트 로컬 hooks + AGENTS.md, .agents/skills")
 else
-  SUMMARY+=("➖ 프로젝트-로컬(--vault): 미지정 — 건너뜀")
+  echo "[4] 프로젝트-로컬: default-vault 없음 — wiki-setup을 먼저 실행한 뒤 install.sh를 재실행하세요."
+  SUMMARY+=("➖ 프로젝트-로컬(Cursor/Codex): default-vault 미설정 — wiki-setup 후 재실행")
 fi
 
 echo ""
