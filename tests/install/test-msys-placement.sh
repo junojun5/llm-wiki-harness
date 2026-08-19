@@ -63,7 +63,9 @@ chmod +x "$SHIM/ln"
 # 통째로 복사한다). 전체 install을 남발하면 스위트가 CI 상한을 넘는다 — 2026-08-08에 실제로
 # rc=124로 잘렸다(120.09초). 그래서 `--fallback`은 그게 **꼭 필요한 케이스에서만** 붙인다.
 run_install() { # run_install <home> <vault> <outfile> [--fallback]
-  HOME="$1" PATH="$SHIM:$PATH" bash "$REPO/install.sh" ${4:+--fallback} --vault "$2" >"$3" 2>&1
+  # [4] 프로젝트-로컬 블록은 --vault 인자 대신 ~/.llm-wiki/default-vault(wiki-setup 산물)에서 볼트를 해석한다.
+  mkdir -p "$1/.llm-wiki"; printf '%s\n' "$2" > "$1/.llm-wiki/default-vault"
+  HOME="$1" PATH="$SHIM:$PATH" bash "$REPO/install.sh" ${4:+--fallback} >"$3" 2>&1
 }
 sidecars() { find "$@" -name '*.llm-wiki.*' 2>/dev/null | wc -l | tr -d ' '; }
 
