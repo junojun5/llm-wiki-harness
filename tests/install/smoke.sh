@@ -16,8 +16,10 @@ HOME_DIR="$SB/home"; VAULT="$SB/vault"
 VAULT_N="$(native_path "$VAULT")"
 mkdir -p "$HOME_DIR/.claude" "$HOME_DIR/.cursor" "$HOME_DIR/.gemini" "$VAULT"
 
-echo "[1] install.sh --fallback --vault → ~/.llm-wiki 부트스트랩 + Antigravity + 홈 전역(fallback) + 볼트 로컬"
-HOME="$HOME_DIR" bash "$REPO/install.sh" --fallback --vault "$VAULT" >/dev/null 2>&1
+echo "[1] install.sh --fallback (+ default-vault) → ~/.llm-wiki 부트스트랩 + Antigravity + 홈 전역(fallback) + 볼트 로컬"
+# [4] 프로젝트-로컬 블록은 --vault 인자 대신 ~/.llm-wiki/default-vault(wiki-setup 산물)에서 볼트를 해석한다.
+mkdir -p "$HOME_DIR/.llm-wiki"; printf '%s\n' "$VAULT" > "$HOME_DIR/.llm-wiki/default-vault"
+HOME="$HOME_DIR" bash "$REPO/install.sh" --fallback >/dev/null 2>&1
 placed "$HOME_DIR" "$HOME_DIR/.llm-wiki/scripts/resolve-vault.sh" && ok "런타임 스크립트 설치" || no "런타임 스크립트 설치"
 placed "$HOME_DIR" "$VAULT/AGENTS.md" && ok "AGENTS.md 배치" || no "AGENTS.md 배치"
 # Cursor 전역(User): skills + hooks.json(절대경로)
@@ -91,7 +93,8 @@ printf '{"USER_ORIGINAL":"codex"}\n'          > "$H2/.codex/hooks.json"
 printf '{"USER_ORIGINAL":"cursor-hooks"}\n'   > "$V2/.cursor/hooks.json"
 printf '{"USER_ORIGINAL":"cursor-sandbox"}\n' > "$V2/.cursor/sandbox.json"
 printf '# 사용자 전역 AGENTS.md\n'             > "$H2/.gemini/config/AGENTS.md"
-HOME="$H2" bash "$REPO/install.sh" --fallback --vault "$V2" >"$SB2/out" 2>&1
+mkdir -p "$H2/.llm-wiki"; printf '%s\n' "$V2" > "$H2/.llm-wiki/default-vault"
+HOME="$H2" bash "$REPO/install.sh" --fallback >"$SB2/out" 2>&1
 grep -q 'USER_ORIGINAL' "$H2/.codex/hooks.json"          && ok "~/.codex/hooks.json 원본 보존"          || no "~/.codex/hooks.json 덮어씀"
 grep -q 'USER_ORIGINAL' "$V2/.cursor/hooks.json"         && ok "볼트 .cursor/hooks.json 원본 보존"      || no "볼트 .cursor/hooks.json 덮어씀"
 grep -q 'USER_ORIGINAL' "$V2/.cursor/sandbox.json"       && ok "볼트 .cursor/sandbox.json 원본 보존"    || no "볼트 .cursor/sandbox.json 덮어씀"
@@ -109,9 +112,10 @@ grep -q '{{VAULT_ABS}}'  "$V2/.cursor/sandbox.llm-wiki.json" && no "sandbox 사�
 
 echo "[9] install.sh 멱등성 — 재실행 시 사본을 만들지 않는다"
 SB3="$SB/idempotent"; H3="$SB3/home"; V3="$SB3/vault"
-mkdir -p "$H3/.claude" "$H3/.cursor" "$H3/.codex" "$H3/.gemini/config" "$V3"
-HOME="$H3" bash "$REPO/install.sh" --fallback --vault "$V3" >/dev/null 2>&1
-HOME="$H3" bash "$REPO/install.sh" --fallback --vault "$V3" >"$SB3/out2" 2>&1
+mkdir -p "$H3/.claude" "$H3/.cursor" "$H3/.codex" "$H3/.gemini/config" "$V3" "$H3/.llm-wiki"
+printf '%s\n' "$V3" > "$H3/.llm-wiki/default-vault"
+HOME="$H3" bash "$REPO/install.sh" --fallback >/dev/null 2>&1
+HOME="$H3" bash "$REPO/install.sh" --fallback >"$SB3/out2" 2>&1
 [ "$(find "$SB3" -name '*.llm-wiki.*' | wc -l | tr -d ' ')" = "0" ] && ok "재실행에도 사본 0건" || no "재실행이 사본을 만들었다"
 grep -q '이미 최신' "$SB3/out2" && ok "재실행은 '이미 최신'으로 보고" || no "'이미 최신' 보고 없음"
 
@@ -126,9 +130,10 @@ echo "[11] ASCII locale에서도 render가 훅 등록 파일을 만든다 (§3-9
 # UnicodeDecodeError로 죽고 → **훅 등록 파일이 아예 생성되지 않는다**(조용한 설치 실패).
 # macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성이므로 그 자동화까지 꺼야 Windows와 같은 조건이 된다.
 SB4="$SB/ascii"; H4="$SB4/home"; V4="$SB4/vault"
-mkdir -p "$H4/.claude" "$H4/.cursor" "$V4"
+mkdir -p "$H4/.claude" "$H4/.cursor" "$V4" "$H4/.llm-wiki"
+printf '%s\n' "$V4" > "$H4/.llm-wiki/default-vault"
 HOME="$H4" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 \
-  bash "$REPO/install.sh" --fallback --vault "$V4" >"$SB4/out" 2>&1
+  bash "$REPO/install.sh" --fallback >"$SB4/out" 2>&1
 [ -f "$H4/.claude/llm-wiki-hooks.settings.json" ] && ok "Claude 훅 스니펫 생성" || no "ASCII locale에서 render 실패 — Claude 훅 스니펫 없음"
 [ -f "$H4/.cursor/hooks.json" ]                   && ok "Cursor hooks.json 생성"  || no "ASCII locale에서 render 실패 — Cursor hooks.json 없음"
 # render는 읽기만이 아니라 쓰기도 한다 — 한국어가 손상 없이 왕복해야 한다.
