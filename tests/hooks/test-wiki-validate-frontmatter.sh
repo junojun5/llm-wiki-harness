@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# 단위 테스트: hooks/wiki-validate-frontmatter.sh (하네스 스펙 §5-3)
-# wiki/ 하위 .md 쓰기마다 validate-frontmatter.sh를 wrapper로 호출. 위반 시 exit 2 + stderr.
+# wiki/ .md 쓰기의 frontmatter 위반은 exit 2.
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO_ROOT/hooks/wiki-validate-frontmatter.sh"
@@ -83,8 +82,7 @@ new_sandbox; rm -f "$SANDBOX/home/.llm-wiki/default-vault"
 OUT="$(cd "$SANDBOX" && printf '%s' "{\"tool_input\":{\"file_path\":\"$SANDBOX/x.md\"}}" | HOME="$SANDBOX/home" bash "$HOOK" 2>/dev/null)"; CODE=$?
 eq "exit 0" "0" "$CODE"; cleanup
 
-# ── 상대경로·apply_patch 추출 (§5-3 — §5-2와 동일 규칙이어야 한다) ──────────────
-# 절대경로 + file_path 전제였던 구현은 아래 케이스에서 검증이 조용히 죽었다.
+# 상대경로와 apply_patch 본문에서도 대상을 뽑는다. file_path만 보면 검증이 죽는다.
 
 echo "test: Write 상대경로(cwd 기준) — 위반 페이지에서 검증 발화 (exit 2)"
 new_sandbox
@@ -106,9 +104,7 @@ printf '%s' "$VALID" > "$VAULT/wiki/knowledge/notes.md"
 run_hook "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Update File: wiki/knowledge/notes.md\n+본문 추가\n*** End Patch\n\"}}"
 eq "exit 0" "0" "$CODE"; cleanup
 
-# 골든 픽스처(실측 페이로드)로 검증. tool_input은 실측 바이트 그대로 두고
-# 환경 의존값인 cwd만 샌드박스 볼트로 바꿔 넣는다 — 픽스처의 `*** Add File: notes.md`가
-# wiki/knowledge/notes.md 로 해석되게 한다.
+# 픽스처 바이트는 두고 cwd만 샌드박스 볼트로 바꾼다.
 echo "test: 골든 픽스처 posttooluse-apply-patch.json — 위반 페이지에서 검증 발화 (exit 2)"
 new_sandbox
 printf 'title: frontmatter 블록 없음\n' > "$VAULT/wiki/knowledge/notes.md"
@@ -127,11 +123,7 @@ new_sandbox
 run_hook "{\"tool_name\":\"apply_patch\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"command\":\"*** Begin Patch\n*** Delete File: wiki/knowledge/gone.md\n*** End Patch\n\"}}"
 eq "exit 0" "0" "$CODE"; cleanup
 
-# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다** — MSYS의 `ln -s`는 기본
-# 설정에서 복사본을 만들고, 복사된 bash·sed 등은 msys-2.0.dll 의존이 끊겨 실행이 실패하거나
-# **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 스위트가 매달렸고 개별 timeout으로도
-# 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로 스킵하되
-# **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+# MSYS는 PATH를 좁히면 복사된 bash가 죽는다. 그 플랫폼에서는 이 케이스를 건너뛰되 알린다.
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
   *)                    SKIP_NOPY=0 ;;
@@ -141,10 +133,7 @@ if [ "$SKIP_NOPY" = 1 ]; then
   echo "test: (SKIP) python3 fail-open 케이스 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
   echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
 else
-# ⚠️ 의도된 fail-open (§5-3, 근거는 §5-2와 동일): python3가 없으면 resolver가
-#    E_NO_RUNTIME(exit 7)로 실패하고 이 훅은 검증 없이 통과시킨다 — 경로 추출과 validator
-#    본체가 모두 python3라 검증 자체가 성립하지 않는다. 고지는 session-start가 1회 담당.
-#    이 테스트는 그 결정을 고정해 둔다.
+# python3가 없으면 검증 없이 통과한다. 판정 자체가 python3다.
 echo "test: [의도된 fail-open] python3 없음 → 위반 페이로드도 통과 (exit 0)"
 new_sandbox
 NOPY="$SANDBOX/nopy"; mkdir -p "$NOPY"
@@ -152,7 +141,7 @@ for c in bash dirname head sed cat env; do ln -sf "$(command -v "$c")" "$NOPY/$c
 printf 'title 없음\n' > "$VAULT/wiki/knowledge/broken.md"
 OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/wiki/knowledge/broken.md\"}}" \
   | HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$HOOK" 2>"$SANDBOX/err")"; CODE=$?
-eq "exit 0 (§5-3 fail-open)" "0" "$CODE"
+eq "exit 0 (fail-open)" "0" "$CODE"
 (cd "$VAULT" && HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh" >/dev/null 2>&1)
 eq "resolver는 exit 7(E_NO_RUNTIME)" "7" "$?"
 cleanup

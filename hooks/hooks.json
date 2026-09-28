@@ -1,5 +1,5 @@
 {
-  "description": "LLM Wiki 하네스 Claude 플러그인 훅 — raw/ 보호·frontmatter 검증·볼트 컨텍스트 주입. 런처 경로는 인용 필수(공백 경로 대응), shell 필드는 생략(Windows Git Bash 부재 시 cmd.exe 폴백 유지). 상세는 docs/specs/hooks-and-scripts.md.",
+  "description": "raw/ 보호·frontmatter 검증·볼트 컨텍스트 주입. 런처 경로는 인용한다. shell 필드는 비운다.",
   "hooks": {
     "SessionStart": [
       {

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# smoke.sh — 하네스의 결정론적 조각들이 함께 동작하는지 end-to-end로 확인한다 (배포 설계 §9-11).
-# 실제 4개 플랫폼 CLI(Claude/Codex/Cursor/Antigravity)가 필요한 부분은 별도 in-app 검증 대상이며,
-# 여기서는 install → resolve → validate → protect → link-graph → bootstrap 합성 흐름을 격리 HOME에서 검증한다.
+# install → resolve → validate → protect → link-graph → bootstrap을 격리 HOME에서 확인한다.
 set -u
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PASS=0; FAIL=0
@@ -124,11 +122,8 @@ HELP="$(bash "$REPO/install.sh" --help)"
 printf '%s' "$HELP" | grep -qE 'set -euo pipefail|while \[ \$# -gt 0 \]' && no "--help에 코드 누출" || ok "--help 코드 누출 없음"
 printf '%s' "$HELP" | grep -q 'install.sh 필수' && ok "--help에 Cursor install.sh 필수 명시" || no "Cursor 필수 명시 없음"
 
-echo "[11] ASCII locale에서도 render가 훅 등록 파일을 만든다 (§3-9 PYTHONUTF8 계약)"
-# Windows CI에서 발견(2026-08-04, run 30872986849): install.sh의 render()만 §3-9 계약에서
-# 빠져 있었다. render 대상 JSON은 전부 한국어 description을 담고 있어 비UTF-8 locale에서
-# UnicodeDecodeError로 죽고 → **훅 등록 파일이 아예 생성되지 않는다**(조용한 설치 실패).
-# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성이므로 그 자동화까지 꺼야 Windows와 같은 조건이 된다.
+echo "[11] ASCII locale에서도 render가 훅 등록 파일을 만든다"
+# 한국어 JSON을 비UTF-8 locale에서 렌더해도 훅 등록 파일이 생겨야 한다. C locale의 UTF-8 자동 활성은 끈다.
 SB4="$SB/ascii"; H4="$SB4/home"; V4="$SB4/vault"
 mkdir -p "$H4/.claude" "$H4/.cursor" "$V4" "$H4/.llm-wiki"
 printf '%s\n' "$V4" > "$H4/.llm-wiki/default-vault"
@@ -136,11 +131,7 @@ HOME="$H4" LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0 \
   bash "$REPO/install.sh" --fallback >"$SB4/out" 2>&1
 [ -f "$H4/.claude/llm-wiki-hooks.settings.json" ] && ok "Claude 훅 스니펫 생성" || no "ASCII locale에서 render 실패 — Claude 훅 스니펫 없음"
 [ -f "$H4/.cursor/hooks.json" ]                   && ok "Cursor hooks.json 생성"  || no "ASCII locale에서 render 실패 — Cursor hooks.json 없음"
-# render는 읽기만이 아니라 쓰기도 한다 — 한국어가 손상 없이 왕복해야 한다.
-# ⚠️ **특정 문장을 핀으로 잡지 않는다.** 종전 단언은 hooks.json 주석의 한 문장을 박아 뒀는데,
-#    그 주석을 손보면 인코딩과 무관하게 실패했다(2026-08-08 실측). 검사할 성질은 "한국어가
-#    왕복 보존되는가"이지 "그 문장이 거기 있는가"가 아니다. 소스에서 비ASCII를 담은 최상위
-#    문자열 값을 뽑아 렌더 결과와 **같은지** 본다 — 문구를 바꿔도 계약은 그대로 검사된다.
+# 한국어가 왕복되는지만 본다. 특정 문장을 고정하면 문구를 고칠 때마다 깨진다.
 PYTHONUTF8=1 python3 -c '
 import json, sys
 def pick(path):
@@ -159,5 +150,5 @@ grep -q "$(native_path "$H4/.cursor/hooks")" "$H4/.cursor/hooks.json" 2>/dev/nul
 
 echo ""
 echo "SMOKE PASS=$PASS FAIL=$FAIL"
-echo "ⓘ 실제 Claude/Codex/Cursor/Antigravity CLI end-to-end는 in-app 검증 필요 (tests/fixtures/README.md, 배포 설계 §10)."
+echo "ⓘ 실제 Claude/Codex/Cursor/Antigravity CLI end-to-end는 in-app 검증이 필요하다."
 [ "$FAIL" -eq 0 ]

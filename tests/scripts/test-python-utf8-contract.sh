@@ -1,27 +1,14 @@
 #!/usr/bin/env bash
-# 계약 테스트: §3-9 — 레포의 **모든** python3 호출은 PYTHONUTF8=1로 실행한다.
-#
-# 왜 이게 필요한가 (2026-08-04) — §3-9는 0.3.1에서 신설되며 "python3를 호출하는 모든 지점"이라고
-# 적었지만, 실제로는 `scripts/`·`hooks/`만 훑어 `install.sh`의 `render()` 하나가 빠졌다. 그 누락은
-# **Windows CI가 우연히 smoke.sh까지 도달한 뒤에야** 드러났고, 증상은 예외 하나가 아니라
-# **훅 등록 파일이 0바이트로 남아 가드가 조용히 죽는 것**이었다.
-#
-# 사람이 목록을 관리하면 또 빠진다. 그래서 목록 대신 **레포를 스캔**한다.
-# 이 테스트는 새 python3 호출 지점이 추가되는 순간 실패하므로, §3-9가 문서가 아니라 계약이 된다.
-#
-# 범위: 추적 대상 셸 스크립트 전부(scripts/·hooks/·tests/·install.sh). 주석 줄은 제외한다.
+# 셸 스크립트의 python3 호출은 전부 PYTHONUTF8=1이다. 목록 대신 레포를 스캔한다. 주석 줄은 제외.
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PASS=0; FAIL=0
 ok() { PASS=$((PASS+1)); echo "  ok: $1"; }
 no() { FAIL=$((FAIL+1)); echo "  FAIL: $1"; }
 
-echo "test: [§3-9 계약] 모든 python3 호출에 PYTHONUTF8=1 (레포 전체 스캔)"
+echo "test: 모든 python3 호출에 PYTHONUTF8=1 (레포 전체 스캔)"
 
-# ⚠️ 스캔은 **python3 한 번**으로 끝낸다. 줄마다 `sed`를 파이프로 부르는 셸 루프로 짰더니
-#    Windows CI에서 **rc=124로 매달렸다**(2026-08-04 실측, run 30883…) — MSYS는 프로세스
-#    생성이 비싸서 수천 줄 × 서브셸 2개가 120초 상한을 넘긴다. macOS에서는 2초였다.
-#    스캐너가 스스로 CI를 막으면 본말전도다.
+# 스캔은 python3 한 번이다. 줄마다 서브셸을 띄우면 MSYS에서 시간 초과한다.
 VIOLATIONS="$(REPO_ROOT="$REPO_ROOT" PYTHONUTF8=1 python3 - <<'PY'
 import os
 from pathlib import Path

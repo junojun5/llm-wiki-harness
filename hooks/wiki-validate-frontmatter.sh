@@ -1,29 +1,14 @@
 #!/usr/bin/env bash
-# wiki-validate-frontmatter.sh — wiki/ 하위 .md 쓰기마다 frontmatter 기계 검증. 하네스 스펙 §5-3.
-# PostToolUse 가드. 클래스 판정·검증은 validate-frontmatter.sh 단일 출처 — 이 훅은 얇은 wrapper.
-# 위반 시에만 stderr 출력 + exit 2 (에이전트가 피드백 받아 즉시 수정). 위반 0 → 노이즈 0.
+# wiki/ 아래 .md의 frontmatter를 검증하는 wrapper. 위반 때만 stderr + exit 2.
 set -u
 
-# --- vault resolution: §3-2 resolver 재사용 ---
-# resolver 실패 → 조용히 통과. **exit 7(E_NO_RUNTIME, python3 부재)도 포함하며 의도된 것이다**
-# — 근거는 §5-2·hooks/wiki-protect-raw.sh와 동일하다(관할: 글로벌 훅이라 무관 프로젝트를
-# 막게 된다 / 판정 불능: 아래 경로 추출과 validator 본체가 python3라 검증 자체가 불가능하다).
-# python3 부재 고지는 hooks/session-start가 세션당 1회 담당한다. 여기서 다시 발견하지 말 것.
+# resolver 실패(python3 부재 포함)는 통과. 막으면 볼트 밖까지 막히고, 고지는 session-start가 한다.
 RESOLVED="$(bash "$HOME/.llm-wiki/scripts/resolve-vault.sh" 2>/dev/null)" || exit 0
 VAULT_PATH="$(printf '%s\n' "$RESOLVED" | sed -n 's/^VAULT_PATH=//p')"
 WIKI_DIR="$(printf '%s\n' "$RESOLVED" | sed -n 's/^WIKI_DIR=//p')"
 [ -n "$VAULT_PATH" ] && [ -n "$WIKI_DIR" ] || exit 0
 
-# 타깃 후보 — hooks/wiki-protect-raw.sh(§5-2)와 **동일한 추출 규칙**을 쓴다.
-# 두 훅의 필드 탐색 범위가 갈리면 한쪽만 조용히 죽는다 — 실제로 Codex apply_patch에서
-# raw 가드는 살고 이 검증만 죽는 사고가 났다(§5-3). 한쪽을 고치면 반대쪽도 함께 고친다.
-# 유일한 의도적 차이: Delete File은 추출하지 않는다 — 삭제된 파일은 검증 대상이 아니다
-# (없는 파일에 validator를 걸면 정상 삭제가 exit 2로 오보고된다).
-# PYTHONUTF8=1은 §3-9 계약 — 페이로드 경로에 한글이 올 수 있고, 비UTF-8 locale에서는
-# 디코딩이 어긋나 검증 대상 판정이 조용히 빗나간다.
-# wiki/ 하위 판정까지 **python 안에서** 끝낸다. 셸의 `case` 문자열 비교로 두면 양쪽 경로
-# 표기가 달라 어긋난다 — Windows에서 normpath는 `\`를, config는 `/`를, `cd`+`pwd`는 `/c/…`를
-# 준다. 한 함수(_norm)로 양쪽을 같은 규칙에 통과시키는 것이 유일하게 안전한 방법이다.
+# 필드 탐색은 wiki-protect-raw.sh와 같다. Delete File은 빼고, wiki/ 판정은 python에서 경로를 맞춘다.
 TARGET="$(printf '%s' "$(cat)" | BASE_FALLBACK="$PWD" WIKI_ABS="$VAULT_PATH/$WIKI_DIR" PYTHONUTF8=1 python3 -c '
 import json, os, re, sys
 
@@ -39,7 +24,7 @@ ti = d.get("tool_input") or d.get("input") or d.get("arguments") or {}
 if not isinstance(ti, dict):
     ti = {}
 
-# 기준 디렉토리 — Cursor는 cwd 대신 workspace_roots[]를 준다 (§5-4)
+# Cursor는 cwd 대신 workspace_roots[0]을 준다.
 roots = d.get("workspace_roots")
 root0 = roots[0] if isinstance(roots, list) and roots else ""
 base = d.get("cwd") or ti.get("cwd") or root0 or os.environ["BASE_FALLBACK"]
@@ -53,21 +38,17 @@ def pick(*keys):
 
 target = pick("file_path", "path", "filePath", "file")
 
-# apply_patch(Codex)는 file_path가 없다 — 패치 본문에서 대상 경로를 뽑는다 (§5-4)
+# apply_patch는 file_path가 없다. 패치 본문에서 경로를 뽑는다. Delete File은 제외.
 if not target and tool == "apply_patch":
     m = re.search(r"^\*\*\* (?:Add File|Update File|Move to): (.+)$", pick("command", "cmd"), re.M)
     if m:
         target = m.group(1).strip()
 
-# 상대경로 → 절대경로 (에이전트는 대부분 cwd 상대경로를 쓴다 — §5-4)
+# 상대경로는 base 기준으로 절대화한다.
 if target:
     if not os.path.isabs(target):
         target = os.path.join(base, target)
-    # ⚠️ 비교 전 **양쪽을 같은 규칙으로 정규화**한다. Windows에서 normpath는 구분자를 `\`로
-    #    바꾸고, config 값은 `/`를 유지하며, `a/./b` 같은 비정규 표기도 섞인다. 정규화 없이
-    #    비교하면 wiki/ 판정이 어긋나 **검증이 조용히 통과한다**(2026-08-04 Windows CI 실측).
-    #    wiki-protect-raw.sh의 대응 블록과 **반드시 동일**하게 유지한다
-    #    (한쪽 탐색·비교 범위만 좁으면 그쪽 검증이 조용히 죽는다).
+    # 비교 전 슬래시를 맞춘다. 안 맞추면 Windows에서 검증이 통과한다. _norm은 wiki-protect-raw.sh와 같다.
     def _norm(p):
         return os.path.normcase(os.path.normpath(p)).replace("\\", "/")
     wiki_abs = _norm(os.environ["WIKI_ABS"])
@@ -81,7 +62,6 @@ print(target)
 # 볼트 wiki/ 하위 .md가 아니면 통과 — 판정은 위 python 블록이 했다(빈 문자열 = 대상 아님)
 [ -n "$TARGET" ] || exit 0
 
-# 클래스 판정(①②③)·검증은 validator 단일 출처 — 클래스 ③(index/log/hot·decisions·backlog)은
-# validator가 통과 처리하므로 훅에서 파일명 예외를 따로 두지 않는다 (§3-3, drift 방지).
+# 클래스 판정과 검증은 validator가 한다. 원장 파일 예외를 여기서 다시 두지 않는다.
 bash "$HOME/.llm-wiki/scripts/validate-frontmatter.sh" "$TARGET" >&2 || exit 2
 exit 0

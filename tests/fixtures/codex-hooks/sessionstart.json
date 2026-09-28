@@ -1,5 +1,5 @@
 {
-  "_status": "MEASURED 2026-07-31 — codex-cli 0.145.0 / cursor-agent 2026.07.23. 경로·이메일은 마스킹됨. 계약 설명은 spec.md §5-4.",
+  "_status": "경로·이메일 마스킹.",
   "session_id": "019fb87a-cf02-7111-bfbc-afd0f0c39756",
   "transcript_path": "/Users/juno/.codex/sessions/2026/07/31/rollout-2026-07-31T23-01-23-019fb87a-cf02-7111-bfbc-afd0f0c39756.jsonl",
   "cwd": "/PROBE_WS/f475e49c/tmp/probe/ws",

@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# resolve-vault.sh — 모든 스킬·훅의 공통 Step 0 (Config Gate). 하네스 스펙 §3-2.
-# 상태를 남기지 않는다: 매 호출마다 fresh resolve. 성공 출력은 stdout의 KEY=VALUE.
-# 실패는 exit code + stderr 첫 줄 "E_CODE: 메시지".
+# 매 호출 fresh resolve. 성공은 stdout KEY=VALUE, 실패는 exit + stderr "E_CODE: 메시지".
 set -u
 
-# 이 스크립트가 아는 config 스키마 최신 버전 (§3-1)
+# 이 스크립트가 아는 config 스키마 버전
 KNOWN_VERSION=1
 
 # 표준 실패: stderr 첫 줄 고정 포맷 후 종료
@@ -35,21 +33,11 @@ if [ -z "$CONFIG" ]; then
   [ -f "$CONFIG" ] || fail 3 E_BAD_POINTER "전역 포인터 경로에 .wiki-config.json이 없습니다. wiki-setup 스킬을 --update-path로 실행해 볼트 위치를 재지정하세요"
 fi
 
-# --- 2) 런타임 게이트 — 파싱 전 (§3-2) ------------------------------------
-# 위치 판정(1)은 전부 순수 셸이므로 볼트 없는 머신은 여기까지 오지 않고 E_NO_CONFIG로
-# 끝난다. 즉 **E_NO_RUNTIME은 "이 머신에 볼트가 있다"를 함의**하며, 글로벌 훅이 이 코드에만
-# 반응하면 무관한 프로젝트엔 경고가 새지 않는다(별도 스팸 방지 로직 불필요).
-# 게이트가 없으면 python3 부재가 아래 파싱 실패로 흘러 E_INVALID_CONFIG로 **오진**되고,
-# 사용자는 듣지 않는 --repair를 반복한다(2026-08-01 실측).
+# python3 부재는 파싱 전에 끊는다. 볼트 없는 머신은 여기 오기 전에 E_NO_CONFIG로 끝난다.
 command -v python3 >/dev/null 2>&1 \
   || fail 7 E_NO_RUNTIME "python3가 필요하지만 PATH에 없습니다. wiki 스킬과 가드 훅이 비활성입니다 — --repair로는 해결되지 않습니다"
 
-# --- 3) config 파싱 + 필수 키/형식 검증 (python3) --------------------------
-# python3은 구조화된 결과를 라인으로 내보낸다: 첫 토큰이 분기 키.
-# PYTHONUTF8=1은 §3-9 계약이다 — python3의 I/O·open() 기본 인코딩은 locale이 결정하므로,
-# 비UTF-8 locale(Windows 기본 cp1252)에서는 **한글이 든 config 읽기가 UnicodeDecodeError로
-# 죽고 그게 아래 파싱 실패로 흘러 E_INVALID_CONFIG 오진**이 된다(원인은 config가 아니다).
-# open()의 encoding도 함께 명시한다 — env가 유실되는 경로에서도 파일 읽기는 살아야 한다.
+# 첫 토큰이 분기 키. 한글 config는 UTF-8로 읽는다. locale 인코딩이면 파싱 실패로 오진된다.
 PARSED="$(PYTHONUTF8=1 python3 - "$CONFIG" <<'PY' 2>/dev/null
 import json, os, sys
 try:

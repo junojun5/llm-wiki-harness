@@ -1,8 +1,5 @@
 #!/usr/bin/env bash
-# 단위 테스트: hooks/session-start —
-#   ① ~/.llm-wiki/scripts 부트스트랩(없으면 배포본 scripts/에서 symlink) — 마켓플레이스 자가치유
-#   ② 볼트 게이트: CWD가 볼트 안일 때만 using-llm-wiki 주입, 비볼트 세션엔 주입 없음(스팸 방지)
-# HOME을 샌드박스로 격리해 실제 ~/.llm-wiki를 건드리지 않는다.
+# session-start: 런타임 자가치유, 볼트 안에서만 주입. HOME은 샌드박스.
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 . "$REPO_ROOT/tests/lib/paths.sh"
@@ -33,9 +30,7 @@ placed "$HOMESB" "$HOMESB/.llm-wiki/scripts/validate-frontmatter.sh" && ok "부�
 [ -z "$OUT" ] && ok "비볼트 → 주입 없음(빈 stdout)" || no "비볼트인데 출력 있음: $OUT"
 
 echo "test: config 경로 표기가 CWD와 달라도 게이트가 통과한다 (Windows 형식 차이 회귀)"
-# 2026-08-04 Windows CI: $PWD(/c/Users/…)와 config의 vault.path(C:/Users/…)가 같은 곳을
-# 가리키는데도 문자열 비교가 어긋나 **주입이 통째로 일어나지 않았다**(stdout 0바이트).
-# Windows 없이 재현하려면 "같은 디렉터리의 다른 표기"면 충분하다 — 비정규 경로를 쓴다.
+# 같은 디렉터리의 다른 표기여도 주입한다. 문자열만 비교하면 주입이 빈다.
 SBX="$SB/gatecheck"; mkdir -p "$SBX/vault/wiki"
 printf '# Index\n' > "$SBX/vault/wiki/index.md"; printf 'log\n' > "$SBX/vault/wiki/log.md"
 # config에는 같은 곳을 가리키는 **비정규 표기**를 적는다 (a/./b — 문자열로는 $PWD와 다르다)
@@ -62,8 +57,7 @@ mkdir -p "$VAULT/wiki/summaries"
 OUT="$(cd "$VAULT/wiki/summaries" && HOME="$HOMESB" bash "$HOOK" claude </dev/null 2>/dev/null)"
 jpath "하위 CWD도 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 
-# Codex는 Claude와 동일 포맷이다 (2026-07-31 실측 — §5-1).
-# {"additional_context":…}를 내보내면 `hook: SessionStart Failed`로 주입이 조용히 무효가 된다.
+# Codex는 Claude와 같은 JSON이다. additional_context만 내면 주입이 실패한다.
 echo "test: 볼트 CWD (codex) — Claude와 동일한 hookSpecificOutput 포맷"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" codex </dev/null 2>/dev/null)"
 jpath "codex additionalContext" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
@@ -74,13 +68,12 @@ printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if 'add
 echo "test: 볼트 CWD (cursor) — additional_context + env(절대경로)"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" cursor </dev/null 2>/dev/null)"
 jpath "cursor additional_context" "d['additional_context']" "raw/ 는 불변" "$OUT"
-# 기대값은 native 형식이어야 한다 — 이 경로는 argv로 python3에 건너가므로 MSYS가 변환한다
-# (2026-08-08 CI: POSIX 기대값이라 Windows에서만 실패했다). macOS/Linux는 항등이라 동작 불변.
+# 기대 경로는 native 형식이다. MSYS는 python argv를 변환한다.
 jpath "cursor env.LLM_WIKI_RESOLVER 절대경로" "d['env']['LLM_WIKI_RESOLVER']" "$(native_path "$HOMESB/.llm-wiki/scripts/resolve-vault.sh")" "$OUT"
 printf '%s' "$OUT" | PYTHONUTF8=1 python3 -c "import json,sys;sys.exit(0 if not json.load(sys.stdin)['env']['LLM_WIKI_RESOLVER'].startswith('~') else 1)" \
   && ok "cursor env에 틸드 없음(미확장 방지)" || no "cursor env가 틸드로 시작"
 
-# 페이로드 판별 — Cursor는 Claude 포맷 등록도 실행하므로 argv가 claude인 채 발화할 수 있다 (§5-1).
+# Cursor는 Claude 포맷 등록으로도 돈다. argv가 claude여도 cursor_version이 있으면 Cursor다.
 echo "test: 페이로드에 cursor_version → argv가 claude여도 cursor 포맷"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" claude < "$REPO_ROOT/tests/fixtures/cursor-hooks/sessionstart.json" 2>/dev/null)"
 jpath "cursor 포맷으로 전환" "d['additional_context']" "Config Gate" "$OUT"
@@ -90,8 +83,7 @@ echo "test: Codex 골든 픽스처(cursor_version 없음) → codex 포맷 유�
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$HOOK" codex < "$REPO_ROOT/tests/fixtures/codex-hooks/sessionstart.json" 2>/dev/null)"
 jpath "codex 포맷 유지" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 
-# stdin 회귀 — 훅은 페이로드를 읽되 **절대 무한 대기하지 않아야** 한다.
-# 닫히지 않은 파이프를 상속하면(수동 실행·래퍼 경유) 세션 시작 자체가 멈춘다.
+# 닫히지 않은 파이프를 물려받아도 세션 시작이 멈추면 안 된다.
 if command -v timeout >/dev/null 2>&1; then
   echo "test: 열린 idle 파이프를 stdin으로 받아도 블로킹하지 않는다"
   FIFO="$SB/idle.pipe"; rm -f "$FIFO"; mkfifo "$FIFO"
@@ -104,8 +96,7 @@ else
   echo "test: (skip) timeout 명령 없음 — stdin 블로킹 회귀 테스트 생략"
 fi
 
-# run-hook.cmd 폴리글랏 런처 — Unix 분기가 <hook> [platform] 을 그대로 위임하는지.
-# (Windows/cmd 분기는 macOS·Linux에서 실행할 수 없어 정적 검토로만 확인 — hooks/run-hook.cmd 주석 참조)
+# Unix 분기는 hook과 platform을 그대로 넘긴다.
 echo "test: run-hook.cmd Unix 분기 — 플랫폼 인자가 훅에 그대로 전달"
 LAUNCHER="$REPO_ROOT/hooks/run-hook.cmd"
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$LAUNCHER" session-start codex </dev/null 2>/dev/null)"
@@ -113,14 +104,7 @@ jpath "런처 경유 codex 포맷" "d['hookSpecificOutput']['additionalContext']
 OUT="$(cd "$VAULT" && HOME="$HOMESB" bash "$LAUNCHER" session-start cursor </dev/null 2>/dev/null)"
 jpath "런처 경유 cursor 포맷" "d['additional_context']" "Config Gate" "$OUT"
 
-# ── 런처의 줄바꿈 계약 (2026-08-04 Windows CI 실측) ────────────────────────
-# cmd.exe는 **LF-only 배치의 줄 경계를 잡지 못해** 파일을 중간부터 오해석한다 — 주석
-# 조각과 코드 조각이 각각 별개 명령으로 실행되며 런처가 죽었다. 그래서 CRLF로 배포하는데,
-# 이 파일은 bash에서도 실행되는 폴리글랏이라 CR이 그냥 들어가면 Unix 분기가 `shift\r`
-# 같은 토큰을 실행하려다 죽는다. 해법은 실행 줄 끝의 ' #'으로 CR을 주석에 흡수시키는 것 —
-# **CRLF와 ' #'은 한 쌍이고, 둘 중 하나만 있으면 한쪽 플랫폼이 조용히 깨진다.**
-# 위 두 케이스가 "CR이 있어도 Unix 분기가 산다"를 이미 실증하므로, 여기서는 계약 자체를
-# 고정한다(누가 LF로 되돌리거나 ' #' 없는 실행 줄을 추가하면 잡힌다).
+# CRLF와 실행 줄 끝 ' #'은 한 쌍이다. 하나만 있으면 한쪽 플랫폼이 죽는다.
 echo "test: run-hook.cmd 줄바꿈 계약 — CRLF + 실행 줄의 CR 흡수 주석"
 CRS="$(tr -cd '\r' < "$LAUNCHER" | wc -c | tr -d ' ')"
 [ "$CRS" -gt 0 ] \
@@ -138,23 +122,17 @@ done < "$LAUNCHER"
   && ok "Unix 분기 실행 줄이 전부 ' #'으로 CR을 흡수한다" \
   || no "' #' 없는 실행 줄 ${BAD}개 — CRLF에서 bash 분기가 죽는다"
 
-# ── 런처의 bash 탐색·부재 처리 계약 (2026-08-05) ──────────────────────────
-# 이 세 계약은 **CI에서 실행할 수 없다** — windows-latest 러너에는 Git Bash가 항상 있어
-# "bash 부재" 상태를 만들 수 없고, macOS/Linux에서는 cmd.exe 분기 자체가 돌지 않는다.
-# 그래서 정적으로 고정한다. 각각이 왜 그 모양이어야 하는지는 run-hook.cmd 주석과
-# 배포 설계 §10에 있고, 여기서는 "되돌리면 잡힌다"만 보장한다.
+# bash 탐색과 부재 처리는 여기서 실행할 수 없다. 순서가 뒤집히면 실패로 고정한다.
 echo "test: run-hook.cmd cmd.exe 분기 — bash 탐색 순서와 부재 처리"
 
-# ① Git 설치 경로 선탐색이 `where bash`보다 앞에 있어야 한다. 뒤집히면 System32의
-#    레거시 WSL 런처가 먼저 걸려 C:\ 경로를 해석 못 해 훅이 조용히 죽는다.
+# Git bash.exe가 where bash보다 앞이다. 뒤집히면 System32 WSL bash가 C:\ 경로를 못 읽는다.
 GITPROBE="$(grep -n 'ProgramFiles%\\Git\\bin\\bash.exe' "$LAUNCHER" | head -1 | cut -d: -f1)"
 WHEREBASH="$(grep -n '^where bash' "$LAUNCHER" | head -1 | cut -d: -f1)"
 { [ -n "$GITPROBE" ] && [ -n "$WHEREBASH" ] && [ "$GITPROBE" -lt "$WHEREBASH" ]; } \
   && ok "Git 설치 경로를 where bash보다 먼저 확인한다 (${GITPROBE} < ${WHEREBASH})" \
   || no "탐색 순서 역전 — where bash가 System32의 WSL bash를 먼저 집는다"
 
-# ② bash 부재 시 exit 코드가 훅 역할로 갈려야 한다. 전역 PreToolUse matcher에서
-#    fail-closed(2)는 모든 편집을 막고, 비영 exit는 매 호출마다 알림을 띄운다.
+# bash 부재 시 session-start만 exit 2. 가드까지 2면 편집이 전부 막힌다.
 grep -q 'if /i "%SCRIPT%"=="session-start" goto :no_bash_session' "$LAUNCHER" \
   && ok "bash 부재 처리가 session-start와 가드를 구분한다" \
   || no "역할 구분 없음 — 전역 matcher에서 알림 도배 또는 전체 차단이 된다"
@@ -164,20 +142,15 @@ NB="$(tr -d '\r' < "$LAUNCHER" | sed -n '/^:no_bash$/,$p')"
   && ok "가드는 무음 exit 0, session-start는 exit 2" \
   || no "no_bash 분기에 exit 0/exit 2가 둘 다 있어야 한다"
 
-# ③ 경고 문구는 ASCII여야 한다 — 배치 파일의 한글 리터럴은 활성 코드페이지에 따라
-#    mojibake가 되고, 이 문장은 사용자가 조치해야 하는 유일한 출력이다.
+# bash 부재 경고는 ASCII다. 배치 파일 한글은 코드페이지에 따라 깨진다.
 MSG="$(grep '^echo \[llm-wiki\]' "$LAUNCHER" | tr -d '\r')"
 { [ -n "$MSG" ] && ! printf '%s' "$MSG" | LC_ALL=C grep -q '[^ -~]'; } \
   && ok "bash 부재 경고가 ASCII 전용이다" \
   || no "경고에 비ASCII 문자 — 코드페이지에 따라 mojibake가 된다"
 
-# ── 부트스트랩 ①: 버전 업데이트 시 stale symlink 재지정 ────────────────────
-# 마켓플레이스 캐시는 버전별 디렉토리라, 존재 여부만 보면 symlink가 구버전에 영구히
-# 고정된다. 2026-08-01 실측: 캐시는 0.2.0인데 런타임 홈은 0.1.0이라 고친 결함이 그대로
-# 재현됐다. 형제 버전은 재지정하고 사용자 클론(install.sh)은 보존해야 한다.
+# 플러그인 캐시의 형제 버전만 재지정한다. 사용자 클론은 보존한다.
 
-# 가짜 플러그인 캐시 레이아웃 — ROOT가 */plugins/cache/* 안이어야 형제 판정이 켜진다
-# 비교를 물리 경로로 한다 — macOS의 mktemp는 /var(→ /private/var) 심볼릭 아래에 만든다
+# 형제 판정은 플러그인 캐시 안이고, 비교는 물리 경로다.
 mkdir -p "$SB/plugins/cache/llm-wiki-harness/llm-wiki-harness"
 MP="$(cd "$SB/plugins/cache/llm-wiki-harness/llm-wiki-harness" && pwd -P)"
 for v in 0.1.0 0.2.0; do
@@ -189,11 +162,7 @@ for v in 0.1.0 0.2.0; do
   done
 done
 
-# ⚠️ 단언은 **원장**을 본다. `readlink`로 물으면 구현 메커니즘을 단언하는 것이고, MSYS에서는
-#    배치가 복사본이라 항상 빈 문자열이 돌아온다(2026-08-08 CI: 이 블록에서만 5건이 실패했다).
-#    셋업도 `ln -sfn`에 기대지 않는다 — MSYS에서는 그것도 복사라서 "0.1.0을 가리키는 설치"라는
-#    상태가 만들어지지 않는다. 원장을 함께 심어 **의도한 상태를 플랫폼 무관하게** 표현한다.
-#    (원장 없는 symlink의 흡수는 test-msys-placement.sh [4]와 macOS 실행이 덮는다.)
+# 단언은 원장을 본다. readlink는 MSYS 복사본에서 항상 빈다.
 echo "test: 형제 버전 stale 배치 → 새 버전으로 재지정"
 H2="$SB/home2/.llm-wiki/scripts"; mkdir -p "$H2"
 for s in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
@@ -240,12 +209,7 @@ BEFORE="$(readlink "$H6/resolve-vault.sh")"
 (cd "$SB" && HOME="$SB/home6" bash "$MP/0.2.0/hooks/session-start" claude </dev/null >/dev/null 2>&1)
 [ "$(readlink "$H6/resolve-vault.sh")" = "$BEFORE" ] && ok "멱등" || no "멱등 위반"
 
-# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
-# 주입 페이로드는 SKILL.md 본문(전부 한국어)이다. python3의 stdout 인코딩은 locale이
-# 결정하므로 비UTF-8 locale에서는 출력이 UnicodeEncodeError로 죽어 **주입이 조용히 무효**가
-# 된다(2026-08-04 Windows CI 실측: cp1252에서 빈 출력 → JSONDecodeError).
-# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화(PEP 538/540)되므로 그 자동화까지
-# 꺼야 Windows와 같은 조건이 된다.
+# SKILL.md는 한국어다. 비UTF-8 locale에서 주입이 비면 실패. C locale의 UTF-8 자동 활성은 끈다.
 ASCII_LOCALE_ENV=(LC_ALL=C PYTHONUTF8=0 PYTHONCOERCECLOCALE=0)
 
 echo "test: ASCII locale에서도 주입이 온전하다 (한국어 페이로드)"
@@ -261,11 +225,7 @@ printf '# Index\n' > "$KV/wiki/index.md"; printf 'log\n' > "$KV/wiki/log.md"
 OUT="$(cd "$KV" && HOME="$HOMESB" env "${ASCII_LOCALE_ENV[@]}" bash "$HOOK" claude </dev/null 2>/dev/null)"
 jpath "한글 경로 볼트도 주입" "d['hookSpecificOutput']['additionalContext']" "Config Gate" "$OUT"
 
-# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다** — MSYS의 `ln -s`는 기본
-# 설정에서 복사본을 만들고, 복사된 bash·sed 등은 msys-2.0.dll 의존이 끊겨 실행이 실패하거나
-# **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 스위트가 매달렸고 개별 timeout으로도
-# 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로 스킵하되
-# **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+# MSYS는 PATH를 좁히면 복사된 bash가 죽는다. 그 플랫폼에서는 이 케이스를 건너뛰되 알린다.
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
   *)                    SKIP_NOPY=0 ;;
@@ -275,13 +235,7 @@ if [ "$SKIP_NOPY" = 1 ]; then
   echo "test: (SKIP) python3 은닉 케이스 4건 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
   echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
 else
-# ── python3 부재 (§3-2 E_NO_RUNTIME · §5-1) ───────────────────────────────
-# 부트스트랩과 경고 경로는 **python3에 의존할 수 없다** — 런타임 부재를 알리는 경로가
-# 그 런타임을 요구하면 조용히 죽는다(2026-08-01 실측: realpath가 python3라 ROOT가
-# CWD의 부모로 잡히고 부트스트랩이 no-op).
-# 은닉은 PATH를 화이트리스트 디렉토리 **단독**으로 좁혀 만든다 — 뒤에 /usr/bin을 붙이면
-# 거기 있는 python3가 보이고, shim 파일을 두면 `command -v python3`가 성공해 부재가
-# 재현되지 않는다. 목록에서 빠진 명령이 있으면 시끄럽게 실패한다(안전한 방향).
+# python3 부재 경로는 python3를 쓰면 안 된다. PATH는 화이트리스트만 남긴다.
 NOPY="$SB/nopy"; mkdir -p "$NOPY"
 for c in bash dirname head sed readlink ln mkdir cat env; do
   ln -sf "$(command -v "$c")" "$NOPY/$c"

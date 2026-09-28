@@ -1,16 +1,12 @@
 #!/usr/bin/env bash
-# validate-frontmatter.sh <file> — frontmatter 기계 검증. 하네스 스펙 §3-3.
-# 경로/category로 문서 클래스(①페이지 ②라이프사이클 ③원장) 판정 후 클래스별 규칙 적용.
-# 클래스③(원장)은 검증 면제. 통과=exit 0, 위반=exit 1 + stderr에 항목별 메시지.
-# 의미적 품질(요약 정확성 등)은 검증하지 않는다 — wiki-lint의 몫.
+# frontmatter 기계 검증. 원장은 통과, 위반은 exit 1. 요약 품질은 보지 않는다.
 set -u
 
 [ $# -ge 1 ] || { echo "usage: validate-frontmatter.sh <file>" >&2; exit 2; }
 FILE="$1"
 [ -f "$FILE" ] || { echo "파일 없음: $FILE" >&2; exit 2; }
 
-# PYTHONUTF8=1은 §3-9 계약 — 위반 메시지가 한국어이고 페이지 본문도 한국어다. 비UTF-8
-# locale에서는 stdout/stderr 인코딩이 locale을 따라 메시지가 \uXXXX로 손상되거나 죽는다.
+# 위반 메시지는 한국어다. UTF-8을 고정하지 않으면 비UTF-8 locale에서 깨진다.
 PYTHONUTF8=1 python3 - "$FILE" <<'PY'
 import sys, os, re
 
@@ -24,10 +20,7 @@ LEDGER = {"index.md", "log.md", "hot.md", "decisions.md", "backlog.md"}
 if base in LEDGER:
     sys.exit(0)                      # 클래스③ 원장 — 검증 면제
 
-# 클래스②의 범위는 projects/{name}/changes/* · projects/{name}/troubleshooting/* 로
-# **한정**된다 (§3-3). 세그먼트 단순 포함으로 판정하면 knowledge/ 의 대형 주제 서브폴더
-# (§3-3 "대형 주제는 서브폴더 허용")가 오판돼 정상 클래스① 페이지가 거부된다.
-# 따라서 projects 의 손자 위치에 정확히 놓였는지를 본다.
+# 클래스②는 projects/{name}/changes|troubleshooting/ 바로 아래만. 이름만 보면 knowledge 서브폴더가 걸린다.
 def is_class2(name):
     for i, p in enumerate(parts):
         if p == "projects" and i + 3 <= len(parts) - 1 and parts[i + 2] == name:
@@ -172,23 +165,17 @@ if "base_confidence" in d and isinstance(d["base_confidence"], str) and d["base_
 if "tier" in d and isinstance(d["tier"], str) and d["tier"] and d["tier"] not in TIER_ENUM:
     errors.append("tier enum 위반: %r" % d["tier"])
 
-# ── 표기 가드 (fail-loud) ───────────────────────────────────
-# 위 YAML 서브셋 파서는 인라인 flow mapping/sequence를 스칼라 문자열로 읽는다.
-# 그 상태로 아래 isinstance 게이트에 들어가면 검사 블록이 통째로 건너뛰어져
-# "합계가 틀려도 통과"한다. 키가 있는데 기대 타입으로 파싱되지 않으면 여기서 끊는다. (§3-3)
+# 인라인 { } / [ ] 는 이 파서가 문자열로 읽어 검사를 건너뛴다. 기대 타입이 아니면 여기서 끊는다.
 if "provenance" in d and not isinstance(d["provenance"], dict):
     errors.append("provenance가 블록 표기가 아닙니다 (인라인 { } 표기는 검사를 무력화합니다)")
-# relationships 는 타입 확인만으로 부족하다: 인라인 flow 시퀀스(`[{ ... }]`)는 위 파서의
-# `[ ... ]` 분기를 타 **문자열 리스트**로 파싱되므로 isinstance(list) 를 통과하고,
-# 그 상태로는 아래 type enum 루프의 isinstance(r, dict) 게이트가 무발화한다
-# (= 잘못된 type 이 조용히 통과). 원소가 전부 매핑인지까지 본다.
+# 인라인 시퀀스는 문자열 리스트로 읽혀 list 검사를 통과한다. 원소가 매핑인지도 본다.
 if "relationships" in d and (
     not isinstance(d["relationships"], list)
     or not all(isinstance(r, dict) for r in d["relationships"])
 ):
     errors.append("relationships가 블록 리스트 표기가 아닙니다 (인라인 [ { } ] 표기는 검사를 무력화합니다)")
 
-# provenance 합 ≈ 1.0 (있을 때). 허용오차는 §3-8 PROVENANCE_TOLERANCE = ±0.05
+# provenance 합은 1.0 ± 0.05.
 PROVENANCE_TOLERANCE = 0.05
 prov = d.get("provenance")
 if isinstance(prov, dict):
