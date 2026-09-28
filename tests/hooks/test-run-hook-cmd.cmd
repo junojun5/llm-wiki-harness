@@ -1,15 +1,5 @@
 @echo off
-rem 단위 테스트: hooks/run-hook.cmd 의 **cmd.exe 분기** — 인자 전달 계약.
-rem
-rem 왜 필요한가: cmd.exe의 `shift`는 %* 에 영향이 없다(항상 원본 전체 인자로 확장된다).
-rem `shift` 후 `bash %SCRIPT% %*` 를 쓰면 스크립트명이 첫 인자로 다시 실려
-rem `session-start session-start claude` 가 되고 PLATFORM="session-start" →
-rem unknown platform exit 2 로 **Windows에서 세 훅이 전부 죽는다.**
-rem Phase 2 T5에서 %2부터 누적하는 루프로 고쳤으나, macOS/Linux에서는 cmd.exe를 실행할 수
-rem 없어 **정적 검토 + 주석으로만** 확인돼 있었다 — 이 테스트가 그 갭을 닫는다
-rem (.github/workflows/windows.yml 의 cmd-launcher 잡이 실행한다).
-rem
-rem Unix 분기(`:;` 프리픽스)의 회귀는 tests/hooks/test-session-start.sh 가 담당한다.
+rem cmd 분기는 스크립트명을 인자로 다시 실으면 안 된다. shift는 %*를 바꾸지 않는다.
 setlocal enabledelayedexpansion
 
 set "HERE=%~dp0"
@@ -27,22 +17,16 @@ if errorlevel 1 (
   exit /b 1
 )
 
-rem 인자를 [x][y] 로 그대로 되울리는 probe 훅. run-hook.cmd 는 %~dp0 기준으로 스크립트를
-rem 찾으므로 hooks/ 안에 둔다 — 실사용과 동일한 경로 해석을 지나게 하려는 것이다.
-rem (배치 파일 안에서 %%s 는 리터럴 %s 로 쓰인다.)
+rem probe는 hooks/에 둔다. %%s는 리터럴 %s.
 > "%PROBE%" echo printf '[%%s]' "$@"
 
 echo test: run-hook.cmd 인자 전달 (cmd.exe 분기)
 
-rem 인자 0개의 기대값은 빈 문자열이 아니라 `[]` 다 — probe의 `printf '[%s]' "$@"` 는
-rem 인자가 없어도 포맷을 한 번 처리한다(bash printf의 성질). 여기서 검증하는 것은
-rem "스크립트명이 인자로 다시 실리지 않는다"이고, 그 경우엔 `[_argprobe.sh]` 가 나온다.
+rem 인자 0개의 기대값은 []다. 스크립트명이 실리면 [_argprobe.sh]가 된다.
 call "%LAUNCHER%" _argprobe.sh > "%OUTFILE%" 2>nul
 call :check "인자 0개 — 스크립트명이 인자로 새지 않는다" "[]"
 
-rem ⚠️ desc 문자열에 < > ( ) 를 쓰지 않는다. cmd.exe는 **큰따옴표 안이어도** 리다이렉션
-rem    문자를 파싱해 `< was unexpected at this time.`으로 죽는다 (2026-08-04 CI 실측 —
-rem    첫 케이스 통과 직후 두 번째 케이스의 desc에 있던 부등호가 스크립트를 중단시켰다).
+rem desc에 < > ( ) 를 넣지 않는다. 큰따옴표 안에서도 리다이렉션으로 파싱된다.
 call "%LAUNCHER%" _argprobe.sh claude > "%OUTFILE%" 2>nul
 call :check "인자 1개 — 실사용 계약인 hook + platform 형태" "[claude]"
 
@@ -58,10 +42,7 @@ call :check "공백 포함 인자가 1개로 유지된다" "[x y]"
 call "%LAUNCHER%" _argprobe.sh "x y" z > "%OUTFILE%" 2>nul
 call :check "공백 인자 + 추가 인자" "[x y][z]"
 
-rem 비ASCII 인자는 **관측만** 한다(WARN). cmd.exe의 활성 코드페이지·배치 파일 인코딩에
-rem 따라 리터럴이 오독될 수 있고, 실사용 계약의 인자는 `session-start`·`claude|codex|cursor`
-rem 로 전부 ASCII다. 여기서 required 잡을 빨간불로 만들면 신호가 죽는다 —
-rem 실패가 반복되면 그때 별도 항목으로 다룬다.
+rem 비ASCII 인자는 경고만 한다. 실사용 인자는 ASCII다.
 call "%LAUNCHER%" _argprobe.sh 한글 > "%OUTFILE%" 2>nul
 call :observe "비ASCII 인자 (코드페이지 의존)" "[한글]"
 
@@ -78,11 +59,7 @@ set "GOT="
 for /f "usebackq delims=" %%L in ("%OUTFILE%") do set "GOT=%%L"
 goto :eof
 
-rem ⚠️ 판정에 `if (...) else (...)` 괄호 블록을 쓰지 않는다. desc에 닫는 괄호가 있으면
-rem    cmd.exe가 블록을 **조기 종료**해 ok 와 FAIL/WARN 이 동시에 출력된다
-rem    (2026-08-04 CI 실측: "비ASCII 인자 (코드페이지 의존" 이 잘려 나오고 뒤이어 WARN).
-rem    goto 분기는 그 함정이 없다. (부등호 < > 는 여전히 금지 — 큰따옴표 안에서도
-rem    리다이렉션으로 파싱된다.)
+rem if () else () 를 쓰지 않는다. desc의 닫는 괄호가 블록을 조기 종료한다.
 :check
 call :read_got
 if not "!GOT!"=="%~2" goto :check_fail

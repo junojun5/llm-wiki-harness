@@ -1,21 +1,9 @@
 #!/usr/bin/env bash
-# session-start [platform] — 두 가지를 한다:
-#   ① 런타임 부트스트랩: ~/.llm-wiki/scripts가 없으면 이 배포본(플러그인 루트/repo)의 scripts/에서
-#      symlink로 생성한다. 마켓플레이스(install.sh 없이) 설치에서도 스킬·훅이 동작하게 하는 자가치유.
-#   ② 볼트 컨텍스트 주입: CWD가 실제 볼트 안일 때만 using-llm-wiki SKILL.md를 세션 컨텍스트로 주입.
-#      전역 등록(마켓플레이스)돼도 볼트 밖 세션엔 주입하지 않는다(스팸 방지, 하네스 스펙 §5-0·§5-1).
-# 인자 $1 = 플랫폼(claude|codex|cursor). 출력은 플랫폼별 stdout JSON, 본문은 <EXTREMELY_IMPORTANT> 래핑.
-# Antigravity는 훅 미사용(AGENTS.md 상시 로드로 대체).
+# session-start [platform] — ~/.llm-wiki/scripts를 자가치유하고, CWD가 볼트 안일 때만 SKILL.md를 주입한다.
 set -u
 PLATFORM="${1:-claude}"
 
-# 자기 경로 해석은 **python3에 의존하지 않는다** (§5-1). python3로 realpath를 구하면
-# python3 없는 머신에서 SELF가 빈 값이 되고 ROOT가 `dirname ""`=`.` 기준으로 잡혀
-# **CWD의 부모**를 가리킨다 — 부트스트랩 ①이 조용히 no-op 하고, 런타임 부재를 알리는
-# 경고 경로 자체가 죽는다(2026-08-01 실측). 런타임 고지가 그 런타임을 요구할 수 없다.
-# 마지막 컴포넌트의 symlink는 루프로 따라가고(캐시·install.sh 배치 모두 1단이지만
-# 상한을 둔다), 부모 경로의 symlink는 `pwd -P`가 해석한다 — 결과는 realpath와 같은
-# **물리 경로**이고, 아래 형제 버전 판정이 물리 경로끼리 비교하는 전제가 유지된다.
+# 경로 해석은 python3를 쓰지 않는다. 없으면 ROOT가 CWD 부모로 잡혀 부트스트랩과 경고가 같이 죽는다.
 SELF="${BASH_SOURCE[0]}"
 _hops=0
 while [ -L "$SELF" ] && [ "$_hops" -lt 20 ]; do
@@ -26,10 +14,7 @@ while [ -L "$SELF" ] && [ "$_hops" -lt 20 ]; do
 done
 ROOT="$(cd "$(dirname "$SELF")/.." && pwd -P)"
 
-# 페이로드 읽기 — 정상 경로와 경고 경로가 공유한다. 호출 지점이 중요하다(아래 ② 참조).
-# ⚠️ stdin 읽기에 반드시 상한을 둔다. TTY 제외만으로는 부족하다 — 페이로드가 오지 않는
-# 경로(수동 실행, 닫히지 않은 파이프를 상속한 경우)에서 무한 대기하면 **세션 시작 자체가
-# 멈춘다**. 줄당 대기 상한 2초, 실제 훅 호출은 쓰고 바로 닫으므로 지연이 없다.
+# stdin은 줄당 2초 상한. 페이로드 없이 파이프가 열려 있으면 세션 시작이 멈춘다.
 INPUT=""
 read_payload() {
   INPUT=""
@@ -41,11 +26,7 @@ read_payload() {
   done
 }
 
-# python3 부재 경고 — 고정 문자열이라 JSON 빌더가 필요 없다(printf로 직접 쓴다).
-# 포맷은 정상 경로와 동일(§5-1): Claude·Codex는 hookSpecificOutput.additionalContext,
-# Cursor는 래퍼 없는 additional_context. 메시지에 따옴표·개행 리터럴을 넣지 않으므로
-# 이스케이프 문제가 없다(`\n`은 JSON 이스케이프 시퀀스로 그대로 나간다).
-# 주입과 stderr 양쪽에 낸다 — 주입은 에이전트가 읽어 설명하게, stderr는 사용자가 직접 본다.
+# python3 없이 경고를 낸다. Claude·Codex는 hookSpecificOutput, Cursor는 additional_context.
 emit_runtime_warning() {
   local _m="<EXTREMELY_IMPORTANT>\npython3를 PATH에서 찾을 수 없습니다. LLM Wiki의 스킬 12종과 가드 훅 2종이 모두 비활성입니다 — raw/ 쓰기 보호와 frontmatter 검증이 동작하지 않습니다. python3를 설치한 뒤 세션을 다시 시작하세요. wiki-setup --repair로는 해결되지 않습니다.\n</EXTREMELY_IMPORTANT>"
   case "$PLATFORM" in
@@ -55,39 +36,19 @@ emit_runtime_warning() {
   printf 'E_NO_RUNTIME: python3 부재 — LLM Wiki 스킬·가드 훅이 비활성입니다. python3를 설치한 뒤 세션을 다시 시작하세요 (wiki-setup --repair로는 해결되지 않습니다)\n' >&2
 }
 
-# ① 런타임 부트스트랩 (멱등·조용·비치명) — 없을 때, 깨졌을 때, 형제 버전을 가리킬 때.
+# 런타임 부트스트랩. 없을 때, 깨졌을 때, 같은 플러그인의 형제 버전일 때만 다시 놓는다.
 LLMWIKI="$HOME/.llm-wiki/scripts"
 mkdir -p "$LLMWIKI" 2>/dev/null || true
 
-# 마켓플레이스 캐시는 버전별 디렉토리다(.../cache/<mp>/<plugin>/<version>/). 플러그인을
-# 업데이트하면 새 버전 디렉토리가 생기는데, 기존 symlink는 **구버전을 계속 가리킨다** —
-# 존재 여부만 보면 영구히 stale해지고 스킬·훅이 옛 스크립트를 호출한다(2026-08-01 실측:
-# 캐시는 0.2.0인데 런타임 홈은 0.1.0이라 고친 결함이 그대로 재현됐다).
-# 그래서 **같은 플러그인의 형제 버전을 가리킬 때만** 재지정한다.
-# install.sh는 사용자 클론을 가리키게 만드므로(비파괴 정책) 그 경우는 판정 자체를 끈다 —
-# ROOT가 플러그인 캐시 안일 때만 형제 재지정을 활성화한다.
-# 비교는 **물리 경로**로 한다 — readlink는 저장된 원문을 돌려주므로 심볼릭 부모를 포함할 수
-# 있고(macOS의 /var → /private/var 등), 원문끼리 비교하면 형제 판정이 조용히 빗나간다.
+# 플러그인 캐시 안일 때만 형제 버전을 재지정한다. 사용자 클론은 보존. 비교는 물리 경로.
 case "$ROOT" in
   */plugins/cache/*) SIBLING_ROOT="$(cd "$(dirname "$ROOT")" 2>/dev/null && pwd -P)" ;;
   *)                 SIBLING_ROOT="" ;;
 esac
 
-# 소유권과 출처는 **배치 원장**으로 판정한다 — 종전 판정 `[ -L "$DST" ]`은 MSYS(Git Bash)에서
-# 무너진다: `ln -s`가 진짜 symlink가 아니라 **복사본**을 만들므로 판정이 항상 "사용자 파일"로
-# 떨어져 `[ -e "$DST" ] && continue`에 걸리고, **재지정이 영구히 일어나지 않는다.** 그러면
-# 플러그인을 업데이트해도 스킬 12종과 가드 2종이 계속 옛 스크립트를 호출한다 — 위 2026-08-01
-# 결함의 Windows 재발이고, 조용하다. 원장은 install.sh와 같은 형식이다:
-#   `<mechanism>\t<dest>\t<src>`  (dest·src는 절대경로라 탭이 들어가지 않는다)
-# ⚠️ 헬퍼를 install.sh와 **공유하지 않고 복제한다.** 이 훅은 마켓플레이스 캐시에서 install.sh
-#    없이 단독 실행되고, 사본으로 배포되면(MSYS) 형제 파일을 찾을 수 없어 source가 깨진다.
-#    자족성이 DRY보다 우선이다 — 형식이 갈리지 않게 위 한 줄을 양쪽 주석에 박아 둔다.
+# 소유는 원장이다. MSYS ln -s는 복사라 -L로 구분하지 못하고, 이 훅은 install.sh 없이 돈다.
 LEDGER="$HOME/.llm-wiki/.placements"
-# ⚠️ 원장 I/O는 **bash 내장만으로** 구현한다 — `grep`·`cut`·`cp`·`mv`·`rm`을 쓰지 않는다.
-#    이 훅은 "python3가 없다"를 알리는 경로여서 풍부한 환경을 가정할 수 없고, 그 계약을
-#    `tests/hooks/test-session-start.sh`가 PATH를 `bash dirname head sed readlink ln mkdir
-#    cat env`로 좁혀 검증한다. 외부 도구를 늘리면 그 스위트가 조용히 0/3으로 떨어진다
-#    (작성 중 실제로 걸렸다).
+# 원장 I/O는 bash 내장만 쓴다. grep·cut·cp·mv·rm은 축소 PATH에 없다.
 _rec_src() { # _rec_src <dest> → 기록된 src (없으면 빈 문자열)
   local m d s out=""
   [ -f "$LEDGER" ] || return 0
@@ -105,8 +66,7 @@ _rec_put() { # _rec_put <dest> <src> <mechanism>
     done <"$LEDGER"
   fi
   buf="$buf$3"$'\t'"$1"$'\t'"$2"$'\n'
-  # 임시파일+mv가 아니라 직접 쓴다(`mv`가 축소 PATH에 없다). 원장은 작고 자가치유이므로
-  # 찢어진 쓰기는 다음 세션이 다시 만든다 — 볼트 데이터가 아니라 부트스트랩 메모다.
+  # mv는 축소 PATH에 없다. 원장은 다음 세션이 다시 만드는 부트스트랩 메모다.
   printf '%s' "$buf" >"$LEDGER" 2>/dev/null || true
 }
 _same() { # _same <a> <b> — 내용이 같은가. `cmp`는 축소 PATH 밖이라 `cat`으로 비교한다
@@ -120,9 +80,7 @@ _place() { # _place <src> <dst> — 배치하고 원장에 남긴다. 실패는 
   local mech=symlink
   ln -sfn "$1" "$2" 2>/dev/null || true
   if [ ! -L "$2" ]; then
-    # MSYS: 위 `ln`이 복사로 떨어졌다. 리다이렉트로 내용을 옮긴다 — dest를 truncate하므로
-    # 기존 사본도 덮인다. 실행 비트는 세우지 않는다(`chmod`도 축소 PATH 밖) — 호출자가
-    # 전부 `bash <path>` 형태라 필요하지 않다(AGENTS.md Step 0·가드 훅 2개·이 훅).
+    # MSYS는 ln이 복사로 떨어진다. chmod는 축소 PATH 밖이고, 호출은 전부 bash라 실행 비트가 필요 없다.
     cat "$1" >"$2" 2>/dev/null || return 0
     mech=copy
   fi
@@ -133,17 +91,11 @@ for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   SRC="$ROOT/scripts/$f"; DST="$LLMWIKI/$f"
   [ -e "$SRC" ] || continue
 
-  # 기록된 출처. 원장이 없으면 symlink 원문으로 폴백한다 — 원장 도입 이전 설치를 흡수한다
-  # (이 폴백이 없으면 기존 macOS/Linux 사용자의 런타임 홈이 전부 "사용자 소유"로 읽힌다).
+  # 원장이 없으면 symlink 원문으로 폴백한다. 없으면 기존 설치가 사용자 소유로 읽힌다.
   CUR="$(_rec_src "$DST")"
   [ -z "$CUR" ] && [ -L "$DST" ] && CUR="$(readlink "$DST" 2>/dev/null || true)"
 
-  # 원장도 symlink도 없는데 **내용이 SRC와 같다** → 원장 이전 설치다. Windows에서는 그때도
-  # `ln -s`가 복사본을 만들었으므로 흡수할 symlink가 존재하지 않고, 위 폴백만으로는 기존
-  # 설치가 영영 "사용자 소유"로 읽혀 **재지정이 일어나지 않는다**(런타임 홈 영구 stale).
-  # 내용이 같으면 다시 놓아도 디스크 결과가 불변이므로 안전하게 원장에 등록할 수 있고,
-  # 그 다음 업데이트부터 형제 재지정이 정상 동작한다. 사용자가 손댄 파일은 내용이 달라
-  # 이 갈래에 걸리지 않는다(아래 "실제 파일 = 사용자 소유" 정책 유지).
+  # 내용이 같으면 원장 이전 복사본이다. 다시 놓아도 디스크는 같고, 사용자가 고친 파일은 여기 안 걸린다.
   if [ -z "$CUR" ] && _same "$DST" "$SRC"; then
     _place "$SRC" "$DST"; continue
   fi
@@ -161,20 +113,14 @@ for f in resolve-vault.sh validate-frontmatter.sh build-link-graph.sh; do
   fi
 done
 
-# ② 볼트 게이트 — 볼트가 설정돼 있고(resolve 성공) CWD가 그 볼트 안일 때만 주입.
+# 볼트가 resolve되고 CWD가 그 안일 때만 주입한다.
 RESOLVED="$(bash "$LLMWIKI/resolve-vault.sh" 2>/dev/null)"; RC=$?
 
-# exit 7 = E_NO_RUNTIME: python3가 없다. 게이트가 위치 판정 뒤에 있으므로 이 코드는
-# **"이 머신에 볼트가 있다"를 함의**한다(§3-2) — 따라서 무관한 프로젝트엔 새지 않는다.
-# 스킬 12종과 가드 훅 2종이 전부 비활성이라 조용히 넘기면 보호가 사라진 걸 아무도 모른다.
-# 고지 지점은 세션 시작 1회다 — python3 부재는 매 쓰기의 문제가 아니라 머신 설정 문제이고,
-# 가드 훅은 §5-2의 근거대로 fail-open을 유지한다(강등 지점과 고지 지점의 분리).
+# exit 7은 볼트가 있는 머신의 python3 부재다. 세션당 1회만 알리고, 가드 훅은 통과시킨다.
 if [ "$RC" -eq 7 ]; then
-  # 페이로드는 **이 분기 안에서만** 읽는다. 스크립트 앞으로 끌어올리면 볼트 밖 세션도
-  # 읽기 대기 비용을 낸다(페이로드가 오지 않는 경로에서 줄당 최대 2초).
+  # 이 분기에서만 읽는다. 앞으로 올리면 볼트 밖 세션도 대기를 낸다.
   read_payload
-  # 플랫폼 판별 폴백 — 정상 경로의 엄격한 JSON 검사가 python3라 여기선 쓸 수 없다.
-  # 고정 메시지 전달에는 순수 셸 부분 일치로 충분하다.
+  # python3가 없으므로 cursor_version 문자열만 본다.
   case "$INPUT" in *cursor_version*) PLATFORM="cursor" ;; esac
   emit_runtime_warning
   exit 0
@@ -183,16 +129,7 @@ fi
 
 VAULT_PATH="$(printf '%s\n' "$RESOLVED" | sed -n 's/^VAULT_PATH=//p')"
 [ -n "$VAULT_PATH" ] || exit 0
-# CWD가 볼트 밖 → 주입 안 함(전역 스팸 방지).
-# ⚠️ 문자열 비교 하나로는 부족하다. `$PWD`는 **셸이 쓰는 형식**이고 `$VAULT_PATH`는
-#    **config에 적힌 형식**이라 같은 디렉터리를 가리켜도 표기가 다를 수 있다:
-#      · Windows(Git Bash) — `$PWD`=`/c/Users/…` vs config=`C:/Users/…` → 항상 불일치
-#      · `a/./b`·`a/x/../b` 같은 비정규 표기, symlink 경유 경로
-#    2026-08-04 Windows CI 실측: 이 비교가 어긋나 **주입이 통째로 일어나지 않았다**
-#    (`json.decoder.JSONDecodeError: Expecting value` = stdout 0바이트). 조용한 실패라
-#    사용자에게는 "규칙이 로드되지 않는다"로만 보인다.
-# 그래서 빠른 경로(문자열 일치)를 먼저 보고, 어긋나면 `cd`+`pwd`로 **셸 자신의 형식**으로
-# 정규화해 한 번 더 본다. 정규화는 셸이 하므로 플랫폼 표기 차이가 자동으로 흡수된다.
+# 볼트 밖이면 주입하지 않는다. $PWD와 config 경로 표기가 다를 수 있어, 어긋나면 cd+pwd로 한 번 더 본다.
 case "$PWD/" in
   "$VAULT_PATH"/*) ;;
   *)
@@ -204,10 +141,7 @@ esac
 SKILL="$ROOT/skills/using-llm-wiki/SKILL.md"
 [ -f "$SKILL" ] || { echo "using-llm-wiki SKILL.md를 찾을 수 없습니다: $SKILL" >&2; exit 2; }
 
-# ③ 플랫폼 판별은 argv보다 페이로드가 우선한다 (§5-1). Cursor는 Claude 포맷 등록
-#    (~/.claude/settings.json 등)도 실행하므로 argv가 `claude`인 채 Cursor에서 발화할 수 있다.
-#    페이로드에 cursor_version 키가 있으면 Cursor로 판정한다.
-#    읽기 상한의 근거는 read_payload() 주석 참조.
+# argv보다 페이로드가 우선이다. cursor_version이 있으면 Cursor다.
 read_payload
 if [ -n "$INPUT" ] && printf '%s' "$INPUT" | PYTHONUTF8=1 python3 -c '
 import json, sys
@@ -220,9 +154,7 @@ sys.exit(0 if isinstance(d, dict) and "cursor_version" in d else 1)
   PLATFORM="cursor"
 fi
 
-# PYTHONUTF8=1은 §3-9 계약 — 주입 페이로드는 SKILL.md 본문(전부 한국어)이다. 비UTF-8
-# locale에서는 stdout 인코딩이 locale을 따라 출력이 UnicodeEncodeError로 죽고 **주입이
-# 조용히 무효**가 된다(2026-08-04 Windows CI 실측: cp1252에서 빈 출력 → 규칙 미로드).
+# SKILL.md는 한국어다. UTF-8을 고정하지 않으면 비UTF-8 locale에서 주입 출력이 빈다.
 PYTHONUTF8=1 python3 - "$SKILL" "$PLATFORM" "$LLMWIKI/resolve-vault.sh" <<'PY'
 import json, sys, re
 skill_path, platform, resolver = sys.argv[1], sys.argv[2], sys.argv[3]
@@ -230,10 +162,8 @@ text = open(skill_path, encoding="utf-8").read()
 body = re.sub(r'^---\n.*?\n---\n', '', text, count=1, flags=re.S).strip()   # frontmatter 제거
 wrapped = "<EXTREMELY_IMPORTANT>\n" + body + "\n</EXTREMELY_IMPORTANT>"
 
-# 출력 포맷은 2026-07-31 실측 확정 (§5-1).
 if platform in ("claude", "codex"):
-    # Codex는 Claude와 **동일 포맷**이다. {"additional_context":…}를 내보내면
-    # `hook: SessionStart Failed`로 끝나고 주입이 조용히 무효가 된다.
+    # Codex도 Claude와 같은 포맷이다. additional_context만 내면 주입이 실패한다.
     out = {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": wrapped}}
 elif platform == "cursor":
     # Cursor엔 hookSpecificOutput 래퍼가 없다(실측). env 값은 틸드가 확장되지 않으므로 절대경로.

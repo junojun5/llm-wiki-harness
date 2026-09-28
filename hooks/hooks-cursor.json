@@ -1,5 +1,5 @@
 {
-  "description": "LLM Wiki 하네스 Cursor 훅 템플릿 — install.sh가 {{HOOKS_DIR}}를 절대경로로 치환해 배치(플러그인 매니페스트 경유 불가, install.sh 필수). 이벤트명 camelCase, matcher는 JS 정규식, 도구명 대문자 S. Claude 설정과 중복 등록 금지(2회 발화). 상세는 docs/specs/hooks-and-scripts.md.",
+  "description": "Cursor 훅 템플릿. install.sh가 {{HOOKS_DIR}}를 절대경로로 바꾼다. Claude 설정과 같이 등록하면 두 번 돈다.",
   "version": 1,
   "hooks": {
     "sessionStart": [

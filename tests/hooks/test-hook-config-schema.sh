@@ -1,20 +1,6 @@
 #!/usr/bin/env bash
-# 단위 테스트: 플랫폼별 훅 등록 JSON의 최상위 스키마.
-#
-# 왜 필요한가 (2026-08-01 Phase 3 실측):
-#   Codex 0.146.0은 훅 설정을 **strict**하게 역직렬화한다 — 최상위에 `description`·`hooks`
-#   외의 키가 있으면 파일 전체 파싱이 실패하고 경고 한 줄만 남긴 뒤 **훅 0개로 진행**한다:
-#     warning: failed to parse plugin hooks config .../hooks-codex.json:
-#              unknown field `_comment`, expected `description` or `hooks`
-#   설치는 성공하고 `codex plugin list`도 "installed, enabled"로 보이므로 조용히 무방비가 된다.
-#   Claude·Cursor는 `_comment`를 관용하므로(실측) 이 제약은 Codex 파일에만 적용한다.
-#
-# ⚠️ 경로는 python **소스 문자열에 박지 않고 argv로 넘긴다** (2026-08-07 Windows CI 실측).
-#   MSYS(Git Bash)는 native 바이너리를 부를 때 **argv에 한해** 경로를 자동 변환한다. 소스
-#   문자열 안의 `/d/a/...`는 변환되지 않아 native python3가 열지 못하고, 이 스위트가
-#   `FileNotFoundError` → `이벤트 3종 got []`로 실패했다. `install.sh`의 `render()`는
-#   처음부터 argv라서 같은 자리에서 살았다 — 규칙이 있었는데 여기만 빠져 있었다.
-#   같은 계열: `tests/lib/paths.sh`(값으로 건너가는 경로) · §3-9(PYTHONUTF8).
+# Codex 훅 JSON 최상위는 description과 hooks만 허용한다. 다른 키가 있으면 훅이 0개가 된다.
+# python에 넘기는 경로는 소스 문자열이 아니라 argv다. MSYS는 argv만 변환한다.
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -67,8 +53,7 @@ print(";".join(bad))
 ' "$REPO_ROOT/hooks/hooks-codex.json")"
 assert_eq "PLUGIN_ROOT 미참조 없음" "" "$BAD"
 
-# Claude·Cursor는 _comment를 관용한다(실측). 여기서는 "파싱 가능 + hooks 존재"만 보장한다 —
-# 관용 여부가 바뀌면 위 Codex 케이스와 같은 방식으로 제약을 추가한다.
+# Claude·Cursor는 파싱과 hooks 존재만 본다.
 echo "test: hooks.json(Claude)·hooks-cursor.json(Cursor)에 hooks 키 존재"
 for f in hooks/hooks.json hooks/hooks-cursor.json; do
   HAS="$(PYTHONUTF8=1 python3 -c '
@@ -79,13 +64,7 @@ print("yes" if isinstance(d.get("hooks"), dict) and d["hooks"] else "no")
   assert_eq "$f hooks 존재" "yes" "$HAS"
 done
 
-# ── 런처 경로 인용 계약 (2026-08-05) ────────────────────────────────────────
-# command는 셸 문자열로 실행된다 — Claude는 hook 항목의 `shell` 필드(기본 bash),
-# Codex는 `$SHELL -lc`. 따라서 런처 경로에 공백이 있으면 인용 없이는 인자 경계가
-# 깨진다(플러그인 루트는 Windows 사용자명·macOS 홈을 포함하고 둘 다 공백을 허용한다).
-# hooks-codex.json만 처음부터 인용돼 있었고 claude·cursor는 아니었다 — 세 파일이
-# 서로 달랐다는 것 자체가 결함 신호였으므로 여기서 계약으로 고정한다.
-# (Cursor의 실행 모델은 문서상 "shell string"이나 미실측 — hooks-cursor.json 주석 참조.)
+# 런처 경로는 인용한다. 공백이 있으면 인자 경계가 깨진다.
 echo "test: 세 등록 JSON 모두 런처 경로를 큰따옴표로 감싼다"
 UNQUOTED="$(PYTHONUTF8=1 python3 -c '
 import json, sys

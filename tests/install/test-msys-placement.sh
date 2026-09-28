@@ -1,28 +1,5 @@
 #!/usr/bin/env bash
-# 회귀 테스트: MSYS(Git Bash) `ln -s` 시맨틱에서의 install.sh 멱등성.
-#
-# ── 왜 있는가 ──────────────────────────────────────────────────────────────────
-# Git for Windows의 `ln -s`는 **진짜 symlink를 만들지 않고 복사한다**(진짜 symlink는
-# `MSYS=winsymlinks:nativestrict` + 개발자 모드/관리자 권한이 필요하다). 그런데 install.sh와
-# hooks/session-start는 **"이 파일 우리가 놓았나?"를 `[ -L ]`로 판정**했다 — 복사본은
-# symlink가 아니므로 판정이 **항상 "사용자 파일"로 떨어진다.**
-#
-# Windows CI(2026-08-04 run 30903396251 이후)와 이 스위트의 셰임이 같은 결함을 보인다:
-#   1회차  rc=0  사이드카 0건            정상
-#   2회차  rc=0  사이드카 **3건**        자기 복사본을 사용자 파일로 오판 → 병합할 게 없는데
-#                                        AGENTS.md 3자리 전부 "수동 머지하세요"
-#   3회차  rc=1  `ln: …/skills/ingest-url/ingest-url: cannot overwrite directory`
-#                dest가 실존 디렉터리라 `ln`이 그 **안쪽**에 만들려 하고, `-f`는 디렉터리를
-#                지우지 못한다. `set -euo pipefail` 아래서 **install.sh가 즉사**하고
-#                그 뒤의 `[3]` 구간 — **훅 등록 전체**가 한 줄도 실행되지 않는다.
-# 전부 fail-open이고 증상이 조용하다: 사용자는 `ln:` 한 줄만 보고 "왜 가드가 안 도는지"를
-# 연결하지 못한다.
-#
-# ── 왜 셰임인가 ────────────────────────────────────────────────────────────────
-# windows-latest 러너에는 Git Bash가 항상 있어 이 상태를 CI에서 만들 수 없고, macOS/Linux의
-# `ln -s`는 진짜 symlink를 만든다. 그래서 MSYS 시맨틱을 **PATH 셰임으로 재현**한다 — 결함이
-# 플랫폼이 아니라 **소유권 판정 로직**에 있으므로 로직은 어디서든 같게 밟힌다.
-# (Windows에서 이 스위트를 돌리면 셰임이 이미-복사인 `ln`을 한 번 더 감싸는 것뿐이라 무해하다.)
+# MSYS는 ln -s가 복사다. PATH 셰임으로 그 시맨틱을 재현해 재실행 멱등을 고정한다.
 set -u
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -33,10 +10,7 @@ no() { FAIL=$((FAIL+1)); echo "  ✗ $1"; }
 SB="$(mktemp -d)"; trap 'rm -rf "$SB"' EXIT
 SHIM="$SB/shim"; mkdir -p "$SHIM"
 
-# MSYS `ln -s` 시맨틱 셰임. 관측된 진행을 그대로 재현한다:
-#   dst 없음            → 복사
-#   dst가 실존 디렉터리  → ln의 통상 규칙대로 dst/basename(src) 안쪽을 노린다
-#   그 경로가 디렉터리    → `-f`가 못 지워 실패 (죽는 지점)
+# MSYS ln 셰임: 없으면 복사, 디렉터리면 그 안을 노리고, 거기가 디렉터리면 실패한다.
 cat >"$SHIM/ln" <<'SHIM_EOF'
 #!/usr/bin/env bash
 set -u
@@ -59,9 +33,7 @@ cp -R "$SRC" "$DST"
 SHIM_EOF
 chmod +x "$SHIM/ln"
 
-# ⚠️ Windows에서 install 1회가 ~20초다(셰임이 symlink를 전부 복사로 떨어뜨려 스킬 트리를
-# 통째로 복사한다). 전체 install을 남발하면 스위트가 CI 상한을 넘는다 — 2026-08-08에 실제로
-# rc=124로 잘렸다(120.09초). 그래서 `--fallback`은 그게 **꼭 필요한 케이스에서만** 붙인다.
+# --fallback은 필요한 케이스만. 셰임이 스킬 트리를 복사해 전체 install이 느리다.
 run_install() { # run_install <home> <vault> <outfile> [--fallback]
   # [4] 프로젝트-로컬 블록은 --vault 인자 대신 ~/.llm-wiki/default-vault(wiki-setup 산물)에서 볼트를 해석한다.
   mkdir -p "$1/.llm-wiki"; printf '%s\n' "$2" > "$1/.llm-wiki/default-vault"
@@ -83,8 +55,7 @@ run_install "$H" "$V" "$SB/o3" --fallback || rc3=$?
 if [ "$rc3" = 0 ]; then ok "3회차 rc=0"
 else no "3회차 rc=$rc3 — $(grep -m1 '^ln:' "$SB/o3" || echo '(ln 에러 없음)')"; fi
 
-# 죽으면 `[3]` 구간(훅 등록 6곳)이 돌지 않는다. rc만으로는 1회차의 산물과 구별되지 않으므로
-# **그 실행이 끝까지 갔는지**를 종료 마커로 확인한다.
+# 훅 등록까지 갔는지는 종료 마커로 본다. rc만으로는 1회차와 안 갈린다.
 grep -q '── 설치 요약 ──' "$SB/o3" && ok "3회차가 끝까지 실행됨(훅 등록 구간 도달)" \
   || no "3회차가 중간에서 죽었다 — [3] 훅 등록이 실행되지 않았다"
 
@@ -94,9 +65,7 @@ n="$(sidecars "$H" "$V")"
 [ "$n" = 0 ] && ok "사이드카 0건" \
   || no "사이드카 ${n}건 — 병합할 게 없는데 수동 머지를 요구한다: $(find "$H" "$V" -name '*.llm-wiki.*' 2>/dev/null | head -1 | sed "s|$SB/||")"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 오판을 막는 것이 **비파괴 정책을 끄는 것과 같지 않다.** 진짜 사용자 파일은 여전히 보존해야
-# 한다 — 이 단언이 없으면 "사이드카 0건"을 정책을 없애서 통과시킬 수 있다.
+# 사용자 파일은 여전히 보존한다. 사이드카 0건만으로는 정책을 지운 통과를 막지 못한다.
 echo "[3] 진짜 사용자 파일은 보존 + 사이드카 (비파괴 정책 회귀 방지)"
 H2="$SB/h2"; V2="$SB/v2"; mkdir -p "$H2/.claude" "$H2/.cursor" "$H2/.gemini" "$V2"
 printf '# 내가 직접 쓴 규칙\n사용자 소유 파일이다.\n' >"$V2/AGENTS.md"
@@ -104,9 +73,7 @@ run_install "$H2" "$V2" "$SB/o4" || true
 grep -q '내가 직접 쓴 규칙' "$V2/AGENTS.md" && ok "사용자 AGENTS.md 원본 보존" || no "사용자 파일이 덮어써졌다"
 [ -f "$V2/AGENTS.llm-wiki.md" ] && ok "하네스 사본을 사이드카로 배치" || no "사용자 파일 충돌인데 사이드카가 없다"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 기존 사용자(macOS/Linux)는 **진짜 symlink + 스탬프 없음** 상태다. 소유권 판정을 스탬프로
-# 바꿀 때 그 상태를 "사용자 파일"로 읽으면 기존 설치 전부가 다음 실행에서 사이드카를 뒤집어쓴다.
+# 원장 없는 기존 symlink는 우리 것으로 흡수한다. 아니면 다음 실행이 사이드카를 만든다.
 echo "[4] 스탬프 이전 설치(진짜 symlink, 원장 없음)를 사이드카 없이 흡수"
 H3="$SB/h3"; V3="$SB/v3"; mkdir -p "$H3/.claude" "$H3/.cursor" "$H3/.gemini" "$V3"
 /bin/ln -sfn "$REPO/AGENTS.md" "$V3/AGENTS.md"   # 셰임을 우회해 진짜 symlink를 만든다
@@ -115,11 +82,7 @@ n3="$(sidecars "$H3" "$V3")"
 [ "$n3" = 0 ] && ok "기존 symlink 설치 흡수 — 사이드카 0건" \
   || no "기존 설치가 사이드카 ${n3}건을 얻었다 (마이그레이션 파손)"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# `link()`은 무조건 배치 경로다(스킬·훅 트리 15곳). MSYS 대응으로 "dest를 먼저 비운다"를
-# 넣으면 **그 자리에 있던 사용자 디렉터리를 지운다.** 지금도 무해하지 않다: `ln -sfn`은 dest가
-# 실존 디렉터리면 그 **안쪽**에 링크를 만들어 사용자 트리를 오염시킨다.
-# 소유권을 확인하지 않는 배치는 어느 쪽으로도 안전하지 않다.
+# 소유 확인 없이 비우면 사용자 디렉터리가 지워지고, 안 비우면 ln이 그 안에 링크를 만든다.
 echo "[5] 사용자 소유 디렉터리를 지우지도 오염시키지도 않는다"
 H4="$SB/h4"; V4="$SB/v4"; mkdir -p "$H4/.claude/skills/wiki-setup" "$H4/.cursor" "$H4/.gemini" "$V4"
 printf '내 스킬이다.\n' >"$H4/.claude/skills/wiki-setup/mine.md"
@@ -128,12 +91,7 @@ run_install "$H4" "$V4" "$SB/o6" --fallback || true
 [ ! -e "$H4/.claude/skills/wiki-setup/wiki-setup" ] && ok "사용자 트리에 중첩 링크 없음" \
   || no "사용자 디렉터리 안쪽에 중첩 배치됐다 (ln이 dest 내부를 노렸다)"
 
-# ─────────────────────────────────────────────────────────────────────────────
-# install.sh만 고치면 절반이다. **마켓플레이스 설치는 install.sh를 거치지 않는다** —
-# `hooks/session-start`의 부트스트랩 ①이 같은 판정을 하고, 거기도 `[ -L ]`을 썼다.
-# 결과: Windows에서 런타임 홈이 **영구히 stale해진다.** 플러그인을 업데이트해도 복사본은
-# `-L`이 false이므로 `[ -e "$DST" ] && continue`에 걸려 재지정이 일어나지 않고, 스킬·가드가
-# 계속 옛 스크립트를 호출한다(2026-08-01에 이미 한 번 겪은 결함의 Windows 재발).
+# session-start 부트스트랩도 같은 소유 판정을 쓴다. 여기가 틀리면 런타임 홈이 옛 스크립트에 고정된다.
 echo "[6] MSYS에서 session-start 부트스트랩 — 배치 + 형제 버전 재지정 + 클론 보존"
 HOOK="$REPO/hooks/session-start"
 mkdir -p "$SB/plugins/cache/llm-wiki-harness/llm-wiki-harness"

@@ -1,5 +1,5 @@
 {
-  "description": "LLM Wiki 하네스 가드 훅 — raw/ 보호·frontmatter 검증·볼트 컨텍스트 주입. 설치 후 /hooks에서 trust 필요(미완 시 무경고 no-op). 상세는 docs/specs/hooks-and-scripts.md 참조.",
+  "description": "raw/ 보호·frontmatter 검증·볼트 컨텍스트 주입. /hooks trust 전에는 경고 없이 동작하지 않는다.",
   "hooks": {
     "SessionStart": [
       {

@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# 단위 테스트: hooks/wiki-protect-raw.sh (하네스 스펙 §5-2)
-# raw/ 수정 차단, 삭제(rm) 허용, 비볼트 통과. 플랫폼별 차단 신호:
-#   claude/codex → stderr + exit 2 ; cursor → stdout {"permission":"deny"} + exit 0
+# raw/ 수정 차단, rm 허용, 비볼트 통과. claude|codex는 exit 2, cursor는 deny JSON.
 set -u
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 HOOK="$REPO_ROOT/hooks/wiki-protect-raw.sh"
@@ -43,9 +41,7 @@ eq "exit 2" "2" "$CODE"; has "stderr 안내" "raw/" "$ERR"
 cleanup
 
 echo "test: config 경로가 비정규 표기여도 raw/ 차단 (Windows 구분자 차이 회귀)"
-# 2026-08-04 Windows CI: normpath가 target을 `C:\…`로 바꾸는데 RAW_ABS는 config에서 온
-# `C:/…`라 문자열 비교가 어긋나 **hit=False → raw/ 쓰기가 통과**했다. 가드가 조용히 열린다.
-# Windows 없이 재현하려면 "정규화하면 같아지는 다른 표기"면 충분하다.
+# 표기만 다른 같은 경로도 raw/로 봐야 한다. 아니면 가드가 통과한다.
 new_sandbox
 cat > "$VAULT/.wiki-config.json" <<JSON
 { "version": 1, "vault": { "path": "$VAULT_N/./", "wiki_dir": "wiki", "raw_dir": "raw" }, "created": "2026-06-25" }
@@ -87,8 +83,7 @@ eq "exit 0 (cursor)" "0" "$CODE"
 PYTHONUTF8=1 python3 -c "import json,sys; d=json.loads(sys.argv[1]); assert d['permission']=='deny'" "$OUT" 2>/dev/null && ok "permission:deny JSON" || no "permission:deny JSON (got [$OUT])"
 cleanup
 
-# ── 상대경로 해석 (§5-4 실측: Codex·Cursor 경로는 대부분 cwd 상대경로) ──────────
-# 절대경로 전제 가드는 이 케이스들을 조용히 통과시켰다.
+# cwd 상대경로도 raw/로 본다. 절대경로만 보면 통과한다.
 
 echo "test: apply_patch 상대경로가 raw/ 를 가리키면 차단 (exit 2)"
 new_sandbox
@@ -114,7 +109,7 @@ run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"
 eq "exit 0" "0" "$CODE"
 cleanup
 
-echo "test: Cursor는 cwd 없이 workspace_roots[0] 기준으로 절대화 (§5-4)"
+echo "test: Cursor는 cwd 없이 workspace_roots[0] 기준으로 절대화"
 new_sandbox
 run_hook cursor "{\"tool_name\":\"Write\",\"workspace_roots\":[\"$VAULT_N\"],\"tool_input\":{\"file_path\":\"raw/x.md\"}}"
 eq "exit 0 (cursor)" "0" "$CODE"
@@ -127,20 +122,14 @@ run_hook codex "{\"tool_name\":\"Write\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"
 eq "exit 0 (오탐 없음)" "0" "$CODE"
 cleanup
 
-# ⚠️ 알려진 한계 (§5-2, 의도적 비목표): COMMAND 문자열 **안의** 상대경로는 탐지하지 않는다.
-#    TARGET은 BASE 기준으로 절대화하지만 셸 문법 전면 해석은 비목표이므로
-#    `printf 'x' > raw/a.md` 는 통과한다. 이 테스트는 그 한계를 고정해 둔다 —
-#    통과가 아니라 차단으로 바뀌길 원하면 먼저 spec §5-2를 개정해야 한다.
+# COMMAND 안 상대경로 리다이렉트는 통과가 맞다. 셸을 전부 해석하지 않는다.
 echo "test: [알려진 한계] shell COMMAND 내 상대경로는 미탐지 → 통과 (exit 0)"
 new_sandbox
 run_hook codex "{\"tool_name\":\"shell\",\"cwd\":\"$VAULT_N\",\"tool_input\":{\"command\":\"printf 'x' > raw/a.md\"}}"
-eq "exit 0 (§5-2 비목표)" "0" "$CODE"
+eq "exit 0 (COMMAND 안 상대경로는 비목표)" "0" "$CODE"
 cleanup
 
-# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
-# 차단 메시지 MSG는 한국어다. Cursor 분기는 그 메시지를 python3로 JSON 직렬화해 **stdout에**
-# 내보내므로, locale이 비UTF-8이면 출력이 UnicodeEncodeError로 죽고 **deny가 조용히 사라진다**
-# (2026-08-04 Windows CI 실측: cp1252에서 permission:deny JSON이 빈 출력).
+# 한국어 deny JSON은 비UTF-8 locale에서도 나와야 한다. 아니면 차단이 사라진다.
 echo "test: ASCII locale에서도 Cursor deny JSON이 나온다 (한국어 메시지)"
 new_sandbox
 OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/x.md\"}}" \
@@ -160,11 +149,7 @@ eq "exit 2 (한글 경로도 판정)" "2" "$CODE"
 has "stderr 안내" "raw/" "$ERR"
 cleanup
 
-# PATH 단독 좁히기는 **MSYS/Git Bash(Windows)에서 성립하지 않는다** — MSYS의 `ln -s`는 기본
-# 설정에서 복사본을 만들고, 복사된 bash·sed 등은 msys-2.0.dll 의존이 끊겨 실행이 실패하거나
-# **응답 없이 대기**한다(2026-08-04 Windows CI 실측: 스위트가 매달렸고 개별 timeout으로도
-# 끊기지 않았다). 그 플랫폼에서는 은닉 기법 자체가 검증 대상이 아니므로 스킵하되
-# **시끄럽게 알린다** — 조용한 스킵은 "커버했다"로 오독된다.
+# MSYS는 PATH를 좁히면 복사된 bash가 죽는다. 그 플랫폼에서는 이 케이스를 건너뛰되 알린다.
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) SKIP_NOPY=1 ;;
   *)                    SKIP_NOPY=0 ;;
@@ -174,11 +159,7 @@ if [ "$SKIP_NOPY" = 1 ]; then
   echo "test: (SKIP) python3 fail-open 케이스 — MSYS/Windows에서 PATH 단독 좁히기가 성립하지 않는다"
   echo "  SKIP: 은닉 대상 도구가 msys-2.0.dll 의존으로 실행되지 않아 스위트가 매달린다 (2026-08-04 실측)"
 else
-# ⚠️ 의도된 fail-open (§5-2): python3가 없으면 resolver가 E_NO_RUNTIME(exit 7)로 실패하고
-#    이 훅은 **통과시킨다**. 차단으로 돌리면 raw/만 골라 막을 수 없고(경로 판정 블록 자체가
-#    python3다) 볼트 안 전체가 막힌다 — 훅이 글로벌이라 무관 프로젝트까지 함께 막힌다.
-#    고지는 hooks/session-start가 세션당 1회 담당한다. 이 테스트는 그 결정을 고정해 둔다 —
-#    차단으로 바꾸려면 먼저 spec §5-2를 개정해야 한다.
+# python3가 없으면 통과가 맞다. 막으면 볼트 안 전체가 막힌다.
 echo "test: [의도된 fail-open] python3 없음 + 볼트 안 raw/ Write → 통과 (exit 0)"
 new_sandbox
 NOPY="$SANDBOX/nopy"; mkdir -p "$NOPY"
@@ -186,7 +167,7 @@ for c in bash dirname head sed cat env; do ln -sf "$(command -v "$c")" "$NOPY/$c
 OUT="$(cd "$VAULT" && printf '%s' "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$VAULT_N/raw/x.md\"}}" \
   | HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$HOOK" claude 2>"$SANDBOX/err")"; CODE=$?
 ERR="$(cat "$SANDBOX/err")"
-eq "exit 0 (§5-2 fail-open)" "0" "$CODE"
+eq "exit 0 (fail-open)" "0" "$CODE"
 # resolver가 실제로 E_NO_RUNTIME 경로를 탔는지 — 다른 이유로 통과한 게 아님을 확인
 (cd "$VAULT" && HOME="$SANDBOX/home" PATH="$NOPY" "$BASH" "$SANDBOX/home/.llm-wiki/scripts/resolve-vault.sh" >/dev/null 2>&1)
 eq "resolver는 exit 7(E_NO_RUNTIME)" "7" "$?"

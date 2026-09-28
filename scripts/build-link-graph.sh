@@ -1,22 +1,12 @@
 #!/usr/bin/env bash
-# build-link-graph.sh <wiki_dir> — 볼트 wiki/를 1회 패스로 읽어 링크 그래프를 구축하고
-# 결정론적 파생 사실을 출력한다. 하네스 스펙 §4-6 (wiki-lint 전용 공용 스크립트).
-# 본문 [[link]] + frontmatter relationships target을 한 그래프로 통합.
-# 출력(탭 구분, 정렬됨):
-#   ORPHAN     <page>                 인바운드 0 (항목 1)
-#   BROKEN     <src> <target_raw>     본문 [[링크]] 대상 부재 (항목 2·9)
-#   REL_BROKEN <src> <target_raw>     relationships target 부재 (항목 12)
-#   REL_SELF   <src> <target_raw>     relationships target 자기참조 (항목 12)
-#   SUMMARY nodes=N orphans=N broken=N rel_broken=N rel_self=N
-# index.md·log.md·hot.md는 스캔·인바운드 계수에서 제외 (§4-6).
+# wiki/를 한 패스로 읽어 ORPHAN/BROKEN/REL_BROKEN/REL_SELF/SUMMARY를 낸다. index·log·hot은 제외.
 set -u
 
 [ $# -ge 1 ] || { echo "usage: build-link-graph.sh <wiki_dir>" >&2; exit 2; }
 WIKI="$1"
 [ -d "$WIKI" ] || { echo "wiki 디렉토리 없음: $WIKI" >&2; exit 2; }
 
-# PYTHONUTF8=1은 §3-9 계약 — 페이지 파일명·[[링크]]에 한글이 쓰이고(slug 규칙이 허용)
-# 출력에 그 이름이 실린다. 비UTF-8 locale에서는 읽기·출력이 함께 깨진다.
+# 파일명과 링크에 한글이 있다. UTF-8을 고정하지 않으면 읽기와 출력이 같이 깨진다.
 PYTHONUTF8=1 python3 - "$WIKI" <<'PY'
 import sys, os, re
 
@@ -121,8 +111,7 @@ for p in pages:
         if r is None:
             rel_broken.append((p, raw))
         elif r == src:
-            # 자기참조: relationship 오류로 보고하되 인바운드로 세지 않는다.
-            # (자기 자신을 세면 진짜 고아가 ORPHAN 판정에서 누락됨)
+            # 자기참조는 오류로만 보고한다. 인바운드로 세면 진짜 고아가 빠진다.
             rel_self.append((p, raw))
         else:
             inbound[r] = inbound.get(r, 0) + 1

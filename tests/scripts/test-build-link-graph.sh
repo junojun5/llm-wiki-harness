@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# 단위 테스트: scripts/build-link-graph.sh (하네스 스펙 §4-6 링크 그래프 single-pass)
-# 출력(라인 단위, 탭 구분): ORPHAN / BROKEN / REL_BROKEN / REL_SELF / SUMMARY
+# 링크 그래프 출력: ORPHAN / BROKEN / REL_BROKEN / REL_SELF / SUMMARY.
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -76,9 +75,7 @@ assert_contains "SUMMARY 라인 존재"          "SUMMARY" "$OUT"
 # index.md가 lonely를 링크해도 인바운드로 세지 않으므로 lonely는 여전히 고아
 cleanup
 
-# ── 코드 스팬·코드 블록 안의 [[링크]]는 링크가 아니다 ─────────────────
-# 스킬 문서가 `[[knowledge]]` 표기를 산문에 쓰므로 에이전트가 그 문구를 따라 쓰면
-# 존재하지 않는 페이지를 가리키는 BROKEN이 생겼다 (2026-08-01 E2E 실측).
+# 코드 블록·인라인 스팬 안의 [[링크]]는 링크가 아니다.
 new_sandbox
 page "concepts/target.md" '---
 title: "대상"
@@ -105,9 +102,7 @@ assert_absent   "코드 밖 실제 링크는 계수됨"       "ORPHAN${TAB}conce
 assert_contains "broken 총계 0"                  "broken=0" "$OUT2"
 cleanup
 
-# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
-# slug 규칙은 한글 파일명을 허용하고(AGENTS.md), 출력 라인에 그 이름이 실린다.
-# 비UTF-8 locale에서는 파일 읽기와 출력이 함께 깨져 링크 그래프가 조용히 비어버린다.
+# 한글 파일명은 비UTF-8 locale에서도 출력에 남아야 한다.
 echo "test: ASCII locale + 한글 파일명도 링크 그래프에 잡힌다"
 new_sandbox
 page "knowledge/한글허브.md" '---

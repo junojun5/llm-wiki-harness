@@ -1,23 +1,6 @@
 name: windows
 
-# 왜 이 워크플로가 있는가 — `hooks/run-hook.cmd`의 cmd.exe 분기는 Phase 2 T5 이래
-# **정적 검토로만** 확인돼 있었다. macOS/Linux에서는 cmd.exe를 실행할 수 없기 때문이다.
-# 환경 확보를 기다리는 대신 CI로 닫는다 (보류 3건 설계 §3).
-#
-# 두 잡 모두 required다. bash 갈래는 2026-08-04에 `continue-on-error: true`로 시작했다 —
-# 경로 구분자·realpath·symlink 동작이 달라 처음부터 통과하지 않을 가능성이 실재했고,
-# 첫 CI가 빨간불이면 신호가 죽기 때문이다. 그때 남긴 승격 조건은 "전 스위트 PASS로 3회
-# 연속"이었다.
-#
-# **2026-08-09 승격 완료.** master에서 3회 연속(31262878491 · 31262918439 · 31263911242)
-# 전 스위트 통과해 `continue-on-error`를 제거했다. 이제 Windows 실패가 PR을 막는다.
-# 그전까지 열려 있던 실패 3스위트의 뿌리는 배포 설계 §7-1b(배치 원장)에 기록돼 있다 —
-# 소유권을 `[ -L ]`로 물은 것 하나였고, 나머지 절반은 테스트가 계약이 아니라 구현
-# 메커니즘을 단언한 결과였다.
-#
-# ⚠️ **되돌리려면 근거를 남긴다.** 다시 `continue-on-error`를 붙이는 것은 "Windows 지원"을
-# 검증 없는 주장으로 되돌리는 일이다. 특정 스위트가 불안정하면 그 스위트만 격리하고
-# 사유를 여기 적는다 — 잡 전체를 정보용으로 내리지 않는다.
+# cmd 분기와 셸 스위트. 둘 다 실패하면 PR을 막는다. continue-on-error는 다시 붙이지 않는다.
 
 on:
   push:
@@ -26,7 +9,6 @@ on:
 
 jobs:
   cmd-launcher:
-    # required — 보류 3번(run-hook.cmd 실기 미검증)을 닫는 갈래.
     name: run-hook.cmd 인자 전달 (cmd.exe)
     runs-on: windows-latest
     timeout-minutes: 10
@@ -37,23 +19,15 @@ jobs:
         run: tests\hooks\test-run-hook-cmd.cmd
 
   bash-suite:
-    # required — 2026-08-09 승격(위 헤더 참조). 실패하면 PR을 막는다.
     name: 셸 스위트 (Git Bash)
     runs-on: windows-latest
-    # ⚠️ 타임아웃은 필수다. 2026-08-04에 이 잡이 **매달렸다**(0.3.1 인코딩 수정으로 이전보다
-    # 더 진행되면서 어느 스위트가 입력을 기다리는 상태에 도달했다). 실행 중에는 로그 blob이
-    # 아직 없어 어디서 멈췄는지 볼 수 없으므로, 타임아웃으로 강제 종료시켜 **그 시점까지의
-    # 로그로 멈춘 지점을 특정**한다. 스텝 단위로 걸어 잡 오버헤드와 구분한다.
+    # 타임아웃이 없으면 입력을 기다리는 스위트가 로그 없이 멈춘다.
     steps:
       - uses: actions/checkout@v4
       - name: bash 존재 확인
         shell: bash
         run: bash --version && python3 --version
-      # 스위트별 상한 + stdin 닫기. `tests/run.sh` 경유로 돌리면 이 러너에서 매달리는데
-      # (2026-08-04) **같은 스위트를 단독으로 돌리면 통과한다** — 즉 스위트 내용이 아니라
-      # 러너 방식(stdin 상속·출력 버퍼링)의 문제다. 여기서는 각 스위트를 개별 상한과 함께
-      # `</dev/null`로 돌려 **매달리는 스위트를 rc=124로 지목**하고 나머지는 계속 진행시킨다.
-      # `tests/run.sh` 자체를 고치는 것은 별도 항목이다(로컬에서는 문제가 없다).
+      # tests/run.sh로 돌리면 이 러너에서 멈춘다. 스위트마다 stdin을 닫고 상한을 둔다.
       - name: 스위트별 (개별 상한 · stdin 닫음)
         shell: bash
         timeout-minutes: 10
@@ -61,28 +35,12 @@ jobs:
           rc_all=0
           for t in tests/scripts/test-*.sh tests/hooks/test-*.sh tests/skills/test-*.sh tests/install/test-*.sh tests/install/smoke.sh; do
             printf '=== START %s\n' "$t"
-            # ⚠️ 파이프로 받지 않는다. timeout이 스위트를 죽여도 손자 프로세스가 파이프를
-            #    붙잡으면 `tail`이 EOF를 못 받아 **그 자리에서 다시 매달린다**(2026-08-04 실측:
-            #    `| tail -40`을 썼더니 timeout 120이 무의미해지고 END 라인이 나오지 않았다).
-            #    파일로 받아 스위트가 끝난 뒤에 읽는다. -k 로 SIGTERM 후 강제 종료까지 보장.
-            # ⚠️ `|| rc=$?` 없이 rc를 받으면 이 루프는 **첫 실패에서 통째로 죽는다.**
-            #    GitHub Actions의 bash는 `--noprofile --norc -e -o pipefail`로 돈다 — `-e`가
-            #    걸린 상태에서 실패한 명령을 조건문 밖에 두면 셸이 즉시 종료하므로 아래
-            #    `tail`(실패 이유)도 END 라인도 찍히지 않고 남은 스위트도 돌지 않는다.
-            #    2026-08-04 실측: 로그에 `=== START test-resolve-vault.sh` 다음이 곧바로
-            #    `##[error]exit code 1`이었고 나머지 7스위트의 Windows 상태가 미지로 남았다.
-            #    `|| rc=$?`는 실패를 조건문 안으로 넣어 `-e`의 사정권에서 빼낸다.
-            # 상한 300초. 종전 120초는 **정상 스위트를 자르고 있었다** — 2026-08-08 실측:
-            # `smoke.sh` 104초(통과), `test-msys-placement.sh` 120.09초(rc=124로 잘림).
-            # Windows에서 install 1회가 ~20초인데(symlink가 안 돼 스킬 트리를 통째로 복사한다)
-            # 여러 번 도는 스위트가 상한에 닿는다. 잘린 스위트는 "매달림"으로 오독되므로
-            # 여유를 준다 — 진짜 매달림은 300초에서도 rc=124로 잡힌다.
+            # 출력은 파일로 받는다. 파이프를 잡으면 timeout 뒤에도 tail이 멈춘다.
+            # `|| rc=$?`가 없으면 Actions bash -e가 첫 실패에서 루프를 죽인다.
+            # 상한 300초. install이 느려 더 짧으면 정상 스위트가 잘린다.
             rc=0
             timeout -k 10 300 bash "$t" </dev/null >"$RUNNER_TEMP/out.txt" 2>&1 || rc=$?
-            # 통과한 스위트는 마지막 3줄이면 충분하고, **실패한 스위트는 전문을 찍는다.**
-            # `tail -40`은 큰 스위트(session-start 51단언)에서 **첫 실패를 잘라먹는다** —
-            # 2026-08-04에 그 탓에 원인을 두 사이클 동안 오판했다(꼬리만 보고 게이트를
-            # 지목했으나 앞쪽에 다른 원인이 있었다). 진단 로그는 아끼는 대상이 아니다.
+            # 통과는 마지막 3줄, 실패는 전문. 꼬리만 보면 첫 실패가 잘린다.
             if [ "$rc" = 0 ]; then tail -3 "$RUNNER_TEMP/out.txt" || true
             else cat "$RUNNER_TEMP/out.txt" || true; fi
             printf '=== END %s rc=%s%s\n' "$t" "$rc" "$([ "$rc" = 124 ] && printf ' (TIMEOUT — 매달림)')"

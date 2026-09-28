@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 단위 테스트: scripts/validate-frontmatter.sh (하네스 스펙 §3-3 문서 클래스·기계 검증)
+# frontmatter 기계 검증.
 set -u
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -145,7 +145,7 @@ echo "test: troubleshooting status 위반(proposed) → 실패"
 new_sandbox; run_validate "wiki/projects/p/troubleshooting/bug.md" "${VALID_TS/status: open/status: proposed}"
 assert_eq "exit !=0" "1" "$CODE"; assert_contains "status 언급" "status" "$ERR"; cleanup
 
-# ── 표기 가드: 인라인 flow 표기는 검사를 무력화하므로 fail-loud여야 한다 (§3-3) ──
+# 인라인 flow 표기는 검사를 건너뛰므로 실패로 끊는다.
 echo "test: provenance 인라인 표기(합=0.3) → 실패 (조용히 통과 금지)"
 new_sandbox
 run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
@@ -179,9 +179,7 @@ relationships: uses}"
 assert_eq "exit !=0" "1" "$CODE"
 assert_contains "블록 리스트 안내" "relationships가 블록 리스트 표기가 아닙니다" "$ERR"; cleanup
 
-# 인라인 flow **시퀀스**는 파서의 `[ ... ]` 분기를 타 문자열 리스트로 읽히므로
-# isinstance(list) 만으로는 통과한다 — 그 상태에서 type enum 루프가 무발화하는 것이
-# 실제 결함이었다. 표기 자체를 끊어야 한다.
+# 인라인 시퀀스는 문자열 리스트로 읽혀 list 검사를 통과한다. 표기에서 끊는다.
 echo "test: relationships 인라인 flow 시퀀스 → 실패 (조용히 통과 금지)"
 new_sandbox
 run_validate "wiki/knowledge/ml.md" "${VALID_PAGE/base_confidence: 0.9/base_confidence: 0.9
@@ -212,9 +210,7 @@ relationships:
     type: extends}"
 assert_eq "exit 0" "0" "$CODE"; cleanup
 
-# ── 클래스 판정 범위: 클래스②는 projects/{name}/{changes|troubleshooting}/ 로 한정 (§3-3) ──
-# knowledge/ 는 대형 주제에 서브폴더를 허용하므로, 같은 이름의 서브폴더가 있어도
-# 클래스① 페이지로 판정돼야 한다.
+# changes|troubleshooting 서브폴더는 projects 아래만 클래스②다.
 echo "test: knowledge/changes/ 서브폴더 → 클래스①로 판정 (통과)"
 new_sandbox; run_validate "wiki/knowledge/api/changes/versioning.md" "$VALID_PAGE"
 assert_eq "exit 0" "0" "$CODE"; cleanup
@@ -232,11 +228,7 @@ new_sandbox; run_validate "wiki/projects/p/changes/2026-06-25-y.md" "$VALID_PAGE
 assert_eq "exit !=0" "1" "$CODE"
 assert_contains "클래스② 안내" "category는 projects여야 합니다" "$ERR"; cleanup
 
-# ── 비UTF-8 locale (§3-9) ─────────────────────────────────────────────────
-# 위반 메시지는 전부 한국어다. python3의 stdout/stderr 인코딩은 locale이 결정하므로
-# 비UTF-8 locale에서는 메시지가 \uXXXX 이스케이프로 손상되거나 죽는다 — 사용자가 무엇을
-# 고쳐야 하는지 읽을 수 없다(2026-08-04 Windows CI 실측: cp1252에서 이스케이프로 나왔다).
-# macOS/Linux는 C locale에서 UTF-8 모드가 자동 활성화되므로 그 자동화까지 꺼야 동일 조건이다.
+# 위반 메시지는 비UTF-8 locale에서도 한국어로 남아야 한다.
 echo "test: ASCII locale에서도 한국어 위반 메시지가 온전하다"
 new_sandbox
 f="$SANDBOX/wiki/knowledge/broken.md"; mkdir -p "$(dirname "$f")"
